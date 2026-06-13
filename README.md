@@ -1,42 +1,68 @@
 # pfSense Manager
 
-pfSense Manager is a Flutter Android app for managing multiple pfSense instances from a phone.
+pfSense Manager is an Android app I am building to monitor and manage pfSense firewalls from a phone.
 
-## Features
+It is written in Flutter and connects to the pfSense REST API. Multiple firewall profiles can be saved, which is useful when looking after more than one pfSense installation.
+
+The project is still under development. Check the release notes before using it against an important or production firewall.
+
+## What it currently supports
 
 - Multiple pfSense profiles
-- Dashboard and system status views
-- Firewall rules and firewall logs
-- DHCP leases
-- Services and VPN screens
-- Network monitoring
-- Local lock screen and secure profile storage
-- Light/dark theme support and localization plumbing
+- System, interface and gateway status
+- Firewall rule viewing and management
+- Firewall logs
+- Current firewall states
+- DHCP lease viewing
+- Starting, stopping and restarting services
+- OpenVPN status
+- Restarting OpenVPN
+- Rebooting pfSense
+- Local app lock
+- Encrypted storage for profile credentials
+- Light and dark themes
 
-## Requirements
+## pfSense requirements
 
-- Flutter SDK 3.2 or newer
+The app uses the pfSense REST API v2 endpoints. The normal pfSense web interface by itself is not enough.
+
+Before adding a firewall to the app:
+
+1. Install and enable the pfSense REST API package.
+2. Create an API key with only the permissions you need.
+3. Make sure the API is available over HTTPS.
+4. Confirm that the phone can reach the pfSense address, either locally or through a VPN.
+
+The app deliberately rejects plain HTTP connections.
+
+Self-signed certificates can be allowed for a profile, but doing this disables normal certificate verification for that connection. A certificate issued by a trusted internal CA is preferable.
+
+## Building the app
+
+You will need:
+
+- Flutter with Dart 3.2 or newer
 - Android SDK
 - JDK 17
 
-## Build
+Clone the repository and run:
 
 ```bash
 flutter pub get
 flutter build apk --release
 ```
 
-The APK will be written to:
+The release APK will be created at:
 
 ```text
 build/app/outputs/flutter-apk/app-release.apk
 ```
 
-## Signing
+## Release signing
 
-Release signing files are intentionally not committed.
+Signing keys and passwords are not stored in this repository.
 
-For local signed builds, create `android/key.properties`:
+For a locally signed build, create `android/key.properties`:
 
 ```properties
 storePassword=your-store-password
@@ -45,23 +71,37 @@ keyAlias=your-key-alias
 storeFile=app/pfsense-release.jks
 ```
 
-Place the keystore at `android/app/pfsense-release.jks`.
-
-For GitHub Actions releases, add these repository secrets:
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-
-Then push a version tag such as `v1.5.0`. The workflow will build a signed release APK, create a GitHub Release, and upload the APK plus checksum.
-
-## Current Release
-
-Version: `1.5.0+7`
-
-APK checksum:
+Place the keystore at:
 
 ```text
-5c5e6df3c921dc34933a73383913d001dc9feacdb46d7a0054587061dcc9e9b1
+android/app/pfsense-release.jks
 ```
+
+The GitHub Actions release workflow expects these repository secrets:
+
+```text
+ANDROID_KEYSTORE_BASE64
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_PASSWORD
+ANDROID_KEY_ALIAS
+```
+
+Pushing a version tag such as `v1.5.0` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
+
+## Security notes
+
+This app can perform administrative actions on a firewall. Use a dedicated API account or key with restricted permissions rather than unrestricted administrator credentials.
+
+Do not expose the pfSense REST API directly to the public internet. Access it from a trusted network or through a VPN.
+
+Credentials are stored using Android secure storage, but users should still protect the device with a strong screen lock.
+
+## Current version
+
+`1.5.0+7`
+
+Release APKs and checksums are available from the repository's Releases page.
+
+## Status
+
+This is an independent project and is not affiliated with or endorsed by Netgate.
