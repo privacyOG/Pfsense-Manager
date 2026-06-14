@@ -16,7 +16,7 @@ def hasReleaseSigning = keystoreProperties["storeFile"] &&
     keystoreProperties["keyAlias"]
 
 android {
-    namespace = "com.openclaw.pfsense_manager"
+    namespace = "com.privacyog.pfsense_manager"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.openclaw.pfsense_manager"
+        applicationId = "com.privacyog.pfsense_manager"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
