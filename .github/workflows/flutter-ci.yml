@@ -58,21 +58,34 @@ jobs:
       - name: Run tests
         run: flutter test --coverage
 
-      - name: Build debug APK
-        run: flutter build apk --debug
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: pfsense-manager-debug-${{ github.sha }}
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ github.sha }}
           path: coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build apk --debug 2>&1 | tee flutter-build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-build-log-${{ github.sha }}
+          path: flutter-build.log
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfsense-manager-debug-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 14
