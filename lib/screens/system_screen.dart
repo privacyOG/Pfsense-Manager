@@ -14,42 +14,100 @@ class SystemScreen extends StatefulWidget {
 
 class _SystemScreenState extends State<SystemScreen> {
   SystemInfo? _info;
-  String? _error;
+  Object? _error;
   bool _loading = false;
+  bool _rebooting = false;
+  int _requestGeneration = 0;
+  int? _loadedSessionGeneration;
+  String? _loadedProfileId;
+  DateTime? _lastSuccessfulRefresh;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = context.watch<PfSenseSessionProvider>();
+    final profileId = session.selectedProfile?.id;
+    final changed = _loadedSessionGeneration != session.sessionGeneration ||
+        _loadedProfileId != profileId;
+    if (changed) {
+      _requestGeneration++;
+      _info = null;
+      _error = null;
+      _lastSuccessfulRefresh = null;
+      _loadedSessionGeneration = session.sessionGeneration;
+      _loadedProfileId = profileId;
+      if (session.connected && !_loading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _load();
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestGeneration++;
+    super.dispose();
   }
 
   Future<void> _load() async {
-    final service = context.read<PfSenseSessionProvider>().service;
-    if (service == null) {
-      setState(() => _error = AppStrings.of(context).t('offline'));
+    if (_loading) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) {
+      if (!mounted) return;
+      setState(() {
+        _info = null;
+        _lastSuccessfulRefresh = null;
+        _error = AppStrings.of(context).t('offline');
+      });
       return;
     }
+
+    final request = ++_requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
-      final info = await service.getSystemInfo();
-      if (mounted) setState(() => _info = info);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      final info = await session.service!.getSystemInfo();
+      if (!mounted ||
+          request != _requestGeneration ||
+          sessionGeneration != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
+      setState(() {
+        _info = info;
+        _lastSuccessfulRefresh = DateTime.now();
+      });
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _error = error);
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _reboot() async {
+    if (_rebooting) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return;
+
     final strings = AppStrings.of(context);
+    final profileName = session.selectedProfile?.name ?? 'selected firewall';
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (context) => AlertDialog(
         title: Text(strings.t('reboot')),
-        content: const Text('This will reboot the selected pfSense firewall.'),
+        content: Text(
+          'This will reboot $profileName. Network access and all services may be unavailable for several minutes.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -62,29 +120,66 @@ class _SystemScreenState extends State<SystemScreen> {
         ],
       ),
     );
-    if (confirmed == true && mounted) {
-      await context.read<PfSenseSessionProvider>().service?.rebootSystem();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _rebooting = true);
+    try {
+      await session.service!.rebootSystem();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Reboot request accepted. The firewall may disconnect while restarting.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _rebooting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final session = context.watch<PfSenseSessionProvider>();
     final info = _info;
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           if (_loading) const LinearProgressIndicator(),
-          if (_error != null)
+          if (_lastSuccessfulRefresh != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Last updated ${_formatTime(_lastSuccessfulRefresh!)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          if (!session.connected)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.cloud_off_outlined),
+                title: Text(strings.t('offline')),
+              ),
+            )
+          else if (_error != null)
             Card(
               child: ListTile(
                 leading: const Icon(Icons.error_outline),
-                title: Text(_error!),
+                title: Text(_error.toString()),
               ),
             ),
-          if (info != null) ...[
+          if (session.connected && info != null) ...[
             _row('Version', info.version),
             _row('Platform', info.platform),
             _row('Architecture', info.architecture),
@@ -96,9 +191,17 @@ class _SystemScreenState extends State<SystemScreen> {
           ],
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _reboot,
-            icon: const Icon(Icons.power_settings_new),
-            label: Text(strings.t('reboot')),
+            onPressed: session.connected && !_loading && !_rebooting
+                ? _reboot
+                : null,
+            icon: _rebooting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.power_settings_new),
+            label: Text(_rebooting ? 'Sending reboot request…' : strings.t('reboot')),
           ),
         ],
       ),
@@ -112,5 +215,10 @@ class _SystemScreenState extends State<SystemScreen> {
         subtitle: Text(value.isEmpty ? '-' : value),
       ),
     );
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}';
   }
 }
