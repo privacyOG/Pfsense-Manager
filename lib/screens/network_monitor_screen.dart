@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/dashboard.dart';
 import '../models/network_state.dart';
@@ -17,7 +18,10 @@ class NetworkMonitorScreen extends StatefulWidget {
 
 class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     with WidgetsBindingObserver {
-  static const _minimumRefreshSeconds = 3;
+  static const _minimumRefreshSeconds = 1;
+  static const _prefLive = 'networkMonitor.live';
+  static const _prefRefreshSeconds = 'networkMonitor.refreshSeconds';
+  static const _prefQuickFilter = 'networkMonitor.quickFilter';
 
   final _search = TextEditingController();
   final Map<String, _InterfaceCounters> _previousCounters = {};
@@ -29,6 +33,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   bool _loading = false;
   bool _live = true;
   bool _appActive = true;
+  bool _preferencesLoaded = false;
   int _refreshSeconds = 3;
   String _quickFilter = 'all';
   Timer? _timer;
@@ -43,7 +48,31 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _search.addListener(_onSearchChanged);
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    final savedInterval = preferences.getInt(_prefRefreshSeconds) ?? 3;
+    final allowedIntervals = const {1, 3, 5, 10};
+    setState(() {
+      _live = preferences.getBool(_prefLive) ?? true;
+      _refreshSeconds = allowedIntervals.contains(savedInterval)
+          ? savedInterval
+          : math.max(_minimumRefreshSeconds, savedInterval);
+      _quickFilter = preferences.getString(_prefQuickFilter) ?? 'all';
+      _preferencesLoaded = true;
+    });
     _startTimer();
+  }
+
+  Future<void> _savePreferences() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_prefLive, _live);
+    await preferences.setInt(_prefRefreshSeconds, _refreshSeconds);
+    await preferences.setString(_prefQuickFilter, _quickFilter);
   }
 
   void _onSearchChanged() {
@@ -62,6 +91,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
 
   void _startTimer() {
     _timer?.cancel();
+    if (!_preferencesLoaded) return;
     final interval = math.max(_minimumRefreshSeconds, _refreshSeconds);
     _timer = Timer.periodic(Duration(seconds: interval), (_) {
       final session = context.read<PfSenseSessionProvider>();
@@ -254,8 +284,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
             _Message(icon: Icons.error_outline, text: _error.toString()),
           if (session.connected && _interfaces.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text('Interface traffic',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Interface traffic',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             for (final interface in _interfaces)
               _interfaceCard(interface, _rates[_interfaceLabel(interface)]),
@@ -294,7 +326,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
                 ),
                 Switch(
                   value: _live,
-                  onChanged: (value) => setState(() => _live = value),
+                  onChanged: (value) {
+                    setState(() => _live = value);
+                    _savePreferences();
+                  },
                 ),
               ],
             ),
@@ -311,6 +346,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
             const SizedBox(height: 12),
             SegmentedButton<int>(
               segments: const [
+                ButtonSegment(value: 1, label: Text('1s')),
                 ButtonSegment(value: 3, label: Text('3s')),
                 ButtonSegment(value: 5, label: Text('5s')),
                 ButtonSegment(value: 10, label: Text('10s')),
@@ -325,6 +361,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
                   _lastSampleAt = null;
                 });
                 _startTimer();
+                _savePreferences();
                 if (_live) _load();
               },
             ),
@@ -353,7 +390,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
               ChoiceChip(
                 label: Text(value.toUpperCase()),
                 selected: _quickFilter == value,
-                onSelected: (_) => setState(() => _quickFilter = value),
+                onSelected: (_) {
+                  setState(() => _quickFilter = value);
+                  _savePreferences();
+                },
               ),
           ],
         ),
