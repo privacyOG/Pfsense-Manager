@@ -1,4 +1,4 @@
-package com.openclaw.pfsense_manager
+package com.privacyog.pfsense_manager
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 
