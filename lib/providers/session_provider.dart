@@ -14,7 +14,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   bool _connected = false;
   bool _connecting = false;
   String? _connectionError;
-  int _connectionGeneration = 0;
+  int _sessionGeneration = 0;
 
   PfSenseProfile? get selectedProfile => _selectedProfile;
   PfSenseService? get service => _service;
@@ -22,8 +22,13 @@ class PfSenseSessionProvider extends ChangeNotifier {
   bool get connecting => _connecting;
   String? get connectionError => _connectionError;
 
+  /// Changes whenever the active session becomes invalid or is replaced.
+  /// Feature screens capture this value before a request and ignore responses
+  /// that complete after the generation changes.
+  int get sessionGeneration => _sessionGeneration;
+
   Future<void> connect(PfSenseProfile profile) async {
-    final generation = ++_connectionGeneration;
+    final generation = ++_sessionGeneration;
 
     _service?.dispose();
     _service = null;
@@ -38,7 +43,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       candidate = PfSenseService(PfSenseApiClient(profile));
       final healthy = await candidate.healthCheck();
 
-      if (generation != _connectionGeneration) {
+      if (generation != _sessionGeneration) {
         candidate.dispose();
         return;
       }
@@ -59,7 +64,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       notifyListeners();
     } catch (error) {
       candidate?.dispose();
-      if (generation != _connectionGeneration) return;
+      if (generation != _sessionGeneration) return;
 
       _connected = false;
       _connecting = false;
@@ -74,7 +79,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect({bool keepProfile = true}) async {
-    _connectionGeneration++;
+    _sessionGeneration++;
     _service?.dispose();
     _service = null;
     if (!keepProfile) _selectedProfile = null;
@@ -91,7 +96,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _connectionGeneration++;
+    _sessionGeneration++;
     _service?.dispose();
     super.dispose();
   }
