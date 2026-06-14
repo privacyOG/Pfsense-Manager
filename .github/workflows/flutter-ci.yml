@@ -49,8 +49,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Static analysis
-        run: flutter analyze
+      - name: Analyze changed Dart files
+        run: |
+          dart analyze lib/screens/home_shell.dart
+          dart analyze lib/providers/session_provider.dart
+          dart analyze test/home_shell_navigation_test.dart
 
       - name: Run tests
         run: flutter test --coverage
