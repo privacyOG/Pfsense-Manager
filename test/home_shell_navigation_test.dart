@@ -77,8 +77,9 @@ void main() {
     expect(find.text('Firewall profiles'), findsOneWidget);
   });
 
-  testWidgets('selected destination persists after reconstruction',
-      (tester) async {
+  testWidgets('selected destination persists after reconstruction', (
+    tester,
+  ) async {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
