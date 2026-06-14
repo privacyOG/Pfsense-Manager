@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/system_service.dart';
 import '../providers/session_provider.dart';
+import '../widgets/state_message.dart';
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
@@ -200,16 +201,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
           const SizedBox(height: 12),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
-            _message(
-              Icons.cloud_off_outlined,
-              strings?.disconnectedMessage ?? 'Disconnected',
+            StateMessage(
+              icon: Icons.cloud_off_outlined,
+              text: strings?.disconnectedMessage ?? 'Disconnected',
             )
           else if (_error != null)
-            _message(Icons.error_outline, _error.toString())
+            StateMessage(icon: Icons.error_outline, text: _error.toString())
           else if (!_loading && _services.isEmpty)
-            _message(
-              Icons.miscellaneous_services_outlined,
-              strings?.emptyState ?? 'Nothing to show yet.',
+            StateMessage(
+              icon: Icons.miscellaneous_services_outlined,
+              text: strings?.emptyState ?? 'Nothing to show yet.',
             ),
           if (session.connected)
             for (final service in _services)
@@ -277,7 +278,4 @@ class _ServicesScreenState extends State<ServicesScreen> {
         '${local.minute.toString().padLeft(2, '0')}:'
         '${local.second.toString().padLeft(2, '0')}';
   }
-
-  Widget _message(IconData icon, String text) =>
-      Card(child: ListTile(leading: Icon(icon), title: Text(text)));
 }
