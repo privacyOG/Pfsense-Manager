@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/dhcp_lease.dart';
 import '../providers/session_provider.dart';
+import '../widgets/state_message.dart';
 
 class DhcpLeasesScreen extends StatefulWidget {
   const DhcpLeasesScreen({super.key});
@@ -190,11 +191,17 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
           const SizedBox(height: 14),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
-            const _Message(icon: Icons.cloud_off_outlined, text: 'Disconnected')
+            const StateMessage(
+              icon: Icons.cloud_off_outlined,
+              text: 'Disconnected',
+            )
           else if (_error != null)
-            _Message(icon: Icons.error_outline, text: '$_error')
+            StateMessage(
+              icon: Icons.error_outline,
+              text: _error.toString(),
+            )
           else if (!_loading && visible.isEmpty)
-            const _Message(
+            const StateMessage(
               icon: Icons.dns_outlined,
               text: 'No DHCP leases reported by pfREST.',
             ),
@@ -315,17 +322,5 @@ class _MiniStat extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(child: ListTile(leading: Icon(icon), title: Text(text)));
   }
 }
