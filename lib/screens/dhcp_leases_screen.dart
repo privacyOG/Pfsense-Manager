@@ -16,6 +16,11 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
   List<DhcpLease> _leases = [];
   Object? _error;
   bool _loading = false;
+  bool _actionBusy = false;
+  int _requestGeneration = 0;
+  int? _loadedSessionGeneration;
+  String? _loadedProfileId;
+  DateTime? _lastSuccessfulRefresh;
 
   @override
   void initState() {
@@ -26,37 +31,83 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_leases.isEmpty && !_loading) _load(showSpinner: true);
+    final session = context.watch<PfSenseSessionProvider>();
+    final profileId = session.selectedProfile?.id;
+    final sessionChanged = _loadedSessionGeneration != session.sessionGeneration ||
+        _loadedProfileId != profileId;
+
+    if (sessionChanged) {
+      _requestGeneration++;
+      _leases = [];
+      _error = null;
+      _lastSuccessfulRefresh = null;
+      _loadedSessionGeneration = session.sessionGeneration;
+      _loadedProfileId = profileId;
+      if (session.connected && !_loading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _load(showSpinner: true);
+        });
+      }
+    } else if (_leases.isEmpty && !_loading && session.connected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load(showSpinner: true);
+      });
+    }
   }
 
   @override
   void dispose() {
+    _requestGeneration++;
     _search.dispose();
     super.dispose();
   }
 
   Future<void> _load({bool showSpinner = false}) async {
+    if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) {
-      setState(() => _error = 'Disconnected');
+      if (!mounted) return;
+      setState(() {
+        _leases = [];
+        _lastSuccessfulRefresh = null;
+        _error = 'Disconnected';
+      });
       return;
     }
-    if (showSpinner) setState(() => _loading = true);
+
+    final request = ++_requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    setState(() {
+      _loading = true;
+      if (showSpinner) _error = null;
+    });
+
     try {
       final leases = await session.service!.getDhcpLeases();
-      if (!mounted) return;
+      if (!mounted ||
+          request != _requestGeneration ||
+          sessionGeneration != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
       setState(() {
         _leases = leases;
         _error = null;
+        _lastSuccessfulRefresh = DateTime.now();
       });
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
+    } catch (error) {
+      if (!mounted || request != _requestGeneration) return;
+      setState(() => _error = error);
     } finally {
-      if (mounted && showSpinner) setState(() => _loading = false);
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   Future<void> _delete(DhcpLease lease) async {
+    if (_actionBusy) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -77,27 +128,36 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
       ),
     );
     if (ok != true || !mounted) return;
+
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return;
+
+    setState(() => _actionBusy = true);
     try {
-      await context.read<PfSenseSessionProvider>().service!.deleteDhcpLease(lease);
+      await session.service!.deleteDhcpLease(lease);
       await _load(showSpinner: true);
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final q = _search.text.trim().toLowerCase();
+    final session = context.watch<PfSenseSessionProvider>();
+    final query = _search.text.trim().toLowerCase();
     final visible = _leases
         .where((lease) =>
-            q.isEmpty ||
-            lease.ipAddress.toLowerCase().contains(q) ||
-            lease.macAddress.toLowerCase().contains(q) ||
-            lease.hostname.toLowerCase().contains(q) ||
-            lease.interface.toLowerCase().contains(q))
+            query.isEmpty ||
+            lease.ipAddress.toLowerCase().contains(query) ||
+            lease.macAddress.toLowerCase().contains(query) ||
+            lease.hostname.toLowerCase().contains(query) ||
+            lease.interface.toLowerCase().contains(query))
         .toList();
     final active = _leases.where((lease) => lease.active).length;
     final staticCount = _leases.where((lease) => lease.staticMapping).length;
@@ -108,10 +168,17 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
           _LeaseSummary(
-            total: _leases.length,
-            active: active,
-            staticCount: staticCount,
+            total: session.connected ? _leases.length : 0,
+            active: session.connected ? active : 0,
+            staticCount: session.connected ? staticCount : 0,
           ),
+          if (_lastSuccessfulRefresh != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Last updated ${_formatTime(_lastSuccessfulRefresh!)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 14),
           TextField(
             controller: _search,
@@ -122,17 +189,31 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
           ),
           const SizedBox(height: 14),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
-          if (_error != null) _Message(icon: Icons.error_outline, text: '$_error'),
-          if (!_loading && _error == null && visible.isEmpty)
+          if (!session.connected)
+            const _Message(icon: Icons.cloud_off_outlined, text: 'Disconnected')
+          else if (_error != null)
+            _Message(icon: Icons.error_outline, text: '$_error')
+          else if (!_loading && visible.isEmpty)
             const _Message(
               icon: Icons.dns_outlined,
               text: 'No DHCP leases reported by pfREST.',
             ),
-          for (final lease in visible)
-            _LeaseTile(lease: lease, onDelete: () => _delete(lease)),
+          if (session.connected)
+            for (final lease in visible)
+              _LeaseTile(
+                lease: lease,
+                onDelete: _actionBusy ? null : () => _delete(lease),
+              ),
         ],
       ),
     );
+  }
+
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}:'
+        '${local.second.toString().padLeft(2, '0')}';
   }
 }
 
@@ -180,7 +261,7 @@ class _LeaseTile extends StatelessWidget {
   const _LeaseTile({required this.lease, required this.onDelete});
 
   final DhcpLease lease;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
