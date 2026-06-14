@@ -19,4 +19,31 @@ void main() {
     expect(find.text('Disconnected'), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
   });
+
+  testWidgets('supports details and an action', (tester) async {
+    var pressed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StateMessage(
+            icon: Icons.error_outline,
+            text: 'Unable to load data',
+            details: 'Check the selected firewall connection.',
+            action: TextButton(
+              onPressed: () => pressed = true,
+              child: const Text('Retry'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Unable to load data'), findsOneWidget);
+    expect(
+      find.text('Check the selected firewall connection.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Retry'));
+    expect(pressed, isTrue);
+  });
 }
