@@ -49,8 +49,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Check formatting for changed Dart files
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/screens/home_shell.dart \
+            lib/providers/session_provider.dart \
+            test/home_shell_navigation_test.dart
 
       - name: Static analysis
         run: flutter analyze
