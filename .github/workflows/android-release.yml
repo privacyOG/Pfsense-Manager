@@ -1,6 +1,7 @@
-name: Android Release
+name: Android Production Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -8,62 +9,125 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-release:
+    name: Build signed Android release
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.2'
           channel: stable
+          cache: true
 
-      - name: Restore signing key
+      - name: Verify signing secrets
+        shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           test -n "$ANDROID_KEYSTORE_BASE64"
-          mkdir -p android/app
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/pfsense-release.jks
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+
+      - name: Restore signing key
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/pfsense-release.jks
           cat > android/key.properties <<EOF
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyPassword=$ANDROID_KEY_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
-          storeFile=app/pfsense-release.jks
+          storeFile=pfsense-release.jks
           EOF
+          chmod 600 android/app/pfsense-release.jks android/key.properties
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze
+      - name: Analyze release changes
+        run: |
+          dart analyze lib/screens/home_shell.dart
+          dart analyze lib/providers/session_provider.dart
+          dart analyze test/home_shell_navigation_test.dart
 
-      - name: Build release APK
+      - name: Run tests
+        run: flutter test
+
+      - name: Build signed release APK
         run: flutter build apk --release
 
-      - name: Prepare artifact
+      - name: Verify APK signature
+        shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d+ -f1)"
           APK="pfsense-manager-${VERSION}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk "$APK"
           sha256sum "$APK" > "$APK.sha256"
           echo "APK=$APK" >> "$GITHUB_ENV"
 
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfsense-manager-signed-${{ github.sha }}
+          path: |
+            ${{ env.APK }}
+            ${{ env.APK }}.sha256
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: pfSense Manager 1.6.0
+          generate_release_notes: true
+          body: |
+            ## pfSense Manager 1.6.0
+
+            - Redesigned five-destination navigation
+            - Responsive NavigationRail for larger screens
+            - Grouped Firewall, Network and Services sections
+            - Faster firewall profile switching
+            - Automatic reconnection when the app resumes
+            - Safer API-client disposal and stale-request protection
+            - Improved connection error and retry interface
           files: |
             ${{ env.APK }}
             ${{ env.APK }}.sha256
