@@ -11,6 +11,7 @@ class PfSenseApiClient {
   late final Dio _dio;
   final PfSenseProfile profile;
   final bool _useApiKey = true;
+  bool _disposed = false;
 
   PfSenseApiClient(this.profile) {
     if (!profile.useHttps) {
@@ -53,6 +54,7 @@ class PfSenseApiClient {
 
   /// Switch to JWT auth mode (get token, then use Bearer)
   Future<String> getJwtToken() async {
+    _ensureActive();
     try {
       final credentials = '${profile.username}:${profile.apiKey}';
       final encoded = base64Encode(utf8.encode(credentials));
@@ -71,7 +73,6 @@ class PfSenseApiClient {
     }
   }
 
-  /// GET request with automatic retry
   Future<Response> get(
     String path, {
     Map<String, dynamic>? queryParameters,
@@ -79,22 +80,18 @@ class PfSenseApiClient {
     return _request('GET', path, queryParameters: queryParameters);
   }
 
-  /// POST request
   Future<Response> post(String path, {dynamic data}) async {
     return _request('POST', path, data: data);
   }
 
-  /// PUT request
   Future<Response> put(String path, {dynamic data}) async {
     return _request('PUT', path, data: data);
   }
 
-  /// PATCH request
   Future<Response> patch(String path, {dynamic data}) async {
     return _request('PATCH', path, data: data);
   }
 
-  /// DELETE request
   Future<Response> delete(
     String path, {
     Map<String, dynamic>? queryParameters,
@@ -108,6 +105,7 @@ class PfSenseApiClient {
     dynamic data,
     Map<String, dynamic>? queryParameters,
   }) async {
+    _ensureActive();
     try {
       final response = await _dio.request(
         path,
@@ -115,6 +113,7 @@ class PfSenseApiClient {
         queryParameters: queryParameters,
         options: Options(method: method),
       );
+      _ensureActive();
 
       if (response.statusCode != null &&
           response.statusCode! >= 200 &&
@@ -128,6 +127,9 @@ class PfSenseApiClient {
         response.statusCode,
       );
     } on DioException catch (e) {
+      if (_disposed) {
+        throw const ApiException('The pfSense session was closed.');
+      }
       throw ApiException.fromDio(e);
     }
   }
@@ -155,7 +157,15 @@ class PfSenseApiClient {
     return 'Unknown error';
   }
 
+  void _ensureActive() {
+    if (_disposed) {
+      throw const ApiException('The pfSense session was closed.');
+    }
+  }
+
   void dispose() {
-    _dio.close();
+    if (_disposed) return;
+    _disposed = true;
+    _dio.close(force: true);
   }
 }
