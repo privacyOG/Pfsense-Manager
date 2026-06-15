@@ -1,19 +1,22 @@
 # Changelog
 
+## 1.7.3
+
+- Added live per-interface byte, packet, input error, output error, and collision counters.
+- Added support for every reported CPU thermal sensor with hottest-sensor alerts.
+- Added a dedicated Gateways screen with live latency and packet-loss history charts.
+- Added saved live/pause controls and 1, 3, 5, or 10-second gateway refresh intervals.
+- Added persistent Dashboard section ordering, visibility controls, long-press access, and layout reset.
+- Expanded System Information with firmware, architecture, commit hash, package mirror, repository priorities, hostname, platform, uptime, and update timestamps.
+- Improved README branding, donation details, supported-feature documentation, and version information.
+- Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
+
 ## 1.7.2
 
 - Improved Network Monitor traffic graph readability.
 - Added adaptive bandwidth scaling for changing traffic levels.
 - Added a persisted display-unit selector for bits/s and Bytes/s.
 - Improved bandwidth-axis labels, time labels, legends, fills, and tooltips.
-- Replaced stale Network Monitor state totals with live per-interface byte and packet counters.
-- Added Network Monitor visibility for input errors, output errors, and collisions.
-- Added Dashboard support for every reported CPU thermal sensor, including hottest-sensor alerts.
-- Added a dedicated Gateways screen with live latency and packet-loss history charts.
-- Added saved live/pause and 1, 3, 5, or 10-second refresh controls for gateway monitoring.
-- Added persistent Dashboard section ordering with drag handles, visibility controls, long-press access, and layout reset.
-- Expanded System Information with firmware, architecture, commit, package mirror, repository priority, hostname, platform, uptime, and update timestamps.
-- Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.0
 
