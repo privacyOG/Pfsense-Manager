@@ -26,7 +26,7 @@ void main() {
     expect(find.text('WAN_DHCP'), findsOneWidget);
     expect(find.text('ONLINE'), findsOneWidget);
     expect(find.text('Latency 12.4 ms'), findsOneWidget);
-    expect(find.text('Loss 0.5%'), findsOneWidget);
+    expect(find.text('Packet loss 0.5%'), findsOneWidget);
     expect(find.text('Collecting gateway samples…'), findsOneWidget);
   });
 }
