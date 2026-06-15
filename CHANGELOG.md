@@ -9,6 +9,7 @@
 - Replaced stale Network Monitor state totals with live per-interface byte and packet counters.
 - Added Network Monitor visibility for input errors, output errors, and collisions.
 - Added Dashboard support for every reported CPU thermal sensor, including hottest-sensor alerts.
+- Added a dedicated Gateways screen with live latency and packet-loss history charts.
 - Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.0

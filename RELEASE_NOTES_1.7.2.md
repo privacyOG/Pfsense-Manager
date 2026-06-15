@@ -5,6 +5,9 @@
 - Improved Network Monitor traffic graph readability.
 - Added adaptive bandwidth scaling for changing traffic levels.
 - Added saved bits/s and Bytes/s display options.
+- Added live byte, packet, error, and collision counters for every interface.
+- Added all reported CPU thermal sensors to the Dashboard.
+- Added a dedicated Gateways screen with live latency and packet-loss history charts.
 - Improved bandwidth-axis labels, time labels, legends, fills, and tooltips.
 - Preserved existing session, polling, lifecycle, and saved-setting protections.
 
