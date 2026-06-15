@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/dashboard.dart';
 import '../models/network_state.dart';
 import '../providers/session_provider.dart';
+import '../widgets/interface_traffic_totals.dart';
 
 enum _BandwidthUnit { bytes, bits }
 
@@ -301,8 +302,6 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         })
         .toList();
 
-    final bytes = _states.fold<int>(0, (sum, state) => sum + state.bytes);
-    final packets = _states.fold<int>(0, (sum, state) => sum + state.packets);
     final totalRates = _totalHistory.isEmpty
         ? const _InterfaceRates(inBps: 0, outBps: 0)
         : _InterfaceRates(
@@ -315,7 +314,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
-          _summaryCard(bytes: bytes, packets: packets, rates: totalRates),
+          _summaryCard(rates: totalRates),
           const SizedBox(height: 14),
           _TrafficChartCard(
             title: 'Live throughput',
@@ -376,11 +375,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     );
   }
 
-  Widget _summaryCard({
-    required int bytes,
-    required int packets,
-    required _InterfaceRates rates,
-  }) {
+  Widget _summaryCard({required _InterfaceRates rates}) {
     final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
@@ -468,15 +463,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _DarkChip(label: '${_states.length} states'),
-              _DarkChip(label: _formatBytes(bytes)),
-              _DarkChip(label: '$packets packets'),
-            ],
-          ),
+          InterfaceTrafficTotals(interfaces: _interfaces),
           const SizedBox(height: 14),
           SegmentedButton<int>(
             segments: const [
@@ -685,6 +672,8 @@ class _InterfaceTrafficCard extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            InterfaceCounterRow(interface: interface),
             const SizedBox(height: 14),
             SizedBox(
               height: 170,
@@ -1148,31 +1137,6 @@ class _MetricTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DarkChip extends StatelessWidget {
-  const _DarkChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Color(0xFFD4E1EC),
-          fontWeight: FontWeight.w600,
-        ),
       ),
     );
   }
