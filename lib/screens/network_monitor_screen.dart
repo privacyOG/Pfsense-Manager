@@ -10,6 +10,8 @@ import '../models/dashboard.dart';
 import '../models/network_state.dart';
 import '../providers/session_provider.dart';
 
+enum _BandwidthUnit { bytes, bits }
+
 class NetworkMonitorScreen extends StatefulWidget {
   const NetworkMonitorScreen({super.key});
 
@@ -24,6 +26,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   static const _prefLive = 'networkMonitor.live';
   static const _prefRefreshSeconds = 'networkMonitor.refreshSeconds';
   static const _prefQuickFilter = 'networkMonitor.quickFilter';
+  static const _prefBandwidthUnit = 'networkMonitor.bandwidthUnit';
 
   final _search = TextEditingController();
   final Map<String, _InterfaceCounters> _previousCounters = {};
@@ -40,6 +43,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   bool _preferencesLoaded = false;
   int _refreshSeconds = 3;
   String _quickFilter = 'all';
+  _BandwidthUnit _bandwidthUnit = _BandwidthUnit.bits;
   Timer? _timer;
   DateTime? _lastSampleAt;
   DateTime? _lastSuccessfulRefresh;
@@ -61,12 +65,15 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
 
     final savedInterval = preferences.getInt(_prefRefreshSeconds) ?? 3;
     final allowedIntervals = const {1, 3, 5, 10};
+    final savedUnit = preferences.getString(_prefBandwidthUnit);
     setState(() {
       _live = preferences.getBool(_prefLive) ?? true;
       _refreshSeconds = allowedIntervals.contains(savedInterval)
           ? savedInterval
           : math.max(_minimumRefreshSeconds, savedInterval);
       _quickFilter = preferences.getString(_prefQuickFilter) ?? 'all';
+      _bandwidthUnit =
+          savedUnit == 'bytes' ? _BandwidthUnit.bytes : _BandwidthUnit.bits;
       _preferencesLoaded = true;
     });
     _startTimer();
@@ -77,6 +84,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     await preferences.setBool(_prefLive, _live);
     await preferences.setInt(_prefRefreshSeconds, _refreshSeconds);
     await preferences.setString(_prefQuickFilter, _quickFilter);
+    await preferences.setString(
+      _prefBandwidthUnit,
+      _bandwidthUnit == _BandwidthUnit.bytes ? 'bytes' : 'bits',
+    );
   }
 
   void _onSearchChanged() {
@@ -235,13 +246,16 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
       final outRate = previous == null
           ? 0.0
           : math.max(0, current.bytesOut - previous.bytesOut) / elapsed;
+
       nextCounters[key] = current;
       nextRates[key] = _InterfaceRates(inBps: inRate, outBps: outRate);
       totalIn += inRate;
       totalOut += outRate;
 
       final history = _interfaceHistory.putIfAbsent(key, () => []);
-      history.add(_RateSample(capturedAt: now, inBps: inRate, outBps: outRate));
+      history.add(
+        _RateSample(capturedAt: now, inBps: inRate, outBps: outRate),
+      );
       _trimHistory(history, now);
     }
 
@@ -286,6 +300,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
           ].join(' ').toLowerCase().contains(query);
         })
         .toList();
+
     final bytes = _states.fold<int>(0, (sum, state) => sum + state.bytes);
     final packets = _states.fold<int>(0, (sum, state) => sum + state.packets);
     final totalRates = _totalHistory.isEmpty
@@ -306,14 +321,16 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
             title: 'Live throughput',
             subtitle: 'Combined traffic across all reported interfaces',
             history: _totalHistory,
-            height: 220,
+            height: 250,
+            unit: _bandwidthUnit,
           ),
-          const SizedBox(height: 10),
-          if (_lastSuccessfulRefresh != null)
+          if (_lastSuccessfulRefresh != null) ...[
+            const SizedBox(height: 8),
             Text(
-              'Last updated ${_formatTime(_lastSuccessfulRefresh!)}',
+              'Last updated ${_formatClock(_lastSuccessfulRefresh!)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+          ],
           const SizedBox(height: 8),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
@@ -340,6 +357,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
                       _interfaceHistory[_interfaceLabel(_interfaces[index])] ??
                           const [],
                   accent: _interfaceAccent(index),
+                  unit: _bandwidthUnit,
                 ),
               ),
           ],
@@ -386,8 +404,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         children: [
           Row(
             children: [
-              const Icon(Icons.monitor_heart_outlined,
-                  color: Color(0xFF8BC1FF)),
+              const Icon(
+                Icons.monitor_heart_outlined,
+                color: Color(0xFF8BC1FF),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -407,24 +427,42 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          SegmentedButton<_BandwidthUnit>(
+            segments: const [
+              ButtonSegment(
+                value: _BandwidthUnit.bits,
+                label: Text('bits/s'),
+              ),
+              ButtonSegment(
+                value: _BandwidthUnit.bytes,
+                label: Text('Bytes/s'),
+              ),
+            ],
+            selected: {_bandwidthUnit},
+            onSelectionChanged: (values) {
+              setState(() => _bandwidthUnit = values.first);
+              _savePreferences();
+            },
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: _MetricTile(
                   label: 'Inbound',
-                  value: _formatRate(rates.inBps),
+                  value: _formatRate(rates.inBps, _bandwidthUnit),
                   icon: Icons.south_west,
-                  color: const Color(0xFF63E6BE),
+                  color: const Color(0xFF29B6F6),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _MetricTile(
                   label: 'Outbound',
-                  value: _formatRate(rates.outBps),
+                  value: _formatRate(rates.outBps, _bandwidthUnit),
                   icon: Icons.north_east,
-                  color: const Color(0xFFFFB86B),
+                  color: const Color(0xFFFF8A00),
                 ),
               ),
             ],
@@ -537,21 +575,14 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     };
   }
 
-  String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}:'
-        '${local.second.toString().padLeft(2, '0')}';
-  }
-
   Color _interfaceAccent(int index) {
     const accents = [
-      Color(0xFF63E6BE),
-      Color(0xFF74C0FC),
-      Color(0xFFFFB86B),
-      Color(0xFFB197FC),
-      Color(0xFF4DABF7),
-      Color(0xFFFF8787),
+      Color(0xFF29B6F6),
+      Color(0xFF66BB6A),
+      Color(0xFFAB47BC),
+      Color(0xFFFFCA28),
+      Color(0xFF26C6DA),
+      Color(0xFFEF5350),
     ];
     return accents[index % accents.length];
   }
@@ -563,12 +594,14 @@ class _InterfaceTrafficCard extends StatelessWidget {
     required this.rates,
     required this.history,
     required this.accent,
+    required this.unit,
   });
 
   final InterfaceStatus interface;
   final _InterfaceRates? rates;
   final List<_RateSample> history;
   final Color accent;
+  final _BandwidthUnit unit;
 
   @override
   Widget build(BuildContext context) {
@@ -579,7 +612,7 @@ class _InterfaceTrafficCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         color: const Color(0xFF102741),
-        border: Border.all(color: accent.withOpacity(0.28)),
+        border: Border.all(color: accent.withOpacity(0.32)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.18),
@@ -590,7 +623,7 @@ class _InterfaceTrafficCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+        padding: const EdgeInsets.fromLTRB(16, 15, 12, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -620,7 +653,6 @@ class _InterfaceTrafficCard extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                             ),
                       ),
-                      const SizedBox(height: 2),
                       Text(
                         interface.up ? 'Online' : 'Offline',
                         style: TextStyle(
@@ -635,17 +667,17 @@ class _InterfaceTrafficCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'IN  ${_formatRate(inRate)}',
+                      'IN  ${_formatRate(inRate, unit)}',
                       style: const TextStyle(
-                        color: Color(0xFF63E6BE),
+                        color: Color(0xFF29B6F6),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'OUT  ${_formatRate(outRate)}',
+                      'OUT  ${_formatRate(outRate, unit)}',
                       style: const TextStyle(
-                        color: Color(0xFFFFB86B),
+                        color: Color(0xFFFF8A00),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -655,8 +687,13 @@ class _InterfaceTrafficCard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             SizedBox(
-              height: 94,
-              child: _MiniTrafficChart(history: history, accent: accent),
+              height: 170,
+              child: _BandwidthChart(
+                history: history,
+                unit: unit,
+                inboundColor: accent,
+                compact: true,
+              ),
             ),
           ],
         ),
@@ -671,12 +708,14 @@ class _TrafficChartCard extends StatelessWidget {
     required this.subtitle,
     required this.history,
     required this.height,
+    required this.unit,
   });
 
   final String title;
   final String subtitle;
   final List<_RateSample> history;
   final double height;
+  final _BandwidthUnit unit;
 
   @override
   Widget build(BuildContext context) {
@@ -686,7 +725,7 @@ class _TrafficChartCard extends StatelessWidget {
         color: const Color(0xFF0B1C30),
         border: Border.all(color: const Color(0xFF2B4E72)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 10, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -699,13 +738,19 @@ class _TrafficChartCard extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            subtitle,
+            '$subtitle • ${unit == _BandwidthUnit.bits ? 'bits/s' : 'Bytes/s'}',
             style: const TextStyle(color: Color(0xFF9CB3CA)),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          const _ChartLegend(),
+          const SizedBox(height: 10),
           SizedBox(
             height: height,
-            child: _FullTrafficChart(history: history),
+            child: _BandwidthChart(
+              history: history,
+              unit: unit,
+              inboundColor: const Color(0xFF29B6F6),
+            ),
           ),
         ],
       ),
@@ -713,44 +758,99 @@ class _TrafficChartCard extends StatelessWidget {
   }
 }
 
-class _FullTrafficChart extends StatelessWidget {
-  const _FullTrafficChart({required this.history});
+class _ChartLegend extends StatelessWidget {
+  const _ChartLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Wrap(
+      spacing: 18,
+      runSpacing: 8,
+      children: [
+        _LegendItem(label: 'Inbound', color: Color(0xFF29B6F6)),
+        _LegendItem(label: 'Outbound', color: Color(0xFFFF8A00)),
+      ],
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 11,
+          height: 11,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: Color(0xFFD4E1EC))),
+      ],
+    );
+  }
+}
+
+class _BandwidthChart extends StatelessWidget {
+  const _BandwidthChart({
+    required this.history,
+    required this.unit,
+    required this.inboundColor,
+    this.compact = false,
+  });
 
   final List<_RateSample> history;
+  final _BandwidthUnit unit;
+  final Color inboundColor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     if (history.length < 2) {
-      return const _ChartPlaceholder();
+      return _ChartPlaceholder(compact: compact);
     }
 
-    final inSpots = <FlSpot>[];
-    final outSpots = <FlSpot>[];
-    for (var i = 0; i < history.length; i++) {
-      inSpots.add(FlSpot(i.toDouble(), history[i].inBps));
-      outSpots.add(FlSpot(i.toDouble(), history[i].outBps));
+    final inbound = <FlSpot>[];
+    final outbound = <FlSpot>[];
+    var visiblePeak = 0.0;
+    for (var index = 0; index < history.length; index++) {
+      final inValue = _displayRate(history[index].inBps, unit);
+      final outValue = _displayRate(history[index].outBps, unit);
+      visiblePeak = math.max(visiblePeak, math.max(inValue, outValue));
+      inbound.add(FlSpot(index.toDouble(), inValue));
+      outbound.add(FlSpot(index.toDouble(), -outValue));
     }
-    final maxY = math.max(
-      1024.0,
-      history.fold<double>(
-        0,
-        (current, sample) =>
-            math.max(current, math.max(sample.inBps, sample.outBps)),
-      ) * 1.2,
-    );
+
+    final scale = _niceScale(visiblePeak);
+    final interval = scale / 2;
+    final maxX = math.max(1, history.length - 1).toDouble();
 
     return LineChart(
       LineChartData(
         minX: 0,
-        maxX: math.max(1, history.length - 1).toDouble(),
-        minY: 0,
-        maxY: maxY,
+        maxX: maxX,
+        minY: -scale,
+        maxY: scale,
+        clipData: const FlClipData.all(),
         gridData: FlGridData(
           show: true,
-          drawVerticalLine: false,
-          horizontalInterval: math.max(1, maxY / 4),
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: Colors.white.withOpacity(0.08),
+          drawVerticalLine: !compact,
+          horizontalInterval: interval,
+          verticalInterval: compact ? 1 : math.max(1, maxX / 4),
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: value == 0
+                ? Colors.white.withOpacity(0.42)
+                : Colors.white.withOpacity(0.10),
+            strokeWidth: value == 0 ? 1.4 : 1,
+          ),
+          getDrawingVerticalLine: (_) => FlLine(
+            color: Colors.white.withOpacity(0.07),
             strokeWidth: 1,
           ),
         ),
@@ -758,35 +858,94 @@ class _FullTrafficChart extends StatelessWidget {
           topTitles: const AxisTitles(
             sideTitles: SideTitles(showTitles: false),
           ),
-          rightTitles: const AxisTitles(
+          leftTitles: const AxisTitles(
             sideTitles: SideTitles(showTitles: false),
           ),
-          bottomTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
+          rightTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 56,
-              getTitlesWidget: (value, meta) => Text(
-                _formatRate(value),
-                style: const TextStyle(
-                  color: Color(0xFF8FA7BE),
-                  fontSize: 10,
-                ),
-              ),
+              reservedSize: compact ? 48 : 62,
+              interval: interval,
+              getTitlesWidget: (value, meta) {
+                if (value.abs() < interval / 10) {
+                  return const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: Text(
+                      '0',
+                      style: TextStyle(
+                        color: Color(0xFFD7E3EE),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text(
+                    _formatAxis(value.abs(), unit),
+                    style: TextStyle(
+                      color: value > 0
+                          ? const Color(0xFF81D4FA)
+                          : const Color(0xFFFFB74D),
+                      fontSize: compact ? 9 : 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: compact ? 22 : 28,
+              interval: math.max(1, maxX / 2),
+              getTitlesWidget: (value, meta) {
+                final index =
+                    value.round().clamp(0, history.length - 1).toInt();
+                final isStart = index == 0;
+                final isMiddle =
+                    (index - (history.length - 1) / 2).abs() <= 1;
+                final isEnd = index == history.length - 1;
+                if (!isStart && !isMiddle && !isEnd) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    _formatClock(history[index].capturedAt),
+                    style: TextStyle(
+                      color: const Color(0xFF9CB3CA),
+                      fontSize: compact ? 9 : 10,
+                      fontWeight:
+                          isStart || isEnd ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
-        borderData: FlBorderData(show: false),
+        borderData: FlBorderData(
+          show: true,
+          border: Border(
+            right: BorderSide(color: Colors.white.withOpacity(0.35)),
+            bottom: BorderSide(color: Colors.white.withOpacity(0.18)),
+          ),
+        ),
         lineTouchData: LineTouchData(
+          enabled: !compact,
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (spots) => spots
                 .map(
                   (spot) => LineTooltipItem(
-                    '${spot.barIndex == 0 ? 'In' : 'Out'} ${_formatRate(spot.y)}',
-                    const TextStyle(
-                      color: Colors.white,
+                    '${spot.barIndex == 0 ? 'Inbound' : 'Outbound'}\n'
+                    '${_formatDisplayValue(spot.y.abs(), unit)}',
+                    TextStyle(
+                      color: spot.barIndex == 0
+                          ? const Color(0xFF81D4FA)
+                          : const Color(0xFFFFB74D),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -795,55 +954,22 @@ class _FullTrafficChart extends StatelessWidget {
           ),
         ),
         lineBarsData: [
-          _lineData(inSpots, const Color(0xFF63E6BE), fill: true),
-          _lineData(outSpots, const Color(0xFFFFB86B), fill: false),
+          _lineData(
+            inbound,
+            inboundColor,
+            fillToZero: true,
+            aboveZero: true,
+          ),
+          _lineData(
+            outbound,
+            const Color(0xFFFF8A00),
+            fillToZero: true,
+            aboveZero: false,
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _MiniTrafficChart extends StatelessWidget {
-  const _MiniTrafficChart({required this.history, required this.accent});
-
-  final List<_RateSample> history;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    if (history.length < 2) {
-      return const _ChartPlaceholder(compact: true);
-    }
-    final inSpots = <FlSpot>[];
-    final outSpots = <FlSpot>[];
-    for (var i = 0; i < history.length; i++) {
-      inSpots.add(FlSpot(i.toDouble(), history[i].inBps));
-      outSpots.add(FlSpot(i.toDouble(), history[i].outBps));
-    }
-    final maxY = math.max(
-      1024.0,
-      history.fold<double>(
-        0,
-        (current, sample) =>
-            math.max(current, math.max(sample.inBps, sample.outBps)),
-      ) * 1.15,
-    );
-
-    return LineChart(
-      LineChartData(
-        minX: 0,
-        maxX: math.max(1, history.length - 1).toDouble(),
-        minY: 0,
-        maxY: maxY,
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          _lineData(inSpots, accent, fill: true),
-          _lineData(outSpots, const Color(0xFFFFB86B), fill: false),
-        ],
-      ),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
     );
   }
 }
@@ -851,21 +977,106 @@ class _MiniTrafficChart extends StatelessWidget {
 LineChartBarData _lineData(
   List<FlSpot> spots,
   Color color, {
-  required bool fill,
+  required bool fillToZero,
+  required bool aboveZero,
 }) {
   return LineChartBarData(
     spots: spots,
-    isCurved: true,
-    curveSmoothness: 0.22,
+    isCurved: false,
     color: color,
     barWidth: 2.2,
     isStrokeCapRound: true,
     dotData: const FlDotData(show: false),
     belowBarData: BarAreaData(
-      show: fill,
-      color: color.withOpacity(0.13),
+      show: fillToZero && aboveZero,
+      color: color.withOpacity(0.28),
+      cutOffY: 0,
+      applyCutOffY: true,
+    ),
+    aboveBarData: BarAreaData(
+      show: fillToZero && !aboveZero,
+      color: color.withOpacity(0.30),
+      cutOffY: 0,
+      applyCutOffY: true,
     ),
   );
+}
+
+double _displayRate(double bytesPerSecond, _BandwidthUnit unit) {
+  return unit == _BandwidthUnit.bits ? bytesPerSecond * 8 : bytesPerSecond;
+}
+
+double _niceScale(double peak) {
+  if (!peak.isFinite || peak <= 0) return 1;
+  final padded = peak * 1.18;
+  final exponent =
+      math.pow(10, (math.log(padded) / math.ln10).floor()).toDouble();
+  final fraction = padded / exponent;
+  final niceFraction = fraction <= 1
+      ? 1.0
+      : fraction <= 2
+          ? 2.0
+          : fraction <= 5
+              ? 5.0
+              : 10.0;
+  return math.max(1, niceFraction * exponent);
+}
+
+String _formatRate(double bytesPerSecond, _BandwidthUnit unit) {
+  return _formatDisplayValue(_displayRate(bytesPerSecond, unit), unit);
+}
+
+String _formatDisplayValue(double value, _BandwidthUnit unit) {
+  final base = unit == _BandwidthUnit.bits ? 1000.0 : 1024.0;
+  final suffixes = unit == _BandwidthUnit.bits
+      ? const ['b/s', 'Kb/s', 'Mb/s', 'Gb/s', 'Tb/s']
+      : const ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'];
+
+  var scaled = value.abs();
+  var suffixIndex = 0;
+  while (scaled >= base && suffixIndex < suffixes.length - 1) {
+    scaled /= base;
+    suffixIndex++;
+  }
+  final decimals = scaled >= 100
+      ? 0
+      : scaled >= 10
+          ? 1
+          : 2;
+  return '${scaled.toStringAsFixed(decimals)} ${suffixes[suffixIndex]}';
+}
+
+String _formatAxis(double value, _BandwidthUnit unit) {
+  final formatted = _formatDisplayValue(value, unit);
+  return formatted.replaceAll('/s', '');
+}
+
+String _formatClock(DateTime value) {
+  final local = value.toLocal();
+  return '${local.minute.toString().padLeft(2, '0')}:'
+      '${local.second.toString().padLeft(2, '0')}';
+}
+
+String _interfaceLabel(InterfaceStatus interface) {
+  final description = interface.description.trim();
+  if (description.isNotEmpty) return description;
+  final name = interface.name.trim();
+  if (name.isNotEmpty) return name.toUpperCase();
+  final hardware = interface.hardwareInterface.trim();
+  return hardware.isEmpty ? 'unknown' : hardware;
+}
+
+String _formatBytes(int bytes) {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  if (bytes >= 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+  return '$bytes B';
 }
 
 class _ChartPlaceholder extends StatelessWidget {
@@ -965,31 +1176,6 @@ class _DarkChip extends StatelessWidget {
       ),
     );
   }
-}
-
-String _interfaceLabel(InterfaceStatus interface) {
-  final description = interface.description.trim();
-  if (description.isNotEmpty) return description;
-  final name = interface.name.trim();
-  if (name.isNotEmpty) return name.toUpperCase();
-  final hardware = interface.hardwareInterface.trim();
-  return hardware.isEmpty ? 'unknown' : hardware;
-}
-
-String _formatRate(double bytesPerSecond) =>
-    '${_formatBytes(bytesPerSecond.round())}/s';
-
-String _formatBytes(int bytes) {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-  if (bytes >= 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-  if (bytes >= 1024) {
-    return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  }
-  return '$bytes B';
 }
 
 class _InterfaceCounters {
