@@ -125,6 +125,15 @@ Do not expose the pfSense REST API directly to the public internet. Access it fr
 
 Credentials are stored using Android secure storage, but users should still protect the device with a strong screen lock.
 
+## Legal and privacy
+
+- [GNU General Public License v3.0](LICENSE)
+- [Project notice](NOTICE)
+- [Privacy policy](PRIVACY_POLICY.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
+
+pfSense Manager is licensed under **GPL-3.0-only**. Distributed modified versions must remain available under GPLv3 with corresponding source code.
+
 ## Current version
 
 `1.7.3+12`
