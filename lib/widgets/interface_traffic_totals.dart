@@ -1,0 +1,181 @@
+import 'package:flutter/material.dart';
+
+import '../models/dashboard.dart';
+
+class InterfaceTrafficTotals extends StatelessWidget {
+  const InterfaceTrafficTotals({
+    super.key,
+    required this.interfaces,
+    this.compact = false,
+  });
+
+  final List<InterfaceStatus> interfaces;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytesIn = interfaces.fold<int>(0, (sum, item) => sum + item.bytesIn);
+    final bytesOut = interfaces.fold<int>(0, (sum, item) => sum + item.bytesOut);
+    final packetsIn = interfaces.fold<int>(0, (sum, item) => sum + item.packetsIn);
+    final packetsOut = interfaces.fold<int>(0, (sum, item) => sum + item.packetsOut);
+
+    final items = [
+      _Counter('Bytes in', _formatBytes(bytesIn), Icons.south_west, const Color(0xFF29B6F6)),
+      _Counter('Bytes out', _formatBytes(bytesOut), Icons.north_east, const Color(0xFFFF8A00)),
+      _Counter('Packets in', _formatCount(packetsIn), Icons.download_outlined, const Color(0xFF66BB6A)),
+      _Counter('Packets out', _formatCount(packetsOut), Icons.upload_outlined, const Color(0xFFAB47BC)),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 520 ? 4 : 2;
+        final width = (constraints.maxWidth - ((columns - 1) * 8)) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: width,
+                child: _CounterTile(counter: item, compact: compact),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class InterfaceCounterRow extends StatelessWidget {
+  const InterfaceCounterRow({super.key, required this.interface});
+
+  final InterfaceStatus interface;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 430;
+        final children = [
+          _InlineCounter(label: 'Bytes in', value: _formatBytes(interface.bytesIn)),
+          _InlineCounter(label: 'Bytes out', value: _formatBytes(interface.bytesOut)),
+          _InlineCounter(label: 'Packets in', value: _formatCount(interface.packetsIn)),
+          _InlineCounter(label: 'Packets out', value: _formatCount(interface.packetsOut)),
+        ];
+        return GridView.count(
+          crossAxisCount: narrow ? 2 : 4,
+          childAspectRatio: narrow ? 2.2 : 1.8,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: children,
+        );
+      },
+    );
+  }
+}
+
+class _Counter {
+  const _Counter(this.label, this.value, this.icon, this.color);
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+}
+
+class _CounterTile extends StatelessWidget {
+  const _CounterTile({required this.counter, required this.compact});
+
+  final _Counter counter;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 11, vertical: compact ? 9 : 11),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: counter.color.withOpacity(0.20)),
+      ),
+      child: Row(
+        children: [
+          Icon(counter.icon, color: counter.color, size: compact ? 17 : 19),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(counter.label, style: const TextStyle(color: Color(0xFFAFC0D1), fontSize: 11)),
+                const SizedBox(height: 2),
+                Text(
+                  counter.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineCounter extends StatelessWidget {
+  const _InlineCounter({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Color(0xFF9CB3CA), fontSize: 10)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes >= 1024 * 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024 * 1024)).toStringAsFixed(1)} TB';
+  }
+  if (bytes >= 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  if (bytes >= 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+  return '$bytes B';
+}
+
+String _formatCount(int value) {
+  if (value >= 1000000000) return '${(value / 1000000000).toStringAsFixed(1)}B';
+  if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
+  if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
+  return value.toString();
+}
