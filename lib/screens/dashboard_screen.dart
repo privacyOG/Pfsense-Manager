@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/dashboard.dart';
+import '../models/dashboard_layout.dart';
 import '../providers/session_provider.dart';
 import '../widgets/thermal_sensors_panel.dart';
 
@@ -24,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   static const _prefShowLoad = 'dashboard.showLoad';
   static const _prefShowGateways = 'dashboard.showGateways';
   static const _prefShowInterfaces = 'dashboard.showInterfaces';
+  static const _prefCardOrder = 'dashboard.cardOrder';
 
   DashboardData? _data;
   Object? _error;
@@ -36,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _showLoad = true;
   bool _showGateways = true;
   bool _showInterfaces = true;
+  List<String> _cardOrder = DashboardLayoutSection.defaults.toList();
   Timer? _timer;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
@@ -77,6 +80,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       _showLoad = prefs.getBool(_prefShowLoad) ?? true;
       _showGateways = prefs.getBool(_prefShowGateways) ?? true;
       _showInterfaces = prefs.getBool(_prefShowInterfaces) ?? true;
+      _cardOrder = DashboardLayout.normalize(
+        prefs.getStringList(_prefCardOrder),
+      );
       _preferencesLoaded = true;
     });
     _startTimer();
@@ -90,6 +96,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     await prefs.setBool(_prefShowLoad, _showLoad);
     await prefs.setBool(_prefShowGateways, _showGateways);
     await prefs.setBool(_prefShowInterfaces, _showInterfaces);
+    await prefs.setStringList(_prefCardOrder, _cardOrder);
   }
 
   void _startTimer() {
@@ -177,6 +184,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  void _reorderCards(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final item = _cardOrder.removeAt(oldIndex);
+      _cardOrder.insert(newIndex, item);
+    });
+    _saveDashboardPreferences();
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
@@ -210,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               showLoad: _showLoad,
               showGateways: _showGateways,
               showInterfaces: _showInterfaces,
+              cardOrder: _cardOrder,
               onLiveChanged: (value) {
                 setState(() => _live = value);
                 _saveDashboardPreferences();
@@ -234,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -243,75 +261,146 @@ class _DashboardScreenState extends State<DashboardScreen>
               _saveDashboardPreferences();
             }
 
+            void reorder(int oldIndex, int newIndex) {
+              _reorderCards(oldIndex, newIndex);
+              setSheetState(() {});
+            }
+
             return SafeArea(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-                children: [
-                  Text(
-                    'Dashboard visibility',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  SwitchListTile(
-                    value: _live,
-                    onChanged: (value) => update(() => _live = value),
-                    title: const Text('Live refresh'),
-                    secondary: const Icon(Icons.sync),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.timer_outlined),
-                    title: const Text('Refresh interval'),
-                    trailing: DropdownButton<int>(
-                      value: _refreshSeconds,
-                      items: const [
-                        DropdownMenuItem(value: 1, child: Text('1 sec')),
-                        DropdownMenuItem(value: 3, child: Text('3 sec')),
-                        DropdownMenuItem(value: 5, child: Text('5 sec')),
-                        DropdownMenuItem(value: 10, child: Text('10 sec')),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        update(() => _refreshSeconds = value);
-                        _startTimer();
-                        if (_live) _refresh();
-                      },
+              child: FractionallySizedBox(
+                heightFactor: 0.86,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dashboard layout',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Drag sections into your preferred order. Long-press any dashboard section to return here.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  CheckboxListTile(
-                    value: _showHealth,
-                    onChanged: (value) =>
-                        update(() => _showHealth = value ?? true),
-                    title: const Text('Health gauges'),
-                    secondary: const Icon(Icons.speed),
-                  ),
-                  CheckboxListTile(
-                    value: _showLoad,
-                    onChanged: (value) =>
-                        update(() => _showLoad = value ?? true),
-                    title: const Text('Load, thermal and buffers'),
-                    secondary: const Icon(Icons.device_thermostat),
-                  ),
-                  CheckboxListTile(
-                    value: _showGateways,
-                    onChanged: (value) =>
-                        update(() => _showGateways = value ?? true),
-                    title: const Text('Gateways'),
-                    secondary: const Icon(Icons.public),
-                  ),
-                  CheckboxListTile(
-                    value: _showInterfaces,
-                    onChanged: (value) =>
-                        update(() => _showInterfaces = value ?? true),
-                    title: const Text('Interfaces'),
-                    secondary: const Icon(Icons.settings_ethernet),
-                  ),
-                ],
+                    Expanded(
+                      child: ReorderableListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: _cardOrder.length,
+                        onReorder: reorder,
+                        buildDefaultDragHandles: false,
+                        itemBuilder: (context, index) {
+                          final id = _cardOrder[index];
+                          return Card(
+                            key: ValueKey(id),
+                            child: ListTile(
+                              leading: Icon(_sectionIcon(id)),
+                              title: Text(_sectionLabel(id)),
+                              subtitle: Text(
+                                _sectionVisible(id) ? 'Visible' : 'Hidden',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Switch(
+                                    value: _sectionVisible(id),
+                                    onChanged: (value) {
+                                      update(() => _setSectionVisible(id, value));
+                                    },
+                                  ),
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: Icon(Icons.drag_handle),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile(
+                      value: _live,
+                      onChanged: (value) => update(() => _live = value),
+                      title: const Text('Live refresh'),
+                      secondary: const Icon(Icons.sync),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.timer_outlined),
+                      title: const Text('Refresh interval'),
+                      trailing: DropdownButton<int>(
+                        value: _refreshSeconds,
+                        items: const [
+                          DropdownMenuItem(value: 1, child: Text('1 sec')),
+                          DropdownMenuItem(value: 3, child: Text('3 sec')),
+                          DropdownMenuItem(value: 5, child: Text('5 sec')),
+                          DropdownMenuItem(value: 10, child: Text('10 sec')),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          update(() => _refreshSeconds = value);
+                          _startTimer();
+                          if (_live) _refresh();
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            update(() {
+                              _cardOrder =
+                                  DashboardLayoutSection.defaults.toList();
+                            });
+                          },
+                          icon: const Icon(Icons.restart_alt),
+                          label: const Text('Reset layout'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
         );
       },
     );
+  }
+
+  bool _sectionVisible(String id) {
+    return switch (id) {
+      DashboardLayoutSection.health => _showHealth,
+      DashboardLayoutSection.system => _showLoad,
+      DashboardLayoutSection.gateways => _showGateways,
+      DashboardLayoutSection.interfaces => _showInterfaces,
+      _ => true,
+    };
+  }
+
+  void _setSectionVisible(String id, bool value) {
+    switch (id) {
+      case DashboardLayoutSection.health:
+        _showHealth = value;
+      case DashboardLayoutSection.system:
+        _showLoad = value;
+      case DashboardLayoutSection.gateways:
+        _showGateways = value;
+      case DashboardLayoutSection.interfaces:
+        _showInterfaces = value;
+    }
   }
 
   void _showNocWallboard(DashboardData data) {
@@ -342,6 +431,7 @@ class _DashboardBody extends StatelessWidget {
     required this.showLoad,
     required this.showGateways,
     required this.showInterfaces,
+    required this.cardOrder,
     required this.onLiveChanged,
     required this.onRefreshSecondsChanged,
     required this.onCustomize,
@@ -356,6 +446,7 @@ class _DashboardBody extends StatelessWidget {
   final bool showLoad;
   final bool showGateways;
   final bool showInterfaces;
+  final List<String> cardOrder;
   final ValueChanged<bool> onLiveChanged;
   final ValueChanged<int> onRefreshSecondsChanged;
   final VoidCallback onCustomize;
@@ -364,7 +455,6 @@ class _DashboardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 760;
     final onlineGateways = data.gateways.where((gateway) => gateway.online);
     final upInterfaces = data.interfaces.where((interface) => interface.up);
 
@@ -389,107 +479,199 @@ class _DashboardBody extends StatelessWidget {
         const SizedBox(height: 14),
         _AlertStrip(data: data),
         const SizedBox(height: 14),
-        if (showHealth) ...[
-          _ResponsiveGrid(
-            minTileWidth: wide ? 220 : 150,
-            children: [
-              _MetricGauge(
-                icon: Icons.memory_outlined,
-                label: 'CPU',
-                value: data.cpuUsage,
-                detail: data.cpuCount > 0 ? '${data.cpuCount} cores' : 'Load',
-                color: const Color(0xFF00C2A8),
-              ),
-              _MetricGauge(
-                icon: Icons.developer_board_outlined,
-                label: 'Memory',
-                value: data.memoryUsage,
-                detail: 'RAM in use',
-                color: const Color(0xFF5E9CFF),
-              ),
-              _MetricGauge(
-                icon: Icons.storage_outlined,
-                label: 'Disk',
-                value: data.diskUsage,
-                detail: 'Filesystem used',
-                color: const Color(0xFFFFB020),
-              ),
-              _MetricGauge(
-                icon: Icons.swap_horiz,
-                label: 'Swap',
-                value: data.swapUsage,
-                detail: 'Swap used',
-                color: const Color(0xFFB36BFF),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-        ],
-        if (showLoad) ...[
-          _ResponsiveGrid(
-            minTileWidth: wide ? 320 : 240,
-            children: [
-              _LoadCard(data: data),
-              _MiniUsageCard(
-                icon: Icons.hub_outlined,
-                title: 'MBUF',
-                value: data.mbufUsage,
-                subtitle: 'Network buffer usage',
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ThermalSensorsPanel(
-            sensors: data.thermalSensors,
-            fallbackTemperatureC: data.temperatureC,
-          ),
-          const SizedBox(height: 22),
-        ],
-        if (showGateways) ...[
-          _SectionHeader(
-            icon: Icons.public_outlined,
-            title: 'Gateways',
-            action: data.gateways.isEmpty
-                ? 'Not reported'
-                : '${onlineGateways.length}/${data.gateways.length} online',
-          ),
-          const SizedBox(height: 10),
-          if (data.gateways.isEmpty)
-            const _EmptyPanel('No gateway telemetry returned by pfSense.')
-          else
-            _ResponsiveGrid(
-              minTileWidth: wide ? 300 : 260,
-              children: data.gateways.map(_GatewayCard.new).toList(),
+        for (final id in cardOrder)
+          if (_isVisible(id))
+            _DashboardSection(
+              key: ValueKey(id),
+              onLongPress: onCustomize,
+              child: _buildSection(context, id),
             ),
-          const SizedBox(height: 22),
-        ],
-        if (showInterfaces) ...[
-          _SectionHeader(
-            icon: Icons.settings_ethernet,
-            title: 'Interfaces',
-            action: data.interfaces.isEmpty
-                ? 'Not reported'
-                : '${upInterfaces.length}/${data.interfaces.length} up',
-          ),
-          const SizedBox(height: 10),
-          if (data.interfaces.isEmpty)
-            const _EmptyPanel('No interface telemetry returned by pfSense.')
-          else
-            _ResponsiveGrid(
-              minTileWidth: wide ? 330 : 280,
-              children: data.interfaces
-                  .map(
-                    (interface) => _InterfaceCard(
-                      interface,
-                      onTap: () => onInterfaceTap(interface),
-                    ),
-                  )
-                  .toList(),
-            ),
-        ],
       ],
     );
   }
+
+  bool _isVisible(String id) {
+    return switch (id) {
+      DashboardLayoutSection.health => showHealth,
+      DashboardLayoutSection.system => showLoad,
+      DashboardLayoutSection.gateways => showGateways,
+      DashboardLayoutSection.interfaces => showInterfaces,
+      _ => false,
+    };
+  }
+
+  Widget _buildSection(BuildContext context, String id) {
+    final wide = MediaQuery.sizeOf(context).width >= 760;
+    final onlineGateways = data.gateways.where((gateway) => gateway.online);
+    final upInterfaces = data.interfaces.where((interface) => interface.up);
+
+    return switch (id) {
+      DashboardLayoutSection.health => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              icon: Icons.speed,
+              title: 'Health gauges',
+              action: 'Long-press to arrange',
+            ),
+            const SizedBox(height: 10),
+            _ResponsiveGrid(
+              minTileWidth: wide ? 220 : 150,
+              children: [
+                _MetricGauge(
+                  icon: Icons.memory_outlined,
+                  label: 'CPU',
+                  value: data.cpuUsage,
+                  detail: data.cpuCount > 0 ? '${data.cpuCount} cores' : 'Load',
+                  color: const Color(0xFF00C2A8),
+                ),
+                _MetricGauge(
+                  icon: Icons.developer_board_outlined,
+                  label: 'Memory',
+                  value: data.memoryUsage,
+                  detail: 'RAM in use',
+                  color: const Color(0xFF5E9CFF),
+                ),
+                _MetricGauge(
+                  icon: Icons.storage_outlined,
+                  label: 'Disk',
+                  value: data.diskUsage,
+                  detail: 'Filesystem used',
+                  color: const Color(0xFFFFB020),
+                ),
+                _MetricGauge(
+                  icon: Icons.swap_horiz,
+                  label: 'Swap',
+                  value: data.swapUsage,
+                  detail: 'Swap used',
+                  color: const Color(0xFFB36BFF),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+          ],
+        ),
+      DashboardLayoutSection.system => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              icon: Icons.device_thermostat,
+              title: 'System load and thermal',
+              action: 'Long-press to arrange',
+            ),
+            const SizedBox(height: 10),
+            _ResponsiveGrid(
+              minTileWidth: wide ? 320 : 240,
+              children: [
+                _LoadCard(data: data),
+                _MiniUsageCard(
+                  icon: Icons.hub_outlined,
+                  title: 'MBUF',
+                  value: data.mbufUsage,
+                  subtitle: 'Network buffer usage',
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ThermalSensorsPanel(
+              sensors: data.thermalSensors,
+              fallbackTemperatureC: data.temperatureC,
+            ),
+            const SizedBox(height: 22),
+          ],
+        ),
+      DashboardLayoutSection.gateways => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              icon: Icons.public_outlined,
+              title: 'Gateways',
+              action: data.gateways.isEmpty
+                  ? 'Not reported'
+                  : '${onlineGateways.length}/${data.gateways.length} online',
+            ),
+            const SizedBox(height: 10),
+            if (data.gateways.isEmpty)
+              const _EmptyPanel('No gateway telemetry returned by pfSense.')
+            else
+              _ResponsiveGrid(
+                minTileWidth: wide ? 300 : 260,
+                children: data.gateways.map(_GatewayCard.new).toList(),
+              ),
+            const SizedBox(height: 22),
+          ],
+        ),
+      DashboardLayoutSection.interfaces => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              icon: Icons.settings_ethernet,
+              title: 'Interfaces',
+              action: data.interfaces.isEmpty
+                  ? 'Not reported'
+                  : '${upInterfaces.length}/${data.interfaces.length} up',
+            ),
+            const SizedBox(height: 10),
+            if (data.interfaces.isEmpty)
+              const _EmptyPanel('No interface telemetry returned by pfSense.')
+            else
+              _ResponsiveGrid(
+                minTileWidth: wide ? 330 : 280,
+                children: data.interfaces
+                    .map(
+                      (interface) => _InterfaceCard(
+                        interface,
+                        onTap: () => onInterfaceTap(interface),
+                      ),
+                    )
+                    .toList(),
+              ),
+            const SizedBox(height: 22),
+          ],
+        ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
+class _DashboardSection extends StatelessWidget {
+  const _DashboardSection({
+    super.key,
+    required this.child,
+    required this.onLongPress,
+  });
+
+  final Widget child;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: child,
+    );
+  }
+}
+
+String _sectionLabel(String id) {
+  return switch (id) {
+    DashboardLayoutSection.health => 'Health gauges',
+    DashboardLayoutSection.system => 'Load, thermal and buffers',
+    DashboardLayoutSection.gateways => 'Gateways',
+    DashboardLayoutSection.interfaces => 'Interfaces',
+    _ => id,
+  };
+}
+
+IconData _sectionIcon(String id) {
+  return switch (id) {
+    DashboardLayoutSection.health => Icons.speed,
+    DashboardLayoutSection.system => Icons.device_thermostat,
+    DashboardLayoutSection.gateways => Icons.public,
+    DashboardLayoutSection.interfaces => Icons.settings_ethernet,
+    _ => Icons.dashboard_customize,
+  };
 }
 
 class _HeroPanel extends StatelessWidget {
@@ -1182,9 +1364,7 @@ class _NocWallboard extends StatelessWidget {
             'Hottest sensor',
             hottest == null ? 'n/a' : '${hottest.toStringAsFixed(1)} °C',
             Icons.device_thermostat,
-            hottest == null
-                ? Colors.grey
-                : thermalColor(hottest),
+            hottest == null ? Colors.grey : thermalColor(hottest),
           ),
           _WallboardTile(
             'Thermal sensors',
