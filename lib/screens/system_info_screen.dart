@@ -1,9 +1,202 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../l10n/app_localizations.dart';
 import '../models/system_info.dart';
 import '../providers/session_provider.dart';
+import '../widgets/system_info_details.dart';
 
-class SystemInfoScreen extends StatefulWidget{const SystemInfoScreen({super.key});@override State<SystemInfoScreen> createState()=>_SystemInfoScreenState();}
-class _SystemInfoScreenState extends State<SystemInfoScreen>{SystemInfo? _info;Object? _error;bool _loading=false;bool _rebooting=false;@override void didChangeDependencies(){super.didChangeDependencies();if(_info==null&&!_loading)_load(showSpinner:true);}Future<void> _load({bool showSpinner=false})async{final s=context.read<PfSenseSessionProvider>();if(!s.connected||s.service==null){setState(()=>_error=AppLocalizations.of(context)?.disconnectedMessage);return;}if(showSpinner)setState(()=>_loading=true);try{final i=await s.service!.getSystemInfo();if(mounted)setState((){_info=i;_error=null;});}catch(e){if(mounted){setState(()=>_error=e);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString())));}}finally{if(mounted&&showSpinner)setState(()=>_loading=false);}}Future<bool?> _confirm(String m){final l=AppLocalizations.of(context);return showDialog<bool>(context:context,builder:(c)=>AlertDialog(title:Text(l?.confirm??'Confirm'),content:Text(m),actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:Text(l?.cancel??'Cancel')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:Text(l?.confirm??'Confirm'))]));}Future<void> _reboot()async{final l=AppLocalizations.of(context);if(await _confirm(l?.rebootConfirm??'Reboot this pfSense system?')!=true)return;if(await _confirm(l?.rebootFinalConfirm??'Confirm reboot')!=true)return;setState(()=>_rebooting=true);try{await context.read<PfSenseSessionProvider>().service!.rebootSystem();}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString())));}finally{if(mounted)setState(()=>_rebooting=false);}}
-@override Widget build(BuildContext context){final l=AppLocalizations.of(context);final s=context.watch<PfSenseSessionProvider>();final i=_info;return RefreshIndicator(onRefresh:()=>_load(showSpinner:true),child:ListView(padding:const EdgeInsets.all(16),children:[if(!s.connected)_msg(Icons.cloud_off_outlined,l?.disconnectedMessage??'Disconnected')else if(_loading)const Padding(padding:EdgeInsets.all(32),child:Center(child:CircularProgressIndicator()))else if(_error!=null)_msg(Icons.error_outline,_error.toString())else if(i==null)_msg(Icons.info_outline,l?.emptyState??'Nothing to show yet.')else ...[_card(l?.version??'Version',i.version,Icons.new_releases_outlined),_card(l?.platform??'Platform',i.platform,Icons.router_outlined),_card(l?.architecture??'Architecture',i.architecture,Icons.developer_board_outlined),_card(l?.phpVersion??'PHP version',i.phpVersion,Icons.code),_card(l?.kernelVersion??'Kernel version',i.kernelVersion,Icons.terminal),_card(l?.repositoryType??'Repository type',i.repositoryType,Icons.inventory_2_outlined),const SizedBox(height:20),FilledButton.icon(onPressed:_rebooting?null:_reboot,icon:const Icon(Icons.power_settings_new),label:Text(l?.reboot??'Reboot'))]]));}Widget _card(String a,String b,IconData i)=>Card(child:ListTile(leading:Icon(i),title:Text(a),subtitle:Text(b,maxLines:2,overflow:TextOverflow.ellipsis)));Widget _msg(IconData i,String t)=>Card(child:ListTile(leading:Icon(i),title:Text(t)));}
+class SystemInfoScreen extends StatefulWidget {
+  const SystemInfoScreen({super.key});
+
+  @override
+  State<SystemInfoScreen> createState() => _SystemInfoScreenState();
+}
+
+class _SystemInfoScreenState extends State<SystemInfoScreen> {
+  SystemInfo? _info;
+  Object? _error;
+  bool _loading = false;
+  bool _rebooting = false;
+  int _requestGeneration = 0;
+  int? _sessionGeneration;
+  String? _profileId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = context.watch<PfSenseSessionProvider>();
+    final changed = _sessionGeneration != session.sessionGeneration ||
+        _profileId != session.selectedProfile?.id;
+    if (changed) {
+      _requestGeneration++;
+      _sessionGeneration = session.sessionGeneration;
+      _profileId = session.selectedProfile?.id;
+      _info = null;
+      _error = null;
+      if (session.connected && !_loading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _load(showSpinner: true);
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestGeneration++;
+    super.dispose();
+  }
+
+  Future<void> _load({bool showSpinner = false}) async {
+    if (_loading) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) {
+      if (!mounted) return;
+      setState(() {
+        _info = null;
+        _error = AppLocalizations.of(context)?.disconnectedMessage ??
+            'Disconnected';
+      });
+      return;
+    }
+
+    final request = ++_requestGeneration;
+    final generation = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    setState(() {
+      _loading = true;
+      if (showSpinner) _error = null;
+    });
+
+    try {
+      final info = await session.service!.getSystemInfo();
+      if (!mounted ||
+          request != _requestGeneration ||
+          generation != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
+      setState(() {
+        _info = info;
+        _error = null;
+      });
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _error = error);
+      }
+    } finally {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<bool?> _confirm(String message) {
+    final strings = AppLocalizations.of(context);
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(strings?.confirm ?? 'Confirm'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(strings?.cancel ?? 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(strings?.confirm ?? 'Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reboot() async {
+    final strings = AppLocalizations.of(context);
+    if (await _confirm(strings?.rebootConfirm ??
+            'Reboot this pfSense system?') !=
+        true) {
+      return;
+    }
+    if (await _confirm(strings?.rebootFinalConfirm ?? 'Confirm reboot') !=
+        true) {
+      return;
+    }
+
+    setState(() => _rebooting = true);
+    try {
+      await context.read<PfSenseSessionProvider>().service!.rebootSystem();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _rebooting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final session = context.watch<PfSenseSessionProvider>();
+    final info = _info;
+
+    return RefreshIndicator(
+      onRefresh: () => _load(showSpinner: true),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  strings?.systemInfo ?? 'System information',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh system information',
+                onPressed: _loading ? null : () => _load(showSpinner: true),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pull down to update firmware, repository and system status.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (_loading) const LinearProgressIndicator(minHeight: 3),
+          if (!session.connected)
+            _message(Icons.cloud_off_outlined,
+                strings?.disconnectedMessage ?? 'Disconnected')
+          else if (_error != null)
+            _message(Icons.error_outline, _error.toString())
+          else if (info == null && !_loading)
+            _message(Icons.info_outline,
+                strings?.emptyState ?? 'Nothing to show yet.')
+          else if (info != null)
+            SystemInfoDetails(
+              info: info,
+              rebooting: _rebooting,
+              onReboot: _reboot,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _message(IconData icon, String text) {
+    return Card(
+      child: ListTile(leading: Icon(icon), title: Text(text)),
+    );
+  }
+}
