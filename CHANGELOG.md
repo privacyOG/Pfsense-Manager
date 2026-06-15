@@ -12,6 +12,7 @@
 - Added a dedicated Gateways screen with live latency and packet-loss history charts.
 - Added saved live/pause and 1, 3, 5, or 10-second refresh controls for gateway monitoring.
 - Added persistent Dashboard section ordering with drag handles, visibility controls, long-press access, and layout reset.
+- Expanded System Information with firmware, architecture, commit, package mirror, repository priority, hostname, platform, uptime, and update timestamps.
 - Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.0
