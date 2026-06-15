@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="250" viewBox="0 0 48 48" role="img" aria-labelledby="title desc">
+  <title id="title">pfSense Manager app icon</title>
+  <desc id="desc">Rounded square network security icon in green, cyan, black, and white.</desc>
+  <path fill="#101418" d="M8 4h32a4 4 0 0 1 4 4v32a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/>
+  <path fill="#00A878" d="M8 4h32a4 4 0 0 1 4 4v18c-8 3-16 6-24 10L4 44V8a4 4 0 0 1 4-4z"/>
+  <path fill="#12B5CB" d="M44 17v23a4 4 0 0 1-4 4H4c11-8 24-17 40-27z"/>
+  <path fill="none" stroke="#FFF" stroke-linejoin="round" stroke-width="3" d="M24 9.5c6 .9 11 2.7 15 5.5l-2.6 16.4C35.1 37.7 30 41.5 24 43.5c-6-2-11.1-5.8-12.4-12.1L9 15c4-2.8 9-4.6 15-5.5z"/>
+  <path fill="none" stroke="#FFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M16 20h15M16 26h11M16 32h7M27 32l3-5 3 7 4-12"/>
+</svg>
