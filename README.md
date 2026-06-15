@@ -32,10 +32,13 @@ The project is still under development. Check the release notes before using it 
 
 - Multiple pfSense profiles
 - System, interface and gateway status
+- Expanded firmware, repository and platform details
 - Live gateway latency and packet-loss history
+- Saved live/pause and gateway refresh intervals
 - CPU thermal sensor monitoring
 - Real-time network throughput charts
 - Per-interface byte, packet, error and collision counters
+- Reorderable, persistent Dashboard sections
 - Firewall rule viewing and management
 - Firewall logs
 - Current firewall states
@@ -112,7 +115,7 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-Pushing a version tag such as `v1.7.2` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
+Pushing a version tag such as `v1.7.3` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
 
 ## Security notes
 
@@ -124,7 +127,7 @@ Credentials are stored using Android secure storage, but users should still prot
 
 ## Current version
 
-`1.7.2+11`
+`1.7.3+12`
 
 Release APKs and checksums are available from the repository's Releases page.
 
