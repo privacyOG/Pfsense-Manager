@@ -9,6 +9,7 @@
 - Added persistent Dashboard section ordering, visibility controls, long-press access, and layout reset.
 - Expanded System Information with firmware, architecture, commit hash, package mirror, repository priorities, hostname, platform, uptime, and update timestamps.
 - Improved README branding, donation details, supported-feature documentation, and version information.
+- Added GNU GPLv3 licensing, project notices, a privacy policy, and third-party notices.
 - Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.2
