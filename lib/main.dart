@@ -11,6 +11,7 @@ import 'providers/session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/lock_screen.dart';
 import 'screens/startup_screen.dart';
+import 'widgets/release_notice.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +46,7 @@ class PfSenseManagerApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: const _LockingShell(),
+            home: const ReleaseNotice(child: _LockingShell()),
           );
         },
       ),
