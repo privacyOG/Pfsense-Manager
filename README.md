@@ -6,9 +6,10 @@ If you find this project useful, consider supporting its development:
 
 💰 Crypto Donations
 Monero (XMR)
+```
 82oJ62ScSZLcVoLfJzAPz7NHZ25kMLaBDSZwScR6wjekeqWanZAfLcT9fnrFG31p3hGhWPG9GuXH1VNAoEbLbkw8RPXP2g8
-
-<img width="651" height="649" alt="8753d4e0831845b046c66bf82177ea311ba7cedd6fc17505ae1dfe948708275a" src="https://github.com/user-attachments/assets/5b0f412f-042f-4d98-b1a7-044cf5b6902a" />
+```
+<img width="251" height="249" alt="8753d4e0831845b046c66bf82177ea311ba7cedd6fc17505ae1dfe948708275a" src="https://github.com/user-attachments/assets/5b0f412f-042f-4d98-b1a7-044cf5b6902a" />
 
 **About pfSemse Manager**
 
