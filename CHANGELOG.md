@@ -6,6 +6,8 @@
 - Added adaptive bandwidth scaling for changing traffic levels.
 - Added a persisted display-unit selector for bits/s and Bytes/s.
 - Improved bandwidth-axis labels, time labels, legends, fills, and tooltips.
+- Replaced stale Network Monitor state totals with live per-interface byte and packet counters.
+- Added Dashboard support for every reported CPU thermal sensor, including hottest-sensor alerts.
 - Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.0
