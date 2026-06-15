@@ -11,7 +11,7 @@ Monero (XMR)
 ```
 <img width="251" height="249" alt="8753d4e0831845b046c66bf82177ea311ba7cedd6fc17505ae1dfe948708275a" src="https://github.com/user-attachments/assets/5b0f412f-042f-4d98-b1a7-044cf5b6902a" />
 
-**About pfSemse Manager**
+**About pfSense Manager**
 
 pfSense Manager is an Android app I am building to monitor and manage pfSense firewalls from a phone.
 
