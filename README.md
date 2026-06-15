@@ -1,19 +1,28 @@
-# pfSense Manager
+<p align="center">
+  <img src="assets/readme/app_icon.svg" width="250" height="250" alt="pfSense Manager app icon" />
+</p>
 
+<h1 align="center">pfSense Manager</h1>
 
-❤️ Support the Project
-If you find this project useful, consider supporting its development:
+<div align="center">
 
-💰 Crypto Donations
-Monero (XMR)
-```
+### ❤️ Support the Project
+
+If you find this project useful, consider supporting its continued development.
+
+**Monero (XMR)**
+
+```text
 82oJ62ScSZLcVoLfJzAPz7NHZ25kMLaBDSZwScR6wjekeqWanZAfLcT9fnrFG31p3hGhWPG9GuXH1VNAoEbLbkw8RPXP2g8
 ```
-<img width="251" height="249" alt="8753d4e0831845b046c66bf82177ea311ba7cedd6fc17505ae1dfe948708275a" src="https://github.com/user-attachments/assets/5b0f412f-042f-4d98-b1a7-044cf5b6902a" />
 
-**About pfSense Manager**
+<img width="250" height="250" alt="Monero donation QR code" src="https://github.com/user-attachments/assets/5b0f412f-042f-4d98-b1a7-044cf5b6902a" />
 
-pfSense Manager is an Android app I am building to monitor and manage pfSense firewalls from a phone.
+</div>
+
+## About pfSense Manager
+
+pfSense Manager is an Android app for monitoring and managing pfSense firewalls from a phone.
 
 It is written in Flutter and connects to the pfSense REST API. Multiple firewall profiles can be saved, which is useful when looking after more than one pfSense installation.
 
@@ -23,6 +32,10 @@ The project is still under development. Check the release notes before using it 
 
 - Multiple pfSense profiles
 - System, interface and gateway status
+- Live gateway latency and packet-loss history
+- CPU thermal sensor monitoring
+- Real-time network throughput charts
+- Per-interface byte, packet, error and collision counters
 - Firewall rule viewing and management
 - Firewall logs
 - Current firewall states
@@ -99,7 +112,7 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-Pushing a version tag such as `v1.5.0` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
+Pushing a version tag such as `v1.7.2` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
 
 ## Security notes
 
@@ -111,7 +124,7 @@ Credentials are stored using Android secure storage, but users should still prot
 
 ## Current version
 
-`1.5.0+7`
+`1.7.2+11`
 
 Release APKs and checksums are available from the repository's Releases page.
 
