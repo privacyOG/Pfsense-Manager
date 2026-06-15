@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.2
+
+- Improved Network Monitor traffic graph readability.
+- Added adaptive bandwidth scaling for changing traffic levels.
+- Added a persisted display-unit selector for bits/s and Bytes/s.
+- Improved bandwidth-axis labels, time labels, legends, fills, and tooltips.
+- Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
+
 ## 1.7.0
 
 - Improved navigation and screen state handling.
