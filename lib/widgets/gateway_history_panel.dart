@@ -17,6 +17,96 @@ class GatewayHistorySample {
   final double packetLossPercent;
 }
 
+class GatewayHistorySection extends StatefulWidget {
+  const GatewayHistorySection({
+    super.key,
+    required this.gateways,
+    this.maxSamples = 60,
+  });
+
+  final List<GatewayStatus> gateways;
+  final int maxSamples;
+
+  @override
+  State<GatewayHistorySection> createState() => _GatewayHistorySectionState();
+}
+
+class _GatewayHistorySectionState extends State<GatewayHistorySection> {
+  final Map<String, List<GatewayHistorySample>> _history = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _record(widget.gateways);
+  }
+
+  @override
+  void didUpdateWidget(covariant GatewayHistorySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _record(widget.gateways);
+  }
+
+  void _record(List<GatewayStatus> gateways) {
+    final now = DateTime.now();
+    final activeNames = gateways.map((gateway) => gateway.name).toSet();
+    _history.removeWhere((name, _) => !activeNames.contains(name));
+
+    for (final gateway in gateways) {
+      final samples = _history.putIfAbsent(gateway.name, () => []);
+      final next = GatewayHistorySample(
+        capturedAt: now,
+        latencyMs: gateway.latency,
+        packetLossPercent: gateway.packetLoss,
+      );
+      if (samples.isEmpty ||
+          samples.last.latencyMs != next.latencyMs ||
+          samples.last.packetLossPercent != next.packetLossPercent ||
+          now.difference(samples.last.capturedAt) >= const Duration(seconds: 1)) {
+        samples.add(next);
+      }
+      if (samples.length > widget.maxSamples) {
+        samples.removeRange(0, samples.length - widget.maxSamples);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.gateways.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.show_chart, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Gateway history',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              'Last ${widget.maxSamples} samples',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (final gateway in widget.gateways)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GatewayHistoryPanel(
+              gateway: gateway,
+              samples: List.unmodifiable(_history[gateway.name] ?? const []),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class GatewayHistoryPanel extends StatelessWidget {
   const GatewayHistoryPanel({
     super.key,
