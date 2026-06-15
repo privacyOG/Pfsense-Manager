@@ -6,6 +6,7 @@ class DashboardData {
   final double swapUsage;
   final double mbufUsage;
   final double? temperatureC;
+  final List<ThermalSensor> thermalSensors;
   final int cpuCount;
   final String cpuModel;
   final String platform;
@@ -23,6 +24,7 @@ class DashboardData {
     this.swapUsage = 0,
     this.mbufUsage = 0,
     this.temperatureC,
+    this.thermalSensors = const [],
     this.cpuCount = 0,
     this.cpuModel = 'Unknown CPU',
     this.platform = 'pfSense',
@@ -36,13 +38,21 @@ class DashboardData {
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final loadAvg = json['cpu_load_avg'] as List? ?? const [];
+    final sensors = _parseThermalSensors(json);
+    final hottest = sensors.isEmpty
+        ? _parseNullableTemperature(json['temp_c'])
+        : sensors.map((sensor) => sensor.temperatureC).reduce(
+              (current, next) => current > next ? current : next,
+            );
+
     return DashboardData(
       cpuUsage: _parseDouble(json['cpu_usage']),
       memoryUsage: _parseDouble(json['mem_usage'] ?? json['memory_usage']),
       diskUsage: _parseDouble(json['disk_usage']),
       swapUsage: _parseDouble(json['swap_usage']),
       mbufUsage: _parseDouble(json['mbuf_usage']),
-      temperatureC: _parseNullableDouble(json['temp_c']),
+      temperatureC: hottest,
+      thermalSensors: sensors,
       cpuCount: _parseInt(json['cpu_count']),
       cpuModel: _string(json['cpu_model'], fallback: 'Unknown CPU'),
       platform: _string(json['platform'], fallback: 'pfSense'),
@@ -64,6 +74,7 @@ class DashboardData {
       swapUsage: swapUsage,
       mbufUsage: mbufUsage,
       temperatureC: temperatureC,
+      thermalSensors: thermalSensors,
       cpuCount: cpuCount,
       cpuModel: cpuModel,
       platform: platform,
@@ -75,6 +86,13 @@ class DashboardData {
       interfaces: interfaces ?? this.interfaces,
     );
   }
+}
+
+class ThermalSensor {
+  const ThermalSensor({required this.name, required this.temperatureC});
+
+  final String name;
+  final double temperatureC;
 }
 
 class GatewayStatus {
@@ -170,6 +188,100 @@ class InterfaceStatus {
   bool get up => status.toLowerCase().contains('up');
 }
 
+List<ThermalSensor> _parseThermalSensors(Map<String, dynamic> json) {
+  final found = <String, double>{};
+
+  void add(String rawName, dynamic rawValue) {
+    final value = _parseNullableTemperature(rawValue);
+    if (value == null || value < -30 || value > 150) return;
+    final name = _normaliseSensorName(rawName);
+    final existing = found[name];
+    if (existing == null || value > existing) found[name] = value;
+  }
+
+  void visit(dynamic node, String path, {bool thermalContext = false}) {
+    if (node is Map) {
+      final map = Map<String, dynamic>.from(node);
+      final objectLabel = _firstText(map, const [
+        'name',
+        'label',
+        'description',
+        'descr',
+        'sensor',
+        'device',
+      ]);
+
+      for (final entry in map.entries) {
+        final key = entry.key;
+        final lower = key.toLowerCase();
+        final childPath = path.isEmpty ? key : '$path.$key';
+        final keyIsThermal = lower.contains('temp') || lower.contains('thermal');
+        final nextContext = thermalContext || keyIsThermal;
+        final value = entry.value;
+
+        if ((value is num || value is String) && nextContext) {
+          final label = objectLabel ?? (thermalContext ? key : childPath);
+          add(label, value);
+        } else {
+          visit(value, childPath, thermalContext: nextContext);
+        }
+      }
+    } else if (node is List) {
+      for (var index = 0; index < node.length; index++) {
+        visit(node[index], '$path.${index + 1}', thermalContext: thermalContext);
+      }
+    } else if (thermalContext) {
+      add(path, node);
+    }
+  }
+
+  visit(json, '');
+
+  if (found.isEmpty) {
+    final legacy = _parseNullableTemperature(json['temp_c']);
+    if (legacy != null) found['System sensor'] = legacy;
+  }
+
+  final sensors = found.entries
+      .map((entry) => ThermalSensor(name: entry.key, temperatureC: entry.value))
+      .toList()
+    ..sort((a, b) => _naturalCompare(a.name, b.name));
+  return sensors;
+}
+
+String? _firstText(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final text = _nullableString(json[key]);
+    if (text != null) return text;
+  }
+  return null;
+}
+
+String _normaliseSensorName(String raw) {
+  var value = raw
+      .replaceAll(RegExp(r'[_\-.]+'), ' ')
+      .replaceAll(RegExp(r'\b(temp|temperature|thermal|celsius|degc)\b', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (value.isEmpty || value.toLowerCase() == 'c') value = 'System sensor';
+  return value
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => part.length == 1
+          ? part.toUpperCase()
+          : '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+}
+
+int _naturalCompare(String a, String b) {
+  final numberA = int.tryParse(RegExp(r'\d+').firstMatch(a)?.group(0) ?? '');
+  final numberB = int.tryParse(RegExp(r'\d+').firstMatch(b)?.group(0) ?? '');
+  if (numberA != null && numberB != null && numberA != numberB) {
+    return numberA.compareTo(numberB);
+  }
+  return a.toLowerCase().compareTo(b.toLowerCase());
+}
+
 String? _address(dynamic address, dynamic subnet) {
   final value = address?.toString();
   if (value == null || value.isEmpty) return null;
@@ -183,6 +295,15 @@ double _parseDouble(dynamic value) => _parseNullableDouble(value) ?? 0.0;
 double? _parseNullableDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value);
+  return null;
+}
+
+double? _parseNullableTemperature(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    final match = RegExp(r'-?\d+(?:\.\d+)?').firstMatch(value);
+    return match == null ? null : double.tryParse(match.group(0)!);
+  }
   return null;
 }
 
