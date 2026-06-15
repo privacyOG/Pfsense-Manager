@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import '../models/dashboard.dart';
 import '../providers/session_provider.dart';
+import '../widgets/thermal_sensors_panel.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,7 +16,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   static const _prefLive = 'dashboard.live';
   static const _prefRefreshSeconds = 'dashboard.refreshSeconds';
   static const _prefShowHealth = 'dashboard.showHealth';
@@ -27,43 +29,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Object? _error;
   bool _loading = false;
   bool _live = true;
+  bool _appActive = true;
+  bool _preferencesLoaded = false;
   int _refreshSeconds = 5;
   bool _showHealth = true;
   bool _showLoad = true;
   bool _showGateways = true;
   bool _showInterfaces = true;
   Timer? _timer;
+  int _requestGeneration = 0;
+  int? _loadedSessionGeneration;
+  String? _loadedProfileId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadDashboardPreferences();
-    _startTimer();
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(Duration(seconds: _refreshSeconds), (_) {
-      if (_live && mounted) _refresh();
-    });
   }
 
   @override
   void dispose() {
+    _requestGeneration++;
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_appActive == active) return;
+    _appActive = active;
+    if (active && _live && mounted) _refresh();
   }
 
   Future<void> _loadDashboardPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+    final savedInterval = prefs.getInt(_prefRefreshSeconds) ?? 5;
     setState(() {
-      _live = prefs.getBool(_prefLive) ?? _live;
-      _refreshSeconds = prefs.getInt(_prefRefreshSeconds) ?? _refreshSeconds;
-      _showHealth = prefs.getBool(_prefShowHealth) ?? _showHealth;
-      _showLoad = prefs.getBool(_prefShowLoad) ?? _showLoad;
-      _showGateways = prefs.getBool(_prefShowGateways) ?? _showGateways;
-      _showInterfaces = prefs.getBool(_prefShowInterfaces) ?? _showInterfaces;
+      _live = prefs.getBool(_prefLive) ?? true;
+      _refreshSeconds = const {1, 3, 5, 10}.contains(savedInterval)
+          ? savedInterval
+          : 5;
+      _showHealth = prefs.getBool(_prefShowHealth) ?? true;
+      _showLoad = prefs.getBool(_prefShowLoad) ?? true;
+      _showGateways = prefs.getBool(_prefShowGateways) ?? true;
+      _showInterfaces = prefs.getBool(_prefShowInterfaces) ?? true;
+      _preferencesLoaded = true;
     });
     _startTimer();
   }
@@ -78,35 +92,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await prefs.setBool(_prefShowInterfaces, _showInterfaces);
   }
 
+  void _startTimer() {
+    _timer?.cancel();
+    if (!_preferencesLoaded) return;
+    _timer = Timer.periodic(Duration(seconds: _refreshSeconds), (_) {
+      final session = context.read<PfSenseSessionProvider>();
+      if (_live &&
+          _appActive &&
+          !_loading &&
+          session.connected &&
+          session.service != null) {
+        _refresh();
+      }
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_data == null && !_loading) _refresh(showSpinner: true);
+    final session = context.watch<PfSenseSessionProvider>();
+    final profileId = session.selectedProfile?.id;
+    final changed = _loadedSessionGeneration != session.sessionGeneration ||
+        _loadedProfileId != profileId;
+
+    if (changed) {
+      _requestGeneration++;
+      _loadedSessionGeneration = session.sessionGeneration;
+      _loadedProfileId = profileId;
+      _data = null;
+      _error = null;
+      if (session.connected && !_loading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _refresh(showSpinner: true);
+        });
+      }
+    } else if (_data == null && session.connected && !_loading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh(showSpinner: true);
+      });
+    }
   }
 
   Future<void> _refresh({bool showSpinner = false}) async {
+    if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) {
-      setState(
-          () => _error = AppLocalizations.of(context)?.disconnectedMessage);
+      if (!mounted) return;
+      setState(() {
+        _data = null;
+        _error = AppLocalizations.of(context)?.disconnectedMessage ??
+            'Disconnected';
+      });
       return;
     }
-    if (showSpinner) setState(() => _loading = true);
+
+    final request = ++_requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    setState(() {
+      _loading = true;
+      if (showSpinner) _error = null;
+    });
+
     try {
       final data = await session.service!.getDashboard();
-      if (!mounted) return;
+      if (!mounted ||
+          request != _requestGeneration ||
+          sessionGeneration != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
       setState(() {
         _data = data;
         _error = null;
       });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _error = error);
+      }
     } finally {
-      if (mounted && showSpinner) setState(() => _loading = false);
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -117,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final data = _data;
 
     return RefreshIndicator(
-      onRefresh: _refresh,
+      onRefresh: () => _refresh(showSpinner: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
@@ -129,7 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           if (_error != null)
             _MessageCard(icon: Icons.error_outline, text: _error.toString()),
-          if (data == null && !_loading)
+          if (data == null && !_loading && session.connected)
             _MessageCard(
               icon: Icons.space_dashboard_outlined,
               text: strings?.emptyState ?? 'Nothing to show yet.',
@@ -146,6 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onLiveChanged: (value) {
                 setState(() => _live = value);
                 _saveDashboardPreferences();
+                if (value) _refresh();
               },
               onRefreshSecondsChanged: (value) {
                 setState(() => _refreshSeconds = value);
@@ -180,8 +248,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
                 children: [
-                  Text('Dashboard visibility',
-                      style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Dashboard visibility',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   SwitchListTile(
                     value: _live,
                     onChanged: (value) => update(() => _live = value),
@@ -360,7 +430,6 @@ class _DashboardBody extends StatelessWidget {
             minTileWidth: wide ? 320 : 240,
             children: [
               _LoadCard(data: data),
-              _ThermalCard(temperatureC: data.temperatureC),
               _MiniUsageCard(
                 icon: Icons.hub_outlined,
                 title: 'MBUF',
@@ -368,6 +437,11 @@ class _DashboardBody extends StatelessWidget {
                 subtitle: 'Network buffer usage',
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          ThermalSensorsPanel(
+            sensors: data.thermalSensors,
+            fallbackTemperatureC: data.temperatureC,
           ),
           const SizedBox(height: 22),
         ],
@@ -381,7 +455,7 @@ class _DashboardBody extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           if (data.gateways.isEmpty)
-            const _EmptyPanel('No gateway telemetry returned by pfREST.')
+            const _EmptyPanel('No gateway telemetry returned by pfSense.')
           else
             _ResponsiveGrid(
               minTileWidth: wide ? 300 : 260,
@@ -399,7 +473,7 @@ class _DashboardBody extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           if (data.interfaces.isEmpty)
-            const _EmptyPanel('No interface telemetry returned by pfREST.')
+            const _EmptyPanel('No interface telemetry returned by pfSense.')
           else
             _ResponsiveGrid(
               minTileWidth: wide ? 330 : 280,
@@ -454,9 +528,9 @@ class _HeroPanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        color: scheme.surfaceContainerHighest.withOpacity(0.55),
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -468,7 +542,7 @@ class _HeroPanel extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00C2A8).withValues(alpha: 0.18),
+                  color: const Color(0xFF00C2A8).withOpacity(0.18),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.security, color: Color(0xFF00C2A8)),
@@ -550,49 +624,76 @@ class _AlertStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final alerts = <_DashboardAlert>[];
     if (data.cpuUsage >= 85) {
-      alerts.add(_DashboardAlert(Icons.memory, 'CPU high',
-          '${data.cpuUsage.toStringAsFixed(1)}%', Colors.redAccent));
+      alerts.add(_DashboardAlert(
+        Icons.memory,
+        'CPU high',
+        '${data.cpuUsage.toStringAsFixed(1)}%',
+        Colors.redAccent,
+      ));
     }
     if (data.memoryUsage >= 85) {
-      alerts.add(_DashboardAlert(Icons.developer_board, 'RAM high',
-          '${data.memoryUsage.toStringAsFixed(1)}%', Colors.orangeAccent));
+      alerts.add(_DashboardAlert(
+        Icons.developer_board,
+        'RAM high',
+        '${data.memoryUsage.toStringAsFixed(1)}%',
+        Colors.orangeAccent,
+      ));
     }
     if (data.diskUsage >= 90) {
-      alerts.add(_DashboardAlert(Icons.storage, 'Disk high',
-          '${data.diskUsage.toStringAsFixed(1)}%', Colors.redAccent));
+      alerts.add(_DashboardAlert(
+        Icons.storage,
+        'Disk high',
+        '${data.diskUsage.toStringAsFixed(1)}%',
+        Colors.redAccent,
+      ));
     }
-    final temp = data.temperatureC;
-    if (temp != null && temp >= 75) {
-      alerts.add(_DashboardAlert(Icons.device_thermostat, 'Thermal alert',
-          '${temp.toStringAsFixed(1)} C', Colors.redAccent));
+    final hottest = data.temperatureC;
+    if (hottest != null && hottest >= 75) {
+      final sensor = data.thermalSensors
+          .where((item) => item.temperatureC == hottest)
+          .map((item) => item.name)
+          .firstOrNull;
+      alerts.add(_DashboardAlert(
+        Icons.device_thermostat,
+        sensor == null ? 'Thermal alert' : '$sensor hot',
+        '${hottest.toStringAsFixed(1)} °C',
+        Colors.redAccent,
+      ));
     }
     final downInterfaces =
         data.interfaces.where((interface) => !interface.up).length;
     if (downInterfaces > 0) {
-      alerts.add(_DashboardAlert(Icons.settings_ethernet, 'Interface down',
-          '$downInterfaces affected', Colors.orangeAccent));
+      alerts.add(_DashboardAlert(
+        Icons.settings_ethernet,
+        'Interface down',
+        '$downInterfaces affected',
+        Colors.orangeAccent,
+      ));
     }
     final downGateways =
         data.gateways.where((gateway) => !gateway.online).length;
     if (downGateways > 0) {
-      alerts.add(_DashboardAlert(Icons.public_off, 'Gateway loss',
-          '$downGateways affected', Colors.redAccent));
+      alerts.add(_DashboardAlert(
+        Icons.public_off,
+        'Gateway loss',
+        '$downGateways affected',
+        Colors.redAccent,
+      ));
     }
 
     if (alerts.isEmpty) {
       alerts.add(const _DashboardAlert(
-          Icons.verified_outlined,
-          'No active alerts',
-          'System telemetry looks healthy',
-          Color(0xFF00C2A8)));
+        Icons.verified_outlined,
+        'No active alerts',
+        'System telemetry looks healthy',
+        Color(0xFF00C2A8),
+      ));
     }
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: [
-        for (final alert in alerts) _AlertChip(alert: alert),
-      ],
+      children: [for (final alert in alerts) _AlertChip(alert: alert)],
     );
   }
 }
@@ -616,9 +717,9 @@ class _AlertChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: alert.color.withValues(alpha: .14),
+        color: alert.color.withOpacity(0.14),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: alert.color.withValues(alpha: .36)),
+        border: Border.all(color: alert.color.withOpacity(0.36)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -692,7 +793,7 @@ class _MetricGauge extends StatelessWidget {
                     value: percent,
                     strokeWidth: 8,
                     color: color,
-                    backgroundColor: color.withValues(alpha: 0.14),
+                    backgroundColor: color.withOpacity(0.14),
                     strokeCap: StrokeCap.round,
                   ),
                   Icon(icon, color: color),
@@ -760,49 +861,6 @@ class _LoadCard extends StatelessWidget {
   }
 }
 
-class _ThermalCard extends StatelessWidget {
-  const _ThermalCard({required this.temperatureC});
-
-  final double? temperatureC;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = temperatureC;
-    final color = value == null
-        ? Theme.of(context).colorScheme.outline
-        : value >= 75
-            ? const Color(0xFFFF5A5F)
-            : value >= 55
-                ? const Color(0xFFFFB020)
-                : const Color(0xFF00C2A8);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _CardTitle(icon: Icons.device_thermostat, title: 'Thermal'),
-            const Spacer(),
-            Text(
-              value == null ? 'Not reported' : '${value.toStringAsFixed(1)} C',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            Text(
-              value == null ? 'No sensor value from pfREST' : 'System sensor',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _MiniUsageCard extends StatelessWidget {
   const _MiniUsageCard({
     required this.icon,
@@ -831,7 +889,7 @@ class _MiniUsageCard extends StatelessWidget {
               value: (value / 100).clamp(0.0, 1.0),
               minHeight: 9,
               color: color,
-              backgroundColor: color.withValues(alpha: 0.14),
+              backgroundColor: color.withOpacity(0.14),
               borderRadius: BorderRadius.circular(8),
             ),
             const SizedBox(height: 10),
@@ -949,10 +1007,14 @@ class _InterfaceCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _Stat('Packets',
-                      _formatCount(interface.packetsIn + interface.packetsOut)),
-                  _Stat('Errors',
-                      _formatCount(interface.errorsIn + interface.errorsOut)),
+                  _Stat(
+                    'Packets',
+                    _formatCount(interface.packetsIn + interface.packetsOut),
+                  ),
+                  _Stat(
+                    'Errors',
+                    _formatCount(interface.errorsIn + interface.errorsOut),
+                  ),
                 ],
               ),
             ],
@@ -1066,6 +1128,8 @@ class _NocWallboard extends StatelessWidget {
         data.gateways.where((gateway) => gateway.online).length;
     final upInterfaces =
         data.interfaces.where((interface) => interface.up).length;
+    final hottest = data.temperatureC;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('NOC Wallboard'),
@@ -1084,28 +1148,49 @@ class _NocWallboard extends StatelessWidget {
         mainAxisSpacing: 12,
         childAspectRatio: 1.25,
         children: [
-          _WallboardTile('CPU', '${data.cpuUsage.toStringAsFixed(1)}%',
-              Icons.memory, _usageColor(data.cpuUsage)),
-          _WallboardTile('RAM', '${data.memoryUsage.toStringAsFixed(1)}%',
-              Icons.developer_board, _usageColor(data.memoryUsage)),
-          _WallboardTile('Disk', '${data.diskUsage.toStringAsFixed(1)}%',
-              Icons.storage, _usageColor(data.diskUsage)),
           _WallboardTile(
-              'Interfaces',
-              '$upInterfaces/${data.interfaces.length}',
-              Icons.settings_ethernet,
-              const Color(0xFF00C2A8)),
-          _WallboardTile('Gateways', '$onlineGateways/${data.gateways.length}',
-              Icons.public, const Color(0xFF5E9CFF)),
+            'CPU',
+            '${data.cpuUsage.toStringAsFixed(1)}%',
+            Icons.memory,
+            _usageColor(data.cpuUsage),
+          ),
           _WallboardTile(
-            'Thermal',
-            data.temperatureC == null
-                ? 'n/a'
-                : '${data.temperatureC!.toStringAsFixed(1)} C',
+            'RAM',
+            '${data.memoryUsage.toStringAsFixed(1)}%',
+            Icons.developer_board,
+            _usageColor(data.memoryUsage),
+          ),
+          _WallboardTile(
+            'Disk',
+            '${data.diskUsage.toStringAsFixed(1)}%',
+            Icons.storage,
+            _usageColor(data.diskUsage),
+          ),
+          _WallboardTile(
+            'Interfaces',
+            '$upInterfaces/${data.interfaces.length}',
+            Icons.settings_ethernet,
+            const Color(0xFF00C2A8),
+          ),
+          _WallboardTile(
+            'Gateways',
+            '$onlineGateways/${data.gateways.length}',
+            Icons.public,
+            const Color(0xFF5E9CFF),
+          ),
+          _WallboardTile(
+            'Hottest sensor',
+            hottest == null ? 'n/a' : '${hottest.toStringAsFixed(1)} °C',
             Icons.device_thermostat,
-            data.temperatureC != null && data.temperatureC! >= 75
-                ? Colors.redAccent
-                : const Color(0xFF00C2A8),
+            hottest == null
+                ? Colors.grey
+                : thermalColor(hottest),
+          ),
+          _WallboardTile(
+            'Thermal sensors',
+            data.thermalSensors.length.toString(),
+            Icons.thermostat,
+            const Color(0xFF00C2A8),
           ),
         ],
       ),
@@ -1222,8 +1307,8 @@ class _StatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        color: scheme.surface.withValues(alpha: 0.62),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        color: scheme.surface.withOpacity(0.62),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1310,7 +1395,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
+        color: color.withOpacity(0.16),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -1354,12 +1439,12 @@ class _EmptyPanel extends StatelessWidget {
 String _formatBytes(int bytes) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   var value = bytes.toDouble();
-  var unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
+  var index = 0;
+  while (value >= 1024 && index < units.length - 1) {
     value /= 1024;
-    unit++;
+    index++;
   }
-  return '${value.toStringAsFixed(value >= 10 || unit == 0 ? 0 : 1)} ${units[unit]}';
+  return '${value.toStringAsFixed(index == 0 ? 0 : 1)} ${units[index]}';
 }
 
 String _formatCount(int value) {
@@ -1367,4 +1452,8 @@ String _formatCount(int value) {
   if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
   return value.toString();
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }
