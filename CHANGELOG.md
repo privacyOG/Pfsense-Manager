@@ -11,6 +11,7 @@
 - Added Dashboard support for every reported CPU thermal sensor, including hottest-sensor alerts.
 - Added a dedicated Gateways screen with live latency and packet-loss history charts.
 - Added saved live/pause and 1, 3, 5, or 10-second refresh controls for gateway monitoring.
+- Added persistent Dashboard section ordering with drag handles, visibility controls, long-press access, and layout reset.
 - Preserved session-safe polling, stale-response protection, lifecycle handling, and saved settings.
 
 ## 1.7.0
