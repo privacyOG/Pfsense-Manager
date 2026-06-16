@@ -1,0 +1,258 @@
+name: Apply changelog migration
+
+on:
+  push:
+    branches:
+      - migrate-release-notes-to-changelog
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: migrate-release-notes-to-changelog
+          fetch-depth: 0
+
+      - name: Consolidate release notes and update workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > CHANGELOG.md <<'EOF'
+          # Changelog
+
+          All notable changes to this project will be documented in this file.
+
+          The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+          ## [Unreleased]
+
+          No notable changes yet.
+
+          ## [1.7.4] - 2026-06-16
+
+          ### Added
+
+          - Dashboard warning chips now open detailed explanations and recommended checks.
+          - Warnings can be ignored per firewall profile or snoozed for 24 hours.
+          - Ignored warnings can be restored from Settings.
+
+          ### Changed
+
+          - Settings retains direct access to the five primary app destinations.
+          - CPU and per-core temperature sensors are displayed separately.
+          - System Information now handles nested pfSense Plus response fields and additional firmware, architecture, hostname, platform, kernel, and uptime aliases.
+          - Router firmware and the installed pfSense Manager app version are displayed separately.
+          - Numeric uptime values are converted to readable days, hours, and minutes.
+          - Production release automation now validates dynamic version metadata, APK identity, APK signatures, checksums, and an explicit reviewed release authorization.
+
+          ### Fixed
+
+          - Fahrenheit helper values are filtered so they cannot produce false Celsius alerts such as `113.4 °C`.
+
+          ### Removed
+
+          - Temporary repository marker and note files.
+
+          **Upgrade note:** Users already running version 1.7.3 under the current Android application ID can install this release as a normal update, provided the APK is signed with the same release key.
+
+          ## [1.7.3] - 2026-06-16
+
+          ### Added
+
+          - Live per-interface byte, packet, input-error, output-error, and collision counters.
+          - Support for every reported CPU thermal sensor with hottest-sensor alerts.
+          - A dedicated Gateways screen with live latency and packet-loss history charts.
+          - Saved live and pause controls with selectable 1, 3, 5, or 10-second gateway refresh intervals.
+          - Persistent Dashboard section ordering, visibility controls, long-press access, and layout reset.
+          - GNU GPLv3 licensing, project notices, a privacy policy, and third-party notices.
+
+          ### Changed
+
+          - System Information was expanded with firmware, architecture, commit hash, package mirror, repository priorities, hostname, platform, uptime, and update timestamps.
+          - README branding, donation details, supported-feature documentation, and version information were improved.
+          - Session-safe polling, stale-response protection, lifecycle handling, and saved settings were preserved while monitoring features were expanded.
+
+          **Upgrade note:** Users running version 1.7.2 can install 1.7.3 as a normal update when the APK is signed with the same release key.
+
+          ## [1.7.2] - 2026-06-15
+
+          ### Added
+
+          - Adaptive bandwidth scaling for changing traffic levels.
+          - A persisted display-unit selector for bits/s and Bytes/s.
+          - Live byte, packet, error, and collision counters for every interface.
+          - All reported CPU thermal sensors on the Dashboard.
+          - A dedicated Gateways screen with live latency and packet-loss history charts.
+
+          ### Changed
+
+          - Network Monitor traffic graph readability was improved.
+          - Bandwidth-axis labels, time labels, legends, fills, and tooltips were improved.
+          - Existing session, polling, lifecycle, and saved-setting protections were preserved.
+
+          **Upgrade note:** Users running version 1.7.1 can install 1.7.2 as a normal update when the APK is signed with the same release key.
+
+          ## [1.7.0]
+
+          ### Added
+
+          - Persistent Network Monitor settings, including the 1-second refresh option.
+          - Shared state-message components for DHCP leases and Services.
+          - Broader widget and lifecycle test coverage.
+
+          ### Changed
+
+          - Navigation and screen-state handling were improved.
+          - Firewall Logs, Services, VPN, System, Dashboard, and Network Monitor reliability were improved.
+          - The Android package was renamed to `com.privacyog.pfsense_manager`.
+
+          ### Fixed
+
+          - Request deduplication and stale-session protection were strengthened.
+
+          **Installation note:** Because the Android application ID changed in this release, installations using the previous package ID must be uninstalled once before installing version 1.7.0. Future releases using the new package ID can update normally.
+          EOF
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          release_path = Path('.github/workflows/android-release.yml')
+          release = release_path.read_text()
+
+          old_metadata = '''          RELEASE_TAG="v${VERSION}"
+          RELEASE_NOTES="RELEASE_NOTES_${VERSION}.md"
+'''
+          new_metadata = '''          RELEASE_TAG="v${VERSION}"
+          CHANGELOG="CHANGELOG.md"
+          RELEASE_NOTES="$RUNNER_TEMP/release-notes-${VERSION}.md"
+'''
+          if release.count(old_metadata) != 1:
+              raise SystemExit('Expected release-note metadata block was not found exactly once')
+          release = release.replace(old_metadata, new_metadata, 1)
+
+          old_validation = '''          test -f "$RELEASE_NOTES"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
+
+      - name: Verify signing secrets
+'''
+          new_validation = '''          test -f "$CHANGELOG"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "CHANGELOG=$CHANGELOG" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
+
+      - name: Extract release notes from changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PYTHON'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ['VERSION']
+          changelog = Path(os.environ['CHANGELOG']).read_text(encoding='utf-8')
+          pattern = re.compile(
+              rf'^## \\[{re.escape(version)}\\](?: - \\d{{4}}-\\d{{2}}-\\d{{2}})?\\s*$\\n'
+              rf'(.*?)(?=^## \\[|\\Z)',
+              re.MULTILINE | re.DOTALL,
+          )
+          match = pattern.search(changelog)
+          if match is None:
+              raise SystemExit(f'CHANGELOG.md has no section for version {version}')
+
+          notes = match.group(1).strip()
+          if not notes or notes == 'No notable changes yet.':
+              raise SystemExit(f'CHANGELOG.md section {version} is empty')
+
+          Path(os.environ['RELEASE_NOTES']).write_text(notes + '\\n', encoding='utf-8')
+          print(f'Extracted release notes for {version}')
+          PYTHON
+
+      - name: Verify signing secrets
+'''
+          if release.count(old_validation) != 1:
+              raise SystemExit('Expected release metadata validation block was not found exactly once')
+          release = release.replace(old_validation, new_validation, 1)
+
+          old_generated = '          generate_release_notes: true\n'
+          if release.count(old_generated) != 1:
+              raise SystemExit('Expected generate_release_notes setting was not found exactly once')
+          release = release.replace(old_generated, '          generate_release_notes: false\n', 1)
+          release_path.write_text(release)
+
+          ci_path = Path('.github/workflows/flutter-ci.yml')
+          ci = ci_path.read_text()
+          checkout = '''      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+'''
+          validation = '''      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate changelog release section
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PYTHON'
+          import re
+          from pathlib import Path
+
+          app_version = next(
+              line.split(':', 1)[1].strip()
+              for line in Path('pubspec.yaml').read_text(encoding='utf-8').splitlines()
+              if line.startswith('version:')
+          )
+          version = app_version.split('+', 1)[0]
+          changelog = Path('CHANGELOG.md').read_text(encoding='utf-8')
+
+          if '## [Unreleased]' not in changelog:
+              raise SystemExit('CHANGELOG.md is missing the [Unreleased] section')
+
+          headings = re.findall(r'^## \\[([^]]+)\\]', changelog, re.MULTILINE)
+          if len(headings) != len(set(headings)):
+              raise SystemExit('CHANGELOG.md contains duplicate version headings')
+
+          pattern = re.compile(
+              rf'^## \\[{re.escape(version)}\\](?: - \\d{{4}}-\\d{{2}}-\\d{{2}})?\\s*$\\n'
+              rf'(.*?)(?=^## \\[|\\Z)',
+              re.MULTILINE | re.DOTALL,
+          )
+          match = pattern.search(changelog)
+          if match is None or not match.group(1).strip():
+              raise SystemExit(f'CHANGELOG.md has no non-empty section for version {version}')
+
+          print(f'Validated CHANGELOG.md section for {version}')
+          PYTHON
+
+      - name: Set up Java 17
+'''
+          if ci.count(checkout) != 1:
+              raise SystemExit('Expected Flutter CI checkout block was not found exactly once')
+          ci_path.write_text(ci.replace(checkout, validation, 1))
+          PY
+
+          rm RELEASE_NOTES_1.7.2.md RELEASE_NOTES_1.7.3.md RELEASE_NOTES_1.7.4.md
+
+      - name: Commit migration and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/apply-changelog-migration.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md .github/workflows/android-release.yml .github/workflows/flutter-ci.yml RELEASE_NOTES_1.7.2.md RELEASE_NOTES_1.7.3.md RELEASE_NOTES_1.7.4.md .github/workflows/apply-changelog-migration.yml
+          git commit -m 'Consolidate release notes into changelog'
+          git push origin HEAD:migrate-release-notes-to-changelog
