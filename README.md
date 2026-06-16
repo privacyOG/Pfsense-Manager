@@ -35,10 +35,13 @@ The project is still under development. Check the release notes before using it 
 - Expanded firmware, repository and platform details
 - Live gateway latency and packet-loss history
 - Saved live/pause and gateway refresh intervals
-- CPU thermal sensor monitoring
+- CPU and per-core thermal sensor monitoring
 - Real-time network throughput charts
 - Per-interface byte, packet, error and collision counters
 - Reorderable, persistent Dashboard sections
+- Clickable Dashboard warning details and recommended checks
+- Per-profile warning ignore and 24-hour snooze controls
+- Settings controls for restoring ignored warnings
 - Firewall rule viewing and management
 - Firewall logs
 - Current firewall states
@@ -115,7 +118,7 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-Pushing a version tag such as `v1.7.3` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
+Pushing a version tag such as `v1.7.4` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
 
 ## Security notes
 
@@ -136,7 +139,7 @@ pfSense Manager is licensed under **GPL-3.0-only**. Distributed modified version
 
 ## Current version
 
-`1.7.3+12`
+`1.7.4+13`
 
 Release APKs and checksums are available from the repository's Releases page.
 

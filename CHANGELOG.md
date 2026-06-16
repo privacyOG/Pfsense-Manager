@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.4
+
+- Added direct Settings navigation back to the five primary app destinations.
+- Improved CPU temperature reporting by listing CPU and core sensors separately.
+- Filtered Fahrenheit helper values so they are not misreported as Celsius alerts.
+- Fixed nested pfSense Plus System Information parsing and expanded field aliases.
+- Displayed router firmware and the installed pfSense Manager app version separately.
+- Added numeric uptime formatting and default package mirror and repository information.
+- Made Dashboard warning chips clickable with detailed explanations and recommended checks.
+- Added per-profile Ignore warning and 24-hour Remind me later actions.
+- Added a Settings control to restore ignored warnings.
+- Removed temporary repository marker and documentation files.
+- Improved production release automation with dynamic version metadata, APK identity checks, signing verification, and dedicated verification and release-trigger branches.
+
 ## 1.7.3
 
 - Added live per-interface byte, packet, input error, output error, and collision counters.
