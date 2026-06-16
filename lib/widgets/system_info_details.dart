@@ -6,11 +6,13 @@ class SystemInfoDetails extends StatelessWidget {
   const SystemInfoDetails({
     super.key,
     required this.info,
+    required this.appVersion,
     required this.rebooting,
     required this.onReboot,
   });
 
   final SystemInfo info;
+  final String appVersion;
   final bool rebooting;
   final VoidCallback onReboot;
 
@@ -27,10 +29,11 @@ class SystemInfoDetails extends StatelessWidget {
         ),
         _DetailCard(rows: {
           'System type': info.systemType,
-          'Version number': info.version,
+          'Router firmware': info.version,
+          'pfSense Manager app': appVersion,
           'Architecture': info.architecture,
           'Git commit hash': info.gitCommit,
-          'Package mirror URL': info.packageMirrorUrl,
+          'Package mirror': info.packageMirrorUrl,
           if (info.buildTime.isNotEmpty) 'Build time': info.buildTime,
         }),
         const SizedBox(height: 18),
@@ -38,23 +41,16 @@ class SystemInfoDetails extends StatelessWidget {
           icon: Icons.inventory_2_outlined,
           title: 'Repository information',
         ),
-        if (info.repositories.isEmpty)
-          _DetailCard(rows: {
-            'Repository type': info.repositoryType,
-            'Priority': 'Not reported',
-            'Mirror': info.packageMirrorUrl,
-          })
-        else
-          for (final repository in info.repositories)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _DetailCard(rows: {
-                'Repository': repository.name,
-                'Priority': repository.priority.toString(),
-                'Status': repository.enabled ? 'Enabled' : 'Disabled',
-                'URL': repository.url,
-              }),
-            ),
+        for (final repository in info.repositories)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _DetailCard(rows: {
+              'Repository': repository.name,
+              'Priority': repository.priority.toString(),
+              'Status': repository.enabled ? 'Enabled' : 'Disabled',
+              'URL': repository.url,
+            }),
+          ),
         const SizedBox(height: 8),
         const _SectionTitle(
           icon: Icons.monitor_heart_outlined,
