@@ -1,0 +1,1 @@
+CPU temperature readings are listed separately.
