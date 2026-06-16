@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -21,6 +22,16 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
   int _requestGeneration = 0;
   int? _sessionGeneration;
   String? _profileId;
+  String _appVersion = 'Unknown';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (!mounted) return;
+      setState(() => _appVersion = info.version);
+    }).catchError((_) {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -186,6 +197,7 @@ class _SystemInfoScreenState extends State<SystemInfoScreen> {
           else if (info != null)
             SystemInfoDetails(
               info: info,
+              appVersion: _appVersion,
               rebooting: _rebooting,
               onReboot: _reboot,
             ),
