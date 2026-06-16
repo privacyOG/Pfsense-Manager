@@ -1,0 +1,1 @@
+Settings now keeps the primary app navigation available.
