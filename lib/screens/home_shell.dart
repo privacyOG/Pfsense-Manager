@@ -173,7 +173,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ],
         ),
       ),
-      _PrimaryDestination(
+      const _PrimaryDestination(
         label: 'More',
         icon: Icons.more_horiz,
         selectedIcon: Icons.more,

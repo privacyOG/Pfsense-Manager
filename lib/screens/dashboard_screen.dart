@@ -120,7 +120,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.didChangeDependencies();
     final session = context.watch<PfSenseSessionProvider>();
     final profileId = session.selectedProfile?.id;
-    final changed = _loadedSessionGeneration != session.sessionGeneration ||
+    final changed =
+        _loadedSessionGeneration != session.sessionGeneration ||
         _loadedProfileId != profileId;
 
     if (changed) {
@@ -148,8 +149,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       setState(() {
         _data = null;
-        _error = AppLocalizations.of(context)?.disconnectedMessage ??
-            'Disconnected';
+        _error =
+            AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
       });
       return;
     }
@@ -187,7 +188,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   void _reorderCards(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex--;
       final item = _cardOrder.removeAt(oldIndex);
       _cardOrder.insert(newIndex, item);
     });
@@ -295,7 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       child: ReorderableListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         itemCount: _cardOrder.length,
-                        onReorder: reorder,
+                        onReorderItem: reorder,
                         buildDefaultDragHandles: false,
                         itemBuilder: (context, index) {
                           final id = _cardOrder[index];
@@ -313,7 +313,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   Switch(
                                     value: _sectionVisible(id),
                                     onChanged: (value) {
-                                      update(() => _setSectionVisible(id, value));
+                                      update(
+                                        () => _setSectionVisible(id, value),
+                                      );
                                     },
                                   ),
                                   ReorderableDragStartListener(
@@ -363,8 +365,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                         child: OutlinedButton.icon(
                           onPressed: () {
                             update(() {
-                              _cardOrder =
-                                  DashboardLayoutSection.defaults.toList();
+                              _cardOrder = DashboardLayoutSection.defaults
+                                  .toList();
                             });
                           },
                           icon: const Icon(Icons.restart_alt),
@@ -511,128 +513,128 @@ class _DashboardBody extends StatelessWidget {
 
     return switch (id) {
       DashboardLayoutSection.health => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionHeader(
-              icon: Icons.speed,
-              title: 'Health gauges',
-              action: 'Long-press to arrange',
-            ),
-            const SizedBox(height: 10),
-            _ResponsiveGrid(
-              minTileWidth: wide ? 220 : 150,
-              children: [
-                _MetricGauge(
-                  icon: Icons.memory_outlined,
-                  label: 'CPU',
-                  value: data.cpuUsage,
-                  detail: data.cpuCount > 0 ? '${data.cpuCount} cores' : 'Load',
-                  color: const Color(0xFF00C2A8),
-                ),
-                _MetricGauge(
-                  icon: Icons.developer_board_outlined,
-                  label: 'Memory',
-                  value: data.memoryUsage,
-                  detail: 'RAM in use',
-                  color: const Color(0xFF5E9CFF),
-                ),
-                _MetricGauge(
-                  icon: Icons.storage_outlined,
-                  label: 'Disk',
-                  value: data.diskUsage,
-                  detail: 'Filesystem used',
-                  color: const Color(0xFFFFB020),
-                ),
-                _MetricGauge(
-                  icon: Icons.swap_horiz,
-                  label: 'Swap',
-                  value: data.swapUsage,
-                  detail: 'Swap used',
-                  color: const Color(0xFFB36BFF),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-          ],
-        ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            icon: Icons.speed,
+            title: 'Health gauges',
+            action: 'Long-press to arrange',
+          ),
+          const SizedBox(height: 10),
+          _ResponsiveGrid(
+            minTileWidth: wide ? 220 : 150,
+            children: [
+              _MetricGauge(
+                icon: Icons.memory_outlined,
+                label: 'CPU',
+                value: data.cpuUsage,
+                detail: data.cpuCount > 0 ? '${data.cpuCount} cores' : 'Load',
+                color: const Color(0xFF00C2A8),
+              ),
+              _MetricGauge(
+                icon: Icons.developer_board_outlined,
+                label: 'Memory',
+                value: data.memoryUsage,
+                detail: 'RAM in use',
+                color: const Color(0xFF5E9CFF),
+              ),
+              _MetricGauge(
+                icon: Icons.storage_outlined,
+                label: 'Disk',
+                value: data.diskUsage,
+                detail: 'Filesystem used',
+                color: const Color(0xFFFFB020),
+              ),
+              _MetricGauge(
+                icon: Icons.swap_horiz,
+                label: 'Swap',
+                value: data.swapUsage,
+                detail: 'Swap used',
+                color: const Color(0xFFB36BFF),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+        ],
+      ),
       DashboardLayoutSection.system => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionHeader(
-              icon: Icons.device_thermostat,
-              title: 'System load and thermal',
-              action: 'Long-press to arrange',
-            ),
-            const SizedBox(height: 10),
-            _ResponsiveGrid(
-              minTileWidth: wide ? 320 : 240,
-              children: [
-                _LoadCard(data: data),
-                _MiniUsageCard(
-                  icon: Icons.hub_outlined,
-                  title: 'MBUF',
-                  value: data.mbufUsage,
-                  subtitle: 'Network buffer usage',
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            ThermalSensorsPanel(
-              sensors: data.thermalSensors,
-              fallbackTemperatureC: data.temperatureC,
-            ),
-            const SizedBox(height: 22),
-          ],
-        ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            icon: Icons.device_thermostat,
+            title: 'System load and thermal',
+            action: 'Long-press to arrange',
+          ),
+          const SizedBox(height: 10),
+          _ResponsiveGrid(
+            minTileWidth: wide ? 320 : 240,
+            children: [
+              _LoadCard(data: data),
+              _MiniUsageCard(
+                icon: Icons.hub_outlined,
+                title: 'MBUF',
+                value: data.mbufUsage,
+                subtitle: 'Network buffer usage',
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ThermalSensorsPanel(
+            sensors: data.thermalSensors,
+            fallbackTemperatureC: data.temperatureC,
+          ),
+          const SizedBox(height: 22),
+        ],
+      ),
       DashboardLayoutSection.gateways => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionHeader(
-              icon: Icons.public_outlined,
-              title: 'Gateways',
-              action: data.gateways.isEmpty
-                  ? 'Not reported'
-                  : '${onlineGateways.length}/${data.gateways.length} online',
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            icon: Icons.public_outlined,
+            title: 'Gateways',
+            action: data.gateways.isEmpty
+                ? 'Not reported'
+                : '${onlineGateways.length}/${data.gateways.length} online',
+          ),
+          const SizedBox(height: 10),
+          if (data.gateways.isEmpty)
+            const _EmptyPanel('No gateway telemetry returned by pfSense.')
+          else
+            _ResponsiveGrid(
+              minTileWidth: wide ? 300 : 260,
+              children: data.gateways.map(_GatewayCard.new).toList(),
             ),
-            const SizedBox(height: 10),
-            if (data.gateways.isEmpty)
-              const _EmptyPanel('No gateway telemetry returned by pfSense.')
-            else
-              _ResponsiveGrid(
-                minTileWidth: wide ? 300 : 260,
-                children: data.gateways.map(_GatewayCard.new).toList(),
-              ),
-            const SizedBox(height: 22),
-          ],
-        ),
+          const SizedBox(height: 22),
+        ],
+      ),
       DashboardLayoutSection.interfaces => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SectionHeader(
-              icon: Icons.settings_ethernet,
-              title: 'Interfaces',
-              action: data.interfaces.isEmpty
-                  ? 'Not reported'
-                  : '${upInterfaces.length}/${data.interfaces.length} up',
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(
+            icon: Icons.settings_ethernet,
+            title: 'Interfaces',
+            action: data.interfaces.isEmpty
+                ? 'Not reported'
+                : '${upInterfaces.length}/${data.interfaces.length} up',
+          ),
+          const SizedBox(height: 10),
+          if (data.interfaces.isEmpty)
+            const _EmptyPanel('No interface telemetry returned by pfSense.')
+          else
+            _ResponsiveGrid(
+              minTileWidth: wide ? 330 : 280,
+              children: data.interfaces
+                  .map(
+                    (interface) => _InterfaceCard(
+                      interface,
+                      onTap: () => onInterfaceTap(interface),
+                    ),
+                  )
+                  .toList(),
             ),
-            const SizedBox(height: 10),
-            if (data.interfaces.isEmpty)
-              const _EmptyPanel('No interface telemetry returned by pfSense.')
-            else
-              _ResponsiveGrid(
-                minTileWidth: wide ? 330 : 280,
-                children: data.interfaces
-                    .map(
-                      (interface) => _InterfaceCard(
-                        interface,
-                        onTap: () => onInterfaceTap(interface),
-                      ),
-                    )
-                    .toList(),
-              ),
-            const SizedBox(height: 22),
-          ],
-        ),
+          const SizedBox(height: 22),
+        ],
+      ),
       _ => const SizedBox.shrink(),
     };
   }
@@ -715,8 +717,8 @@ class _HeroPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
-        color: scheme.surfaceContainerHighest.withOpacity(0.55),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -728,7 +730,7 @@ class _HeroPanel extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00C2A8).withOpacity(0.18),
+                  color: const Color(0xFF00C2A8).withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.security, color: Color(0xFF00C2A8)),
@@ -801,126 +803,6 @@ class _HeroPanel extends StatelessWidget {
   }
 }
 
-class _AlertStrip extends StatelessWidget {
-  const _AlertStrip({required this.data});
-
-  final DashboardData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final alerts = <_DashboardAlert>[];
-    if (data.cpuUsage >= 85) {
-      alerts.add(_DashboardAlert(
-        Icons.memory,
-        'CPU high',
-        '${data.cpuUsage.toStringAsFixed(1)}%',
-        Colors.redAccent,
-      ));
-    }
-    if (data.memoryUsage >= 85) {
-      alerts.add(_DashboardAlert(
-        Icons.developer_board,
-        'RAM high',
-        '${data.memoryUsage.toStringAsFixed(1)}%',
-        Colors.orangeAccent,
-      ));
-    }
-    if (data.diskUsage >= 90) {
-      alerts.add(_DashboardAlert(
-        Icons.storage,
-        'Disk high',
-        '${data.diskUsage.toStringAsFixed(1)}%',
-        Colors.redAccent,
-      ));
-    }
-    final hottest = data.temperatureC;
-    if (hottest != null && hottest >= 75) {
-      final sensor = data.thermalSensors
-          .where((item) => item.temperatureC == hottest)
-          .map((item) => item.name)
-          .firstOrNull;
-      alerts.add(_DashboardAlert(
-        Icons.device_thermostat,
-        sensor == null ? 'Thermal alert' : '$sensor hot',
-        '${hottest.toStringAsFixed(1)} °C',
-        Colors.redAccent,
-      ));
-    }
-    final downInterfaces =
-        data.interfaces.where((interface) => !interface.up).length;
-    if (downInterfaces > 0) {
-      alerts.add(_DashboardAlert(
-        Icons.settings_ethernet,
-        'Interface down',
-        '$downInterfaces affected',
-        Colors.orangeAccent,
-      ));
-    }
-    final downGateways =
-        data.gateways.where((gateway) => !gateway.online).length;
-    if (downGateways > 0) {
-      alerts.add(_DashboardAlert(
-        Icons.public_off,
-        'Gateway loss',
-        '$downGateways affected',
-        Colors.redAccent,
-      ));
-    }
-
-    if (alerts.isEmpty) {
-      alerts.add(const _DashboardAlert(
-        Icons.verified_outlined,
-        'No active alerts',
-        'System telemetry looks healthy',
-        Color(0xFF00C2A8),
-      ));
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [for (final alert in alerts) _AlertChip(alert: alert)],
-    );
-  }
-}
-
-class _DashboardAlert {
-  const _DashboardAlert(this.icon, this.label, this.value, this.color);
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-}
-
-class _AlertChip extends StatelessWidget {
-  const _AlertChip({required this.alert});
-
-  final _DashboardAlert alert;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: alert.color.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: alert.color.withOpacity(0.36)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(alert.icon, color: alert.color, size: 18),
-          const SizedBox(width: 8),
-          Text(alert.label, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(width: 8),
-          Text(alert.value, style: Theme.of(context).textTheme.labelSmall),
-        ],
-      ),
-    );
-  }
-}
-
 class _ResponsiveGrid extends StatelessWidget {
   const _ResponsiveGrid({required this.children, required this.minTileWidth});
 
@@ -979,7 +861,7 @@ class _MetricGauge extends StatelessWidget {
                     value: percent,
                     strokeWidth: 8,
                     color: color,
-                    backgroundColor: color.withOpacity(0.14),
+                    backgroundColor: color.withValues(alpha: 0.14),
                     strokeCap: StrokeCap.round,
                   ),
                   Icon(icon, color: color),
@@ -1075,7 +957,7 @@ class _MiniUsageCard extends StatelessWidget {
               value: (value / 100).clamp(0.0, 1.0),
               minHeight: 9,
               color: color,
-              backgroundColor: color.withOpacity(0.14),
+              backgroundColor: color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(8),
             ),
             const SizedBox(height: 10),
@@ -1310,10 +1192,12 @@ class _NocWallboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onlineGateways =
-        data.gateways.where((gateway) => gateway.online).length;
-    final upInterfaces =
-        data.interfaces.where((interface) => interface.up).length;
+    final onlineGateways = data.gateways
+        .where((gateway) => gateway.online)
+        .length;
+    final upInterfaces = data.interfaces
+        .where((interface) => interface.up)
+        .length;
     final hottest = data.temperatureC;
 
     return Scaffold(
@@ -1406,9 +1290,9 @@ class _WallboardTile extends StatelessWidget {
               child: Text(
                 value,
                 style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             Text(label, style: Theme.of(context).textTheme.titleMedium),
@@ -1491,8 +1375,8 @@ class _StatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        color: scheme.surface.withOpacity(0.62),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        color: scheme.surface.withValues(alpha: 0.62),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1579,7 +1463,7 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -1612,10 +1496,7 @@ class _EmptyPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(text),
-      ),
+      child: Padding(padding: const EdgeInsets.all(16), child: Text(text)),
     );
   }
 }
