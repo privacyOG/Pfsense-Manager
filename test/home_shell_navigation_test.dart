@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pfsense_manager/l10n/app_strings.dart';
+import 'package:pfsense_manager/providers/app_settings_provider.dart';
 import 'package:pfsense_manager/providers/profile_provider.dart';
 import 'package:pfsense_manager/providers/session_provider.dart';
+import 'package:pfsense_manager/providers/theme_provider.dart';
 import 'package:pfsense_manager/screens/home_shell.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +15,8 @@ Widget buildApp() {
     providers: [
       ChangeNotifierProvider(create: (_) => ProfileProvider()),
       ChangeNotifierProvider(create: (_) => PfSenseSessionProvider()),
+      ChangeNotifierProvider(create: (_) => AppSettingsProvider()),
+      ChangeNotifierProvider(create: (_) => ThemeProvider()),
     ],
     child: const MaterialApp(
       supportedLocales: AppStrings.supportedLocales,
@@ -99,5 +103,28 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       2,
     );
+  });
+
+  testWidgets('Settings keeps direct access to primary navigation', (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('More').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pump();
+
+    expect(find.text('Settings'), findsWidgets);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Firewall'), findsOneWidget);
+    expect(find.text('Network'), findsOneWidget);
+    expect(find.text('Services'), findsOneWidget);
+    expect(find.text('More'), findsOneWidget);
   });
 }
