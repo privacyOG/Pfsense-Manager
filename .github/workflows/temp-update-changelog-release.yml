@@ -67,7 +67,7 @@ jobs:
 
           version = os.environ['VERSION']
           lines = Path(os.environ['CHANGELOG']).read_text(encoding='utf-8').splitlines()
-          heading = re.compile(r'^## \\[([^]]+)\\](?: - \\d{4}-\\d{2}-\\d{2})?$')
+          heading = re.compile(r'^## \[([^]]+)\](?: - \d{4}-\d{2}-\d{2})?$')
 
           start = None
           for index, line in enumerate(lines):
@@ -84,11 +84,11 @@ jobs:
                   end = index
                   break
 
-          notes = '\\n'.join(lines[start:end]).strip()
+          notes = '\n'.join(lines[start:end]).strip()
           if not notes or notes == 'No notable changes yet.':
               raise SystemExit(f'CHANGELOG.md section {version} is empty')
 
-          Path(os.environ['RELEASE_NOTES']).write_text(notes + '\\n', encoding='utf-8')
+          Path(os.environ['RELEASE_NOTES']).write_text(notes + '\n', encoding='utf-8')
           print(f'Extracted release notes for {version}')
           PYTHON
 
