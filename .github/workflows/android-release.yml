@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'verify-build-*'
-      - 'publish-build-*'
+      - main
     tags:
       - 'v*'
+    paths:
+      - 'release-authorizations/**'
 
 permissions:
   contents: write
@@ -58,11 +59,14 @@ jobs:
             refs/tags/*)
               test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
               ;;
-            refs/heads/verify-build-*)
-              test "$GITHUB_REF_NAME" = "verify-build-$RELEASE_TAG"
+            refs/heads/main)
+              AUTHORIZATION_FILE="release-authorizations/$RELEASE_TAG"
+              test -f "$AUTHORIZATION_FILE"
+              grep -Fx "$RELEASE_TAG" "$AUTHORIZATION_FILE"
               ;;
-            refs/heads/publish-build-*)
-              test "$GITHUB_REF_NAME" = "publish-build-$RELEASE_TAG"
+            *)
+              echo "Unsupported release ref: $GITHUB_REF" >&2
+              exit 1
               ;;
           esac
 
@@ -176,8 +180,8 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Create version tag from approved release branch
-        if: startsWith(github.ref, 'refs/heads/publish-build-')
+      - name: Create version tag after successful verification
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
@@ -193,7 +197,7 @@ jobs:
           fi
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/publish-build-')
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
