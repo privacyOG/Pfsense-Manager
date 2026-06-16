@@ -177,7 +177,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         label: 'More',
         icon: Icons.more_horiz,
         selectedIcon: Icons.more,
-        child: const _MoreSection(),
+        child: _MoreSection(),
       ),
     ];
 

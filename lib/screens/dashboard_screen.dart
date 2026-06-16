@@ -1518,7 +1518,3 @@ String _formatCount(int value) {
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
   return value.toString();
 }
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
