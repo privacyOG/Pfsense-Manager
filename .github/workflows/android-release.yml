@@ -53,8 +53,8 @@ jobs:
           VERSION="${APP_VERSION%%+*}"
           BUILD_NUMBER="${APP_VERSION##*+}"
           RELEASE_TAG="v${VERSION}"
-          RELEASE_NOTES="RELEASE_NOTES_${VERSION}.md"
-
+          RELEASE_NOTES="$RUNNER_TEMP/version-${VERSION}.md"
+        
           case "$GITHUB_REF" in
             refs/tags/*)
               test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
@@ -70,12 +70,13 @@ jobs:
               ;;
           esac
 
-          test -f "$RELEASE_NOTES"
+          test -f CHANGELOG.md
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
-
+      - name: Build version notes
+        run: python3 tools/changelog_section.py "$VERSION" "$RELEASE_NOTES"
       - name: Verify signing secrets
         shell: bash
         env:
@@ -204,7 +205,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: pfSense Manager ${{ env.VERSION }}
           body_path: ${{ env.RELEASE_NOTES }}
-          generate_release_notes: true
+          generate_release_notes: false
           make_latest: true
           files: |
             ${{ env.APK }}
