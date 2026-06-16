@@ -1,0 +1,1 @@
+Thermal sensor parsing corrected.
