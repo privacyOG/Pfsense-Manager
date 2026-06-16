@@ -12,14 +12,14 @@
 - Added per-profile Ignore warning and 24-hour Remind me later actions.
 - Added a Settings control to restore ignored warnings.
 - Removed temporary repository marker and documentation files.
-- Improved production release automation with dynamic version metadata, APK identity checks, signing verification, and dedicated verification and release-trigger branches.
+- Improved production release automation with dynamic version metadata, APK identity checks, signature verification, and an explicit reviewed release authorization gate.
 
 ## 1.7.3
 
 - Added live per-interface byte, packet, input error, output error, and collision counters.
 - Added support for every reported CPU thermal sensor with hottest-sensor alerts.
 - Added a dedicated Gateways screen with live latency and packet-loss history charts.
-- Added saved live/pause controls and 1, 3, 5, or 10-second gateway refresh intervals.
+- Added saved live/pause and 1, 3, 5, or 10-second gateway refresh intervals.
 - Added persistent Dashboard section ordering, visibility controls, long-press access, and layout reset.
 - Expanded System Information with firmware, architecture, commit hash, package mirror, repository priorities, hostname, platform, uptime, and update timestamps.
 - Improved README branding, donation details, supported-feature documentation, and version information.
