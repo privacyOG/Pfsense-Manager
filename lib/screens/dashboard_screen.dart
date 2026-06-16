@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../models/dashboard.dart';
 import '../models/dashboard_layout.dart';
 import '../providers/session_provider.dart';
+import '../widgets/dashboard_alert_strip.dart';
 import '../widgets/thermal_sensors_panel.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -220,6 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (data != null)
             _DashboardBody(
               data: data,
+              profileId: session.selectedProfile?.id,
               live: _live,
               refreshSeconds: _refreshSeconds,
               showHealth: _showHealth,
@@ -425,6 +427,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 class _DashboardBody extends StatelessWidget {
   const _DashboardBody({
     required this.data,
+    required this.profileId,
     required this.live,
     required this.refreshSeconds,
     required this.showHealth,
@@ -440,6 +443,7 @@ class _DashboardBody extends StatelessWidget {
   });
 
   final DashboardData data;
+  final String? profileId;
   final bool live;
   final int refreshSeconds;
   final bool showHealth;
@@ -477,7 +481,7 @@ class _DashboardBody extends StatelessWidget {
           onNocMode: onNocMode,
         ),
         const SizedBox(height: 14),
-        _AlertStrip(data: data),
+        DashboardAlertStrip(data: data, profileId: profileId),
         const SizedBox(height: 14),
         for (final id in cardOrder)
           if (_isVisible(id))
