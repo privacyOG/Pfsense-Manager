@@ -44,9 +44,6 @@ jobs:
           cache: true
 
       - name: Resolve and validate release metadata
-      - name: Build version notes
-        run: python3 tools/changelog_section.py "$VERSION" "$RELEASE_NOTES"
-      
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +75,8 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
-
+      - name: Build version notes
+        run: python3 tools/changelog_section.py "$VERSION" "$RELEASE_NOTES"
       - name: Verify signing secrets
         shell: bash
         env:
