@@ -46,12 +46,12 @@ class DashboardWarningPreferences {
     DateTime? now,
   }) {
     final raw = _preferences.getString(_snoozedKey(profileId));
-    if (raw == null || raw.isEmpty) return const {};
+    if (raw == null || raw.isEmpty) return <DashboardWarningKind, DateTime>{};
 
     final currentTime = now ?? DateTime.now();
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! Map) return const {};
+      if (decoded is! Map) return <DashboardWarningKind, DateTime>{};
 
       final result = <DashboardWarningKind, DateTime>{};
       for (final entry in decoded.entries) {
@@ -71,7 +71,7 @@ class DashboardWarningPreferences {
       }
       return result;
     } on FormatException {
-      return const {};
+      return <DashboardWarningKind, DateTime>{};
     }
   }
 
