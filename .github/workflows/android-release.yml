@@ -3,6 +3,9 @@ name: Android Production Release
 on:
   workflow_dispatch:
   push:
+    branches:
+      - 'release-verification/**'
+      - 'release-trigger/**'
     tags:
       - 'v*'
 
@@ -15,13 +18,15 @@ concurrency:
 
 jobs:
   build-release:
-    name: Build signed Android release
+    name: Build and verify signed Android release
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -36,6 +41,36 @@ jobs:
           flutter-version: '3.44.2'
           channel: stable
           cache: true
+
+      - name: Resolve and validate release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml)"
+          test -n "$APP_VERSION"
+          test "$APP_VERSION" != "${APP_VERSION%%+*}"
+          VERSION="${APP_VERSION%%+*}"
+          BUILD_NUMBER="${APP_VERSION##*+}"
+          RELEASE_TAG="v${VERSION}"
+          RELEASE_NOTES="RELEASE_NOTES_${VERSION}.md"
+
+          case "$GITHUB_REF" in
+            refs/tags/*)
+              test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
+              ;;
+            refs/heads/release-verification/*)
+              test "$GITHUB_REF_NAME" = "release-verification/$RELEASE_TAG"
+              ;;
+            refs/heads/release-trigger/*)
+              test "$GITHUB_REF_NAME" = "release-trigger/$RELEASE_TAG"
+              ;;
+          esac
+
+          test -f "$RELEASE_NOTES"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
 
       - name: Verify signing secrets
         shell: bash
@@ -73,16 +108,40 @@ jobs:
         run: flutter pub get
 
       - name: Analyze release changes
+        shell: bash
         run: |
+          set -euo pipefail
           dart analyze lib/screens/home_shell.dart
+          dart analyze lib/screens/dashboard_screen.dart
+          dart analyze lib/screens/settings_screen.dart
+          dart analyze lib/screens/system_info_screen.dart
+          dart analyze lib/models/system_info.dart
           dart analyze lib/providers/session_provider.dart
+          dart analyze lib/services/dashboard_warning_preferences.dart
+          dart analyze lib/widgets/dashboard_alert_strip.dart
+          dart analyze lib/widgets/system_info_details.dart
           dart analyze test/home_shell_navigation_test.dart
+          dart analyze test/system_info_model_test.dart
+          dart analyze test/dashboard_warning_preferences_test.dart
 
       - name: Run tests
-        run: flutter test
+        run: flutter test --coverage
 
       - name: Build signed release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+
+      - name: Verify APK identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$AAPT"
+          PACKAGE_LINE="$("$AAPT" dump badging "$APK_PATH" | grep '^package: ' | head -n 1)"
+          printf '%s\n' "$PACKAGE_LINE" | tee apk-identity.txt
+          grep -F "name='com.privacyog.pfsense_manager'" apk-identity.txt
+          grep -F "versionCode='$BUILD_NUMBER'" apk-identity.txt
+          grep -F "versionName='$VERSION'" apk-identity.txt
 
       - name: Verify APK signature
         shell: bash
@@ -90,44 +149,64 @@ jobs:
           set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk
+          "$APKSIGNER" verify --verbose --print-certs build/app/outputs/flutter-apk/app-release.apk | tee apk-signature.txt
+          grep -F 'Number of signers: 1' apk-signature.txt
 
       - name: Prepare artifacts
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d+ -f1)"
           APK="pfsense-manager-${VERSION}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk "$APK"
           sha256sum "$APK" > "$APK.sha256"
+          cp apk-identity.txt "$APK.identity.txt"
+          cp apk-signature.txt "$APK.signature.txt"
           echo "APK=$APK" >> "$GITHUB_ENV"
 
-      - name: Upload signed APK artifact
+      - name: Upload signed release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pfsense-manager-signed-${{ github.sha }}
+          name: pfsense-manager-signed-${{ env.VERSION }}-${{ github.run_id }}
           path: |
             ${{ env.APK }}
             ${{ env.APK }}.sha256
+            ${{ env.APK }}.identity.txt
+            ${{ env.APK }}.signature.txt
+            coverage/lcov.info
           if-no-files-found: error
           retention-days: 90
 
+      - name: Create version tag from approved release branch
+        if: startsWith(github.ref, 'refs/heads/release-trigger/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            EXISTING_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"
+            test "$EXISTING_SHA" = "$GITHUB_SHA"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "pfSense Manager $VERSION"
+            git push origin "$RELEASE_TAG"
+          fi
+
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-trigger/')
         uses: softprops/action-gh-release@v2
         with:
-          name: pfSense Manager 1.6.0
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: pfSense Manager ${{ env.VERSION }}
+          body_path: ${{ env.RELEASE_NOTES }}
           generate_release_notes: true
-          body: |
-            ## pfSense Manager 1.6.0
-
-            - Redesigned five-destination navigation
-            - Responsive NavigationRail for larger screens
-            - Grouped Firewall, Network and Services sections
-            - Faster firewall profile switching
-            - Automatic reconnection when the app resumes
-            - Safer API-client disposal and stale-request protection
-            - Improved connection error and retry interface
+          make_latest: true
           files: |
             ${{ env.APK }}
             ${{ env.APK }}.sha256
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -f android/app/pfsense-release.jks android/key.properties
