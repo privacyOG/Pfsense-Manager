@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'release-verification/**'
-      - 'release-trigger/**'
+      - 'verify-build-*'
+      - 'publish-build-*'
     tags:
       - 'v*'
 
@@ -58,11 +58,11 @@ jobs:
             refs/tags/*)
               test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
               ;;
-            refs/heads/release-verification/*)
-              test "$GITHUB_REF_NAME" = "release-verification/$RELEASE_TAG"
+            refs/heads/verify-build-*)
+              test "$GITHUB_REF_NAME" = "verify-build-$RELEASE_TAG"
               ;;
-            refs/heads/release-trigger/*)
-              test "$GITHUB_REF_NAME" = "release-trigger/$RELEASE_TAG"
+            refs/heads/publish-build-*)
+              test "$GITHUB_REF_NAME" = "publish-build-$RELEASE_TAG"
               ;;
           esac
 
@@ -177,7 +177,7 @@ jobs:
           retention-days: 90
 
       - name: Create version tag from approved release branch
-        if: startsWith(github.ref, 'refs/heads/release-trigger/')
+        if: startsWith(github.ref, 'refs/heads/publish-build-')
         shell: bash
         run: |
           set -euo pipefail
@@ -193,7 +193,7 @@ jobs:
           fi
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-trigger/')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/publish-build-')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
