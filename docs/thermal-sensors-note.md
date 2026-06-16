@@ -1,1 +1,0 @@
-Per-core CPU temperature readings are listed separately and unit helper fields are not treated as sensors.

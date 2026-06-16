@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/app_settings_provider.dart';
+import '../providers/profile_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/dashboard_warning_preferences.dart';
 import 'home_shell.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,6 +25,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _language = 'en';
   PackageInfo? _packageInfo;
   bool _biometricsAvailable = false;
+  DashboardWarningPreferences? _warningPreferences;
+  String? _warningProfileId;
+  int _warningLoadGeneration = 0;
+  int _ignoredWarningCount = 0;
+  int _snoozedWarningCount = 0;
+  bool _warningPreferencesLoading = false;
 
   @override
   void initState() {
@@ -75,11 +83,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+
+  void _scheduleWarningPreferences(String? profileId) {
+    if (_warningProfileId == profileId) return;
+    _warningProfileId = profileId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadWarningPreferences(profileId);
+    });
+  }
+
+  Future<void> _loadWarningPreferences(String? profileId) async {
+    final generation = ++_warningLoadGeneration;
+    if (profileId == null) {
+      if (!mounted) return;
+      setState(() {
+        _warningPreferences = null;
+        _ignoredWarningCount = 0;
+        _snoozedWarningCount = 0;
+        _warningPreferencesLoading = false;
+      });
+      return;
+    }
+
+    setState(() => _warningPreferencesLoading = true);
+    final preferences = await DashboardWarningPreferences.open();
+    final ignored = preferences.ignoredForProfile(profileId).length;
+    final snoozed = preferences.activeSnoozedCount(profileId);
+    if (!mounted || generation != _warningLoadGeneration) return;
+
+    setState(() {
+      _warningPreferences = preferences;
+      _ignoredWarningCount = ignored;
+      _snoozedWarningCount = snoozed;
+      _warningPreferencesLoading = false;
+    });
+  }
+
+  Future<void> _restoreIgnoredWarnings() async {
+    final profileId = _warningProfileId;
+    if (profileId == null) return;
+    final preferences =
+        _warningPreferences ?? await DashboardWarningPreferences.open();
+    await preferences.restoreIgnored(profileId);
+    if (!mounted || profileId != _warningProfileId) return;
+
+    setState(() {
+      _warningPreferences = preferences;
+      _ignoredWarningCount = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Ignored warnings restored.')),
+    );
+  }
+
+  String _warningSummary(String? profileName) {
+    if (profileName == null) {
+      return 'Select a firewall profile to manage warning visibility.';
+    }
+    if (_warningPreferencesLoading) return 'Loading warning preferences...';
+    if (_ignoredWarningCount == 0 && _snoozedWarningCount == 0) {
+      return 'No warnings are ignored or snoozed for $profileName.';
+    }
+    return '$_ignoredWarningCount ignored • $_snoozedWarningCount snoozed for $profileName';
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = context.watch<ThemeProvider>();
     final settings = context.watch<AppSettingsProvider>();
+    final selectedProfile = context.watch<ProfileProvider>().selectedProfile;
+    _scheduleWarningPreferences(selectedProfile?.id);
     final packageInfo = _packageInfo;
     final version = packageInfo == null
         ? 'Loading...'
@@ -238,6 +312,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? 'Enable fingerprint or device unlock'
                   : 'No biometric method reported by Android'),
               secondary: const Icon(Icons.fingerprint),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const _Heading(Icons.warning_amber_outlined, 'Warnings'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.notifications_active_outlined),
+              title: const Text('Ignored dashboard warnings'),
+              subtitle: Text(_warningSummary(selectedProfile?.name)),
+              trailing: TextButton(
+                onPressed: selectedProfile != null &&
+                        !_warningPreferencesLoading &&
+                        _ignoredWarningCount > 0
+                    ? _restoreIgnoredWarnings
+                    : null,
+                child: const Text('Restore'),
+              ),
             ),
           ),
           const SizedBox(height: 18),

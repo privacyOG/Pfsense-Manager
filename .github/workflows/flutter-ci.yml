@@ -11,41 +11,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: flutter-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-warning-patch:
-    if: github.event_name == 'pull_request' && github.head_ref == 'feature/dashboard-warning-actions'
-    name: Apply warning integration patch
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out feature branch
-        uses: actions/checkout@v4
-        with:
-          ref: feature/dashboard-warning-actions
-          fetch-depth: 0
-
-      - name: Apply patch and restore CI workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 tool/apply_warning_patch.py
-          git checkout origin/main -- .github/workflows/flutter-ci.yml
-
-      - name: Commit integrated warning controls
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Add warning actions and remove temporary files"
-          git push origin HEAD:feature/dashboard-warning-actions
-
   validate:
     name: Analyze, test and build debug APK
     runs-on: ubuntu-latest
