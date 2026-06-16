@@ -1,6 +1,5 @@
 import 'system_repository.dart';
 
-/// Firmware, repository and runtime information reported by pfSense.
 class SystemInfo {
   const SystemInfo({
     required this.systemType,
@@ -37,97 +36,76 @@ class SystemInfo {
   final String? lastUpdate;
 
   factory SystemInfo.fromJson(Map<String, dynamic> json) {
-    final data = _asMap(json['data']) ?? json;
-    final repositories = _parseRepositories(data);
-    final repositoryType = _readString(data, const [
-      'repository_type',
-      'repo_type',
-      'repository',
-    ]);
+    final root = _asMap(json['data']) ?? json;
+    final flat = <String, dynamic>{};
+    _flatten(root, flat);
+    final repositories = _parseRepositories(root, flat);
 
     return SystemInfo(
-      systemType: _readString(data, const [
-        'system_type',
-        'product_name',
-        'product',
-        'distribution',
-      ], fallback: 'pfSense'),
-      version: _readString(data, const [
-        'version',
-        'firmware_version',
-        'product_version',
-      ]),
-      architecture: _readString(data, const [
-        'architecture',
-        'arch',
-        'machine',
-      ]),
-      gitCommit: _readString(data, const [
-        'git_commit',
-        'commit',
-        'commit_hash',
-        'revision',
-        'build_commit',
-      ]),
-      packageMirrorUrl: _readString(data, const [
-        'package_mirror_url',
-        'package_mirror',
-        'pkg_mirror',
-        'mirror_url',
-      ], fallback: 'https://cloud.privacyx.co/'),
+      systemType: _read(flat, const [
+        'system_type', 'product_name', 'product', 'distribution', 'edition'
+      ], 'pfSense'),
+      version: _read(flat, const [
+        'version', 'firmware_version', 'product_version', 'base_version',
+        'current_version', 'installed_version', 'version_full', 'system_version'
+      ], 'Unknown'),
+      architecture: _read(flat, const [
+        'architecture', 'arch', 'machine', 'machine_arch', 'cpu_arch', 'platform_arch'
+      ], 'Unknown'),
+      gitCommit: _read(flat, const [
+        'git_commit', 'commit', 'commit_hash', 'revision', 'build_commit'
+      ], 'Unknown'),
+      packageMirrorUrl: _read(flat, const [
+        'package_mirror_url', 'package_mirror', 'pkg_mirror', 'mirror_url'
+      ], 'https://cloud.privacyx.co/'),
       repositories: repositories,
-      hostname: _readString(data, const [
-        'hostname',
-        'host',
-        'system_hostname',
-      ]),
-      platform: _readString(data, const [
-        'os_version',
-        'freebsd_version',
-        'platform_version',
-        'kernel_version',
-        'platform',
-      ]),
-      uptime: _readString(data, const [
-        'uptime',
-        'system_uptime',
-      ]),
-      buildTime: _readString(data, const [
-        'buildtime',
-        'build_time',
-        'build_date',
-      ], fallback: ''),
-      phpVersion: _readString(data, const [
-        'php_version',
-      ], fallback: 'Not reported'),
-      kernelVersion: _readString(data, const [
-        'kernel_version',
-        'kernel',
-        'uname',
-      ]),
-      repositoryType: repositoryType == 'Unknown' && repositories.isNotEmpty
-          ? repositories.first.name
-          : repositoryType,
-      lastUpdate: _readNullableString(data, const [
-        'last_update',
-        'last_updated',
-        'update_timestamp',
-        'updated_at',
+      hostname: _read(flat, const [
+        'hostname', 'host', 'system_hostname', 'config_system_hostname'
+      ], 'Unknown'),
+      platform: _read(flat, const [
+        'freebsd_version', 'os_version', 'platform_version', 'uname', 'platform'
+      ], 'FreeBSD'),
+      uptime: _readUptime(flat),
+      buildTime: _read(flat, const ['buildtime', 'build_time', 'build_date'], ''),
+      phpVersion: _read(flat, const ['php_version'], 'Not reported'),
+      kernelVersion: _read(flat, const [
+        'kernel_version', 'kernel', 'kernel_release', 'uname_r'
+      ], 'Unknown'),
+      repositoryType: repositories.first.name,
+      lastUpdate: _readNullable(flat, const [
+        'last_update', 'last_updated', 'update_timestamp', 'updated_at'
       ]),
       fetchedAt: DateTime.now(),
     );
   }
 }
 
-List<SystemRepository> _parseRepositories(Map<String, dynamic> data) {
-  final raw = data['repositories'] ?? data['repos'] ?? data['repository_info'];
+void _flatten(Map<String, dynamic> source, Map<String, dynamic> target,
+    [String prefix = '']) {
+  for (final entry in source.entries) {
+    final key = entry.key.toLowerCase();
+    final path = prefix.isEmpty ? key : '${prefix}_$key';
+    final value = entry.value;
+    if (value is Map) {
+      _flatten(Map<String, dynamic>.from(value), target, path);
+    } else {
+      target.putIfAbsent(key, () => value);
+      target[path] = value;
+    }
+  }
+}
+
+List<SystemRepository> _parseRepositories(
+  Map<String, dynamic> root,
+  Map<String, dynamic> flat,
+) {
+  final raw = root['repositories'] ?? root['repos'] ?? root['repository_info'];
   final result = <SystemRepository>[];
 
   if (raw is List) {
     for (var index = 0; index < raw.length; index++) {
       final item = _asMap(raw[index]);
-      if (item == null) continue;
-      result.add(_repositoryFromMap(item, index));
+      if (item != null) result.add(_repositoryFromMap(item, index));
     }
   } else if (raw is Map) {
     var index = 0;
@@ -135,32 +113,19 @@ List<SystemRepository> _parseRepositories(Map<String, dynamic> data) {
       final item = _asMap(entry.value) ?? <String, dynamic>{};
       result.add(_repositoryFromMap(
         <String, dynamic>{'name': entry.key.toString(), ...item},
-        index,
+        index++,
       ));
-      index++;
     }
   }
 
   if (result.isEmpty) {
-    final type = _readNullableString(data, const [
-      'repository_type',
-      'repo_type',
-      'repository',
-    ]);
-    final url = _readNullableString(data, const [
-      'repository_url',
-      'repo_url',
-      'package_mirror_url',
-      'package_mirror',
-      'pkg_mirror',
-    ]);
-    if (type != null || url != null) {
-      result.add(SystemRepository(
-        name: type ?? 'Primary repository',
-        url: url ?? 'https://cloud.privacyx.co/',
-        priority: 1,
-      ));
-    }
+    result.add(SystemRepository(
+      name: 'pfSense Manager',
+      url: _read(flat, const [
+        'repository_url', 'repo_url', 'package_mirror_url', 'package_mirror', 'pkg_mirror'
+      ], 'https://cloud.privacyx.co/'),
+      priority: 1,
+    ));
   }
 
   result.sort((a, b) => a.priority.compareTo(b.priority));
@@ -168,15 +133,31 @@ List<SystemRepository> _parseRepositories(Map<String, dynamic> data) {
 }
 
 SystemRepository _repositoryFromMap(Map<String, dynamic> data, int index) {
+  final flat = <String, dynamic>{};
+  _flatten(data, flat);
   return SystemRepository(
-    name: _readString(data, const ['name', 'id', 'type'],
-        fallback: 'Repository ${index + 1}'),
-    url: _readString(data, const ['url', 'mirror', 'repository_url'],
-        fallback: 'Not reported'),
-    priority: _readInt(data, const ['priority', 'order', 'weight'],
-        fallback: index + 1),
-    enabled: _readBool(data, const ['enabled', 'active'], fallback: true),
+    name: _read(flat, const ['name', 'id', 'type'], 'Repository ${index + 1}'),
+    url: _read(flat, const ['url', 'mirror', 'repository_url'],
+        'https://cloud.privacyx.co/'),
+    priority: _readInt(flat, const ['priority', 'order', 'weight'], index + 1),
+    enabled: _readBool(flat, const ['enabled', 'active'], true),
   );
+}
+
+String _readUptime(Map<String, dynamic> flat) {
+  final text = _readNullable(flat, const ['uptime', 'system_uptime', 'uptime_text']);
+  if (text != null && !RegExp(r'^\d+$').hasMatch(text)) return text;
+  final seconds = _readInt(flat, const ['uptime_seconds', 'uptime_sec'],
+      int.tryParse(text ?? '') ?? -1);
+  if (seconds < 0) return 'Unknown';
+  final days = seconds ~/ 86400;
+  final hours = (seconds % 86400) ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final parts = <String>[];
+  if (days > 0) parts.add('$days ${days == 1 ? 'day' : 'days'}');
+  if (hours > 0) parts.add('$hours ${hours == 1 ? 'hour' : 'hours'}');
+  parts.add('$minutes ${minutes == 1 ? 'minute' : 'minutes'}');
+  return parts.join(', ');
 }
 
 Map<String, dynamic>? _asMap(dynamic value) {
@@ -187,17 +168,12 @@ Map<String, dynamic>? _asMap(dynamic value) {
   return null;
 }
 
-String _readString(
-  Map<String, dynamic> data,
-  List<String> keys, {
-  String fallback = 'Unknown',
-}) {
-  return _readNullableString(data, keys) ?? fallback;
-}
+String _read(Map<String, dynamic> data, List<String> keys, String fallback) =>
+    _readNullable(data, keys) ?? fallback;
 
-String? _readNullableString(Map<String, dynamic> data, List<String> keys) {
+String? _readNullable(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
-    final value = data[key];
+    final value = data[key.toLowerCase()];
     if (value == null) continue;
     final text = value.toString().trim();
     if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
@@ -205,13 +181,9 @@ String? _readNullableString(Map<String, dynamic> data, List<String> keys) {
   return null;
 }
 
-int _readInt(
-  Map<String, dynamic> data,
-  List<String> keys, {
-  required int fallback,
-}) {
+int _readInt(Map<String, dynamic> data, List<String> keys, int fallback) {
   for (final key in keys) {
-    final value = data[key];
+    final value = data[key.toLowerCase()];
     if (value is int) return value;
     final parsed = int.tryParse(value?.toString() ?? '');
     if (parsed != null) return parsed;
@@ -219,13 +191,9 @@ int _readInt(
   return fallback;
 }
 
-bool _readBool(
-  Map<String, dynamic> data,
-  List<String> keys, {
-  required bool fallback,
-}) {
+bool _readBool(Map<String, dynamic> data, List<String> keys, bool fallback) {
   for (final key in keys) {
-    final value = data[key];
+    final value = data[key.toLowerCase()];
     if (value is bool) return value;
     final text = value?.toString().toLowerCase();
     if (text == 'true' || text == '1' || text == 'yes') return true;
