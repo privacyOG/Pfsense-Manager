@@ -98,15 +98,28 @@ jobs:
         run: flutter pub get
 
       - name: Analyze changed Dart files
+        shell: bash
         run: |
-          dart analyze lib/main.dart
-          dart analyze lib/widgets/app_lock_gate.dart
-          dart analyze lib/screens/lock_screen.dart
-          dart analyze lib/providers/app_settings_provider.dart
-          dart analyze lib/providers/session_provider.dart
-          dart analyze test/app_lock_gate_test.dart
-          dart analyze lib/screens/home_shell.dart
-          dart analyze test/home_shell_navigation_test.dart
+          set -o pipefail
+          {
+            dart analyze lib/main.dart
+            dart analyze lib/widgets/app_lock_gate.dart
+            dart analyze lib/screens/lock_screen.dart
+            dart analyze lib/providers/app_settings_provider.dart
+            dart analyze lib/providers/session_provider.dart
+            dart analyze test/app_lock_gate_test.dart
+            dart analyze lib/screens/home_shell.dart
+            dart analyze test/home_shell_navigation_test.dart
+          } 2>&1 | tee dart-analyze.log
+
+      - name: Upload analyzer log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-analyze-${{ github.sha }}
+          path: dart-analyze.log
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Run tests
         run: flutter test --coverage
