@@ -4,6 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/memory_pin_verifier_store.dart';
 
+Future<String> _createTestVerifier(String pin) async => 'test:$pin';
+
+Future<bool> _checkTestVerifier(String pin, String verifier) async =>
+    verifier == 'test:$pin';
+
 void main() {
   test('repeated incorrect PIN attempts apply a retry delay', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -13,11 +18,13 @@ void main() {
     final settings = AppSettingsProvider(
       pinStore: store,
       now: () => now,
+      createVerifier: _createTestVerifier,
+      checkVerifier: _checkTestVerifier,
     );
     await settings.load();
     await settings.setPin('1234');
 
-    expect(store.value, isNotNull);
+    expect(store.value, 'test:1234');
     expect(store.value, isNot('1234'));
 
     expect(await settings.verifyPin('0000'), isFalse);
