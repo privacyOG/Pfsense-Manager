@@ -95,13 +95,12 @@ class _LockScreenState extends State<LockScreen> {
                   runSpacing: 10,
                   alignment: WrapAlignment.center,
                   children: [
-                    FilledButton.icon(
-                      onPressed: settings.pinEnabled
-                          ? () => _pinUnlock(settings)
-                          : widget.onUnlock,
-                      icon: const Icon(Icons.lock_open),
-                      label: Text(strings.t('unlock')),
-                    ),
+                    if (settings.pinEnabled)
+                      FilledButton.icon(
+                        onPressed: () => _pinUnlock(settings),
+                        icon: const Icon(Icons.lock_open),
+                        label: Text(strings.t('unlock')),
+                      ),
                     if (settings.biometricEnabled)
                       FilledButton.tonalIcon(
                         onPressed: _biometricUnlock,
