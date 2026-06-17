@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-No notable changes yet.
+### Fixed
+
+- The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
 
 ## [1.7.4] - 2026-06-16
 
