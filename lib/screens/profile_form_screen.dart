@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+
 import '../l10n/app_localizations.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 
 class ProfileFormScreen extends StatefulWidget {
   const ProfileFormScreen({super.key, this.profile});
+
   final PfSenseProfile? profile;
 
   @override
@@ -35,12 +37,11 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
   late final _user = TextEditingController(
     text: widget.profile?.username ?? '',
   );
-  late final _secret = TextEditingController(
-    text: widget.profile?.apiKey ?? '',
-  );
+  final _secret = TextEditingController();
   late bool _https = true;
   late bool _self = widget.profile?.allowSelfSignedCert ?? false;
   bool _obscure = true;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -52,13 +53,14 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     super.dispose();
   }
 
-  void _save() {
-    if (!_key.currentState!.validate()) return;
+  Future<void> _save() async {
+    if (_saving || !_key.currentState!.validate()) return;
 
     final endpoint = _readEndpoint();
     if (endpoint == null) return;
 
-    final p = PfSenseProfile(
+    setState(() => _saving = true);
+    final profile = PfSenseProfile(
       id: widget.profile?.id ?? const Uuid().v4(),
       name: _name.text.trim(),
       host: endpoint.host,
@@ -68,8 +70,15 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
       username: _user.text.trim(),
       apiKey: _secret.text,
     );
+
     final provider = context.read<ProfileProvider>();
-    widget.profile == null ? provider.addProfile(p) : provider.updateProfile(p);
+    if (widget.profile == null) {
+      await provider.addProfile(profile);
+    } else {
+      await provider.updateProfile(profile);
+    }
+
+    if (!mounted) return;
     Navigator.pop(context, true);
   }
 
@@ -105,12 +114,14 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     context.watch<ProfileProvider>();
+    final editing = widget.profile != null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.profile == null
-              ? (l?.addProfile ?? 'Add profile')
-              : (l?.editProfile ?? 'Edit profile'),
+          editing
+              ? (l?.editProfile ?? 'Edit profile')
+              : (l?.addProfile ?? 'Add profile'),
         ),
       ),
       body: Form(
@@ -118,16 +129,25 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _field(_name, l?.name ?? 'Name', Icons.label_outline,
-                validator: _req),
+            _field(
+              _name,
+              l?.name ?? 'Name',
+              Icons.label_outline,
+              validator: _req,
+            ),
             _field(
               _host,
               l?.host ?? 'Host, IP, or URL',
               Icons.router_outlined,
               validator: _hostVal,
             ),
-            _field(_port, l?.port ?? 'Port', Icons.numbers,
-                number: true, validator: _portVal),
+            _field(
+              _port,
+              l?.port ?? 'Port',
+              Icons.numbers,
+              number: true,
+              validator: _portVal,
+            ),
             SwitchListTile(
               value: _https,
               onChanged: null,
@@ -143,15 +163,23 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               ),
               secondary: const Icon(Icons.verified_user_outlined),
             ),
-            _field(_user, l?.username ?? 'Username', Icons.person_outline,
-                validator: _req),
+            _field(
+              _user,
+              l?.username ?? 'Username',
+              Icons.person_outline,
+              validator: _req,
+            ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextFormField(
                 controller: _secret,
                 obscureText: _obscure,
                 decoration: InputDecoration(
-                  labelText: l?.apiKeyOrPassword ?? 'API key / password',
+                  labelText: editing
+                      ? 'Replace API key (optional)'
+                      : (l?.apiKeyOrPassword ?? 'API key'),
+                  helperText:
+                      editing ? 'Leave blank to keep the saved API key.' : null,
                   prefixIcon: const Icon(Icons.key_outlined),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscure = !_obscure),
@@ -162,13 +190,18 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                     ),
                   ),
                 ),
-                validator: _req,
+                validator: editing ? null : _req,
               ),
             ),
             FilledButton.icon(
-              onPressed: _save,
-              icon: const Icon(Icons.save_outlined),
-              label: Text(l?.save ?? 'Save'),
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(_saving ? 'Saving...' : (l?.save ?? 'Save')),
             ),
           ],
         ),
@@ -177,7 +210,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
   }
 
   Widget _field(
-    TextEditingController c,
+    TextEditingController controller,
     String label,
     IconData icon, {
     bool number = false,
@@ -186,7 +219,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
-        controller: c,
+        controller: controller,
         keyboardType: number ? TextInputType.number : TextInputType.text,
         decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
         validator: validator,
@@ -194,16 +227,17 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     );
   }
 
-  String? _req(String? v) => v == null || v.trim().isEmpty
+  String? _req(String? value) => value == null || value.trim().isEmpty
       ? (AppLocalizations.of(context)?.requiredField ?? 'Required')
       : null;
 
-  String? _hostVal(String? v) {
-    final t = v?.trim() ?? '';
-    if (t.isEmpty)
+  String? _hostVal(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
       return AppLocalizations.of(context)?.requiredField ?? 'Required';
-    if (t.contains('://')) {
-      final uri = Uri.tryParse(t);
+    }
+    if (text.contains('://')) {
+      final uri = Uri.tryParse(text);
       if (uri == null || uri.host.isEmpty) {
         return AppLocalizations.of(context)?.host ?? 'Host, IP, or URL';
       }
@@ -212,14 +246,14 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
       }
       return null;
     }
-    return t.contains('/')
+    return text.contains('/')
         ? (AppLocalizations.of(context)?.host ?? 'Host, IP, or URL')
         : null;
   }
 
-  String? _portVal(String? v) {
-    final p = int.tryParse(v?.trim() ?? '');
-    return p == null || p < 1 || p > 65535
+  String? _portVal(String? value) {
+    final port = int.tryParse(value?.trim() ?? '');
+    return port == null || port < 1 || port > 65535
         ? (AppLocalizations.of(context)?.invalidPort ?? 'Invalid port')
         : null;
   }
