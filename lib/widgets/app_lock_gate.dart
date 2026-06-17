@@ -152,11 +152,13 @@ class _AppLockGateState extends State<AppLockGate>
   }
 
   Widget _buildLockSurface() {
-    return Navigator(
-      key: const ValueKey<String>('app-lock-navigator'),
-      onGenerateRoute: (_) => MaterialPageRoute<void>(
-        settings: const RouteSettings(name: '/locked'),
-        builder: (_) => LockScreen(onUnlock: () => unawaited(_unlock())),
+    return HeroControllerScope.none(
+      child: Navigator(
+        key: const ValueKey<String>('app-lock-navigator'),
+        onGenerateRoute: (_) => MaterialPageRoute<void>(
+          settings: const RouteSettings(name: '/locked'),
+          builder: (_) => LockScreen(onUnlock: () => unawaited(_unlock())),
+        ),
       ),
     );
   }
