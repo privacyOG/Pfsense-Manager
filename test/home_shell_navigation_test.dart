@@ -69,6 +69,11 @@ void main() {
   });
 
   testWidgets('saved destination is restored and clamped', (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     SharedPreferences.setMockInitialValues(<String, Object>{
       'home.selectedDestination': 99,
     });
@@ -84,6 +89,11 @@ void main() {
   testWidgets('selected destination persists after reconstruction', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
