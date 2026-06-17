@@ -1,115 +1,14 @@
-name: Temporary changelog release updater
+name: Retired changelog migration
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/temp-update-changelog-release.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
+  retired:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out migration branch
-        uses: actions/checkout@v4
-        with:
-          ref: migrate-release-notes-to-changelog
-          fetch-depth: 0
-
-      - name: Update production release notes source
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/workflows/android-release.yml')
-          text = path.read_text()
-
-          old_metadata = '''          RELEASE_TAG="v${VERSION}"
-          RELEASE_NOTES="RELEASE_NOTES_${VERSION}.md"
-'''
-          new_metadata = '''          RELEASE_TAG="v${VERSION}"
-          CHANGELOG="CHANGELOG.md"
-          RELEASE_NOTES="$RUNNER_TEMP/release-notes-${VERSION}.md"
-'''
-          if text.count(old_metadata) != 1:
-              raise SystemExit('release metadata block mismatch')
-          text = text.replace(old_metadata, new_metadata, 1)
-
-          old_validation = '''          test -f "$RELEASE_NOTES"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
-
-      - name: Verify signing secrets
-'''
-          new_validation = '''          test -f "$CHANGELOG"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "CHANGELOG=$CHANGELOG" >> "$GITHUB_ENV"
-          echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
-
-      - name: Extract release notes from changelog
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 <<'PYTHON'
-          import os
-          import re
-          from pathlib import Path
-
-          version = os.environ['VERSION']
-          lines = Path(os.environ['CHANGELOG']).read_text(encoding='utf-8').splitlines()
-          heading = re.compile(r'^## \[([^]]+)\](?: - \d{4}-\d{2}-\d{2})?$')
-
-          start = None
-          for index, line in enumerate(lines):
-              match = heading.fullmatch(line.strip())
-              if match and match.group(1) == version:
-                  start = index + 1
-                  break
-          if start is None:
-              raise SystemExit(f'CHANGELOG.md has no section for version {version}')
-
-          end = len(lines)
-          for index in range(start, len(lines)):
-              if heading.fullmatch(lines[index].strip()):
-                  end = index
-                  break
-
-          notes = '\n'.join(lines[start:end]).strip()
-          if not notes or notes == 'No notable changes yet.':
-              raise SystemExit(f'CHANGELOG.md section {version} is empty')
-
-          Path(os.environ['RELEASE_NOTES']).write_text(notes + '\n', encoding='utf-8')
-          print(f'Extracted release notes for {version}')
-          PYTHON
-
-      - name: Verify signing secrets
-'''
-          if text.count(old_validation) != 1:
-              raise SystemExit('release validation block mismatch')
-          text = text.replace(old_validation, new_validation, 1)
-
-          if text.count('          generate_release_notes: true\n') != 1:
-              raise SystemExit('release generation setting mismatch')
-          text = text.replace(
-              '          generate_release_notes: true\n',
-              '          generate_release_notes: false\n',
-              1,
-          )
-          path.write_text(text)
-          PY
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/android-release.yml
-          git commit -m 'Read release notes from changelog'
-          git push origin HEAD:migrate-release-notes-to-changelog
+      - name: Migration status
+        run: echo "The changelog migration has already been completed. No repository changes are performed."
