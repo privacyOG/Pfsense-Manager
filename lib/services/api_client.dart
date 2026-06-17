@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
+
 import '../models/profile.dart';
 import '../utils/api_exception.dart';
 
@@ -25,6 +27,8 @@ class PfSenseApiClient {
         baseUrl: profile.baseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
+        followRedirects: false,
+        maxRedirects: 0,
         headers: {},
       ),
     );
@@ -41,6 +45,9 @@ class PfSenseApiClient {
 
     _setupAuth();
   }
+
+  @visibleForTesting
+  BaseOptions get debugOptions => _dio.options;
 
   void _setupAuth() {
     if (_useApiKey && profile.apiKey.isNotEmpty) {
