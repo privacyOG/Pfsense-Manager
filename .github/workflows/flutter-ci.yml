@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - 'upgrade/**'
+      - 'pfsm04-secure-pin-storage'
   workflow_dispatch:
 
 permissions:
