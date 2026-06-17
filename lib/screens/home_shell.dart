@@ -9,6 +9,7 @@ import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
 import 'dashboard_screen.dart';
 import 'dhcp_leases_screen.dart';
+import 'hardware_health_screen.dart';
 import 'firewall_logs_screen.dart';
 import 'firewall_rules_screen.dart';
 import 'network_monitor_screen.dart';
@@ -548,6 +549,17 @@ class _MoreSection extends StatelessWidget {
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ProfilesScreen())),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.monitor_heart_outlined),
+            title: const Text('Hardware health'),
+            subtitle: const Text('CPU temps, SMART drive status and memory trends'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HardwareHealthScreen()),
+            ),
           ),
         ),
         Card(
