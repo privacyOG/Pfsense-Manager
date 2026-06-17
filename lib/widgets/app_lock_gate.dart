@@ -50,6 +50,7 @@ class _AppLockGateState extends State<AppLockGate>
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         _lock();
+        break;
       case AppLifecycleState.resumed:
         break;
     }
