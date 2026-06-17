@@ -10,6 +10,8 @@ import 'package:pfsense_manager/widgets/app_lock_gate.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/memory_pin_verifier_store.dart';
+
 Widget _buildApp({
   required AppSettingsProvider settings,
   required ProfileProvider profiles,
@@ -48,8 +50,15 @@ void main() {
       'lockTimeoutMinutes': 5,
     });
 
-    final settings = AppSettingsProvider();
+    final pinStore = MemoryPinVerifierStore();
+    final settings = AppSettingsProvider(pinStore: pinStore);
     await settings.load();
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.containsKey('pinCode'), isFalse);
+    expect(pinStore.value, isNotNull);
+    expect(pinStore.value, isNot('1234'));
+
     final profiles = ProfileProvider();
     final session = PfSenseSessionProvider();
 
@@ -98,7 +107,9 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
 
-    final settings = AppSettingsProvider();
+    final settings = AppSettingsProvider(
+      pinStore: MemoryPinVerifierStore(),
+    );
     await settings.load();
 
     await tester.pumpWidget(
