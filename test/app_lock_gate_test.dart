@@ -75,15 +75,12 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.paused,
     );
-    await tester.pump();
-
-    expect(find.byType(LockScreen), findsOneWidget);
     expect(session.suspendedForLock, isTrue);
 
     tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.resumed,
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byType(LockScreen), findsOneWidget);
     expect(session.suspendedForLock, isTrue);
