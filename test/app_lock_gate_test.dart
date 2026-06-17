@@ -50,10 +50,15 @@ void main() {
       'lockTimeoutMinutes': 5,
     });
 
-    final settings = AppSettingsProvider(
-      pinStore: MemoryPinVerifierStore(),
-    );
+    final pinStore = MemoryPinVerifierStore();
+    final settings = AppSettingsProvider(pinStore: pinStore);
     await settings.load();
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.containsKey('pinCode'), isFalse);
+    expect(pinStore.value, isNotNull);
+    expect(pinStore.value, isNot('1234'));
+
     final profiles = ProfileProvider();
     final session = PfSenseSessionProvider();
 
