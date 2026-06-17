@@ -185,7 +185,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final index = _selectedIndex < 0
         ? 0
         : (_selectedIndex > maxIndex ? maxIndex : _selectedIndex);
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final usesRail = width >= 600;
+    final extendRail = width >= 1100;
 
     return Scaffold(
       appBar: AppBar(
@@ -203,17 +205,34 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
       body: Row(
         children: [
-          if (wide)
+          if (usesRail)
             NavigationRail(
               selectedIndex: index,
-              onDestinationSelected: (value) {
-                _setSelectedDestination(value);
-              },
-              labelType: NavigationRailLabelType.all,
-              leading: const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: PfSenseBrandMark(size: 42, elevation: false),
-              ),
+              onDestinationSelected: _setSelectedDestination,
+              extended: extendRail,
+              labelType: extendRail
+                  ? NavigationRailLabelType.none
+                  : NavigationRailLabelType.all,
+              minWidth: 72,
+              minExtendedWidth: 200,
+              leading: extendRail
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      child: Row(
+                        children: [
+                          const PfSenseBrandMark(size: 32, elevation: false),
+                          const SizedBox(width: 10),
+                          Text(
+                            'pfSense Manager',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ],
+                      ),
+                    )
+                  : const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: PfSenseBrandMark(size: 42, elevation: false),
+                    ),
               destinations: [
                 for (final destination in destinations)
                   NavigationRailDestination(
@@ -223,7 +242,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   ),
               ],
             ),
-          if (wide) const VerticalDivider(width: 1),
+          if (usesRail) const VerticalDivider(width: 1),
           Expanded(
             child: Column(
               children: [
@@ -239,13 +258,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
         ],
       ),
-      bottomNavigationBar: wide
+      bottomNavigationBar: usesRail
           ? null
           : NavigationBar(
               selectedIndex: index,
-              onDestinationSelected: (value) {
-                _setSelectedDestination(value);
-              },
+              onDestinationSelected: _setSelectedDestination,
               destinations: [
                 for (final destination in destinations)
                   NavigationDestination(

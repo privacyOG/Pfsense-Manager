@@ -198,7 +198,7 @@ class GatewayHistoryPanel extends StatelessWidget {
   }
 }
 
-class _HistoryChart extends StatelessWidget {
+class _HistoryChart extends StatefulWidget {
   const _HistoryChart({
     required this.title,
     required this.unit,
@@ -216,21 +216,30 @@ class _HistoryChart extends StatelessWidget {
   final double? fixedMaximum;
 
   @override
+  State<_HistoryChart> createState() => _HistoryChartState();
+}
+
+class _HistoryChartState extends State<_HistoryChart> {
+  int? _touchedIndex;
+
+  @override
   Widget build(BuildContext context) {
-    final peak = values.fold<double>(0, math.max);
-    final maxY = fixedMaximum ?? _niceScale(peak, minimum: 10);
-    final maxX = math.max(1, values.length - 1).toDouble();
+    final peak = widget.values.fold<double>(0, math.max);
+    final maxY = widget.fixedMaximum ?? _niceScale(peak, minimum: 10);
+    final maxX = math.max(1, widget.values.length - 1).toDouble();
     final spots = [
-      for (var index = 0; index < values.length; index++)
-        FlSpot(index.toDouble(), values[index]),
+      for (var index = 0; index < widget.values.length; index++)
+        FlSpot(index.toDouble(), widget.values[index]),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$title ($unit)',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
+          '${widget.title} (${widget.unit})',
+          style: Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(color: widget.color),
         ),
         const SizedBox(height: 6),
         SizedBox(
@@ -288,19 +297,19 @@ class _HistoryChart extends StatelessWidget {
                     getTitlesWidget: (value, meta) {
                       final index = value
                           .round()
-                          .clamp(0, samples.length - 1)
+                          .clamp(0, widget.samples.length - 1)
                           .toInt();
                       final isStart = index == 0;
                       final isMiddle =
-                          (index - (samples.length - 1) / 2).abs() <= 1;
-                      final isEnd = index == samples.length - 1;
+                          (index - (widget.samples.length - 1) / 2).abs() <= 1;
+                      final isEnd = index == widget.samples.length - 1;
                       if (!isStart && !isMiddle && !isEnd) {
                         return const SizedBox.shrink();
                       }
                       return Padding(
                         padding: const EdgeInsets.only(top: 5),
                         child: Text(
-                          _formatClock(samples[index].capturedAt),
+                          _formatClock(widget.samples[index].capturedAt),
                           style: const TextStyle(fontSize: 9),
                         ),
                       );
@@ -308,17 +317,82 @@ class _HistoryChart extends StatelessWidget {
                   ),
                 ),
               ),
+              lineTouchData: LineTouchData(
+                enabled: true,
+                handleBuiltInTouches: true,
+                touchCallback: (event, response) {
+                  if (!mounted) return;
+                  setState(() {
+                    final spots = response?.lineBarSpots;
+                    if (event is FlPointerExitEvent ||
+                        event is FlPanEndEvent ||
+                        spots == null ||
+                        spots.isEmpty) {
+                      _touchedIndex = null;
+                    } else {
+                      _touchedIndex = spots.first.spotIndex;
+                    }
+                  });
+                },
+                getTouchedSpotIndicator: (barData, spotIndexes) {
+                  return spotIndexes.map((_) {
+                    return TouchedSpotIndicatorData(
+                      FlLine(
+                        color: widget.color.withOpacity(0.65),
+                        strokeWidth: 1.5,
+                        dashArray: [4, 3],
+                      ),
+                      FlDotData(
+                        show: true,
+                        getDotPainter: (spot, percent, barData, index) {
+                          return FlDotCirclePainter(
+                            radius: 4,
+                            color: widget.color,
+                            strokeWidth: 1.5,
+                            strokeColor: Colors.white,
+                          );
+                        },
+                      ),
+                    );
+                  }).toList();
+                },
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => const Color(0xFF0E2844),
+                  tooltipRoundedRadius: 8,
+                  tooltipPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  getTooltipItems: (spots) {
+                    return spots.map((spot) {
+                      final idx = spot.spotIndex
+                          .clamp(0, widget.samples.length - 1);
+                      final time =
+                          _formatClock(widget.samples[idx].capturedAt);
+                      return LineTooltipItem(
+                        '$time\n${spot.y.toStringAsFixed(1)} ${widget.unit}',
+                        TextStyle(
+                          color: widget.color,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
               lineBarsData: [
                 LineChartBarData(
                   spots: spots,
                   isCurved: false,
-                  color: color,
+                  color: widget.color,
                   barWidth: 2.2,
                   isStrokeCapRound: true,
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: color.withOpacity(0.12),
+                    color: widget.color.withOpacity(0.12),
                   ),
                 ),
               ],

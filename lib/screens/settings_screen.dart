@@ -201,6 +201,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: AppThemePalette.emerald,
                     child: Text('Emerald'),
                   ),
+                  DropdownMenuItem(
+                    value: AppThemePalette.dynamic,
+                    child: Text('Material You'),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value != null) {
