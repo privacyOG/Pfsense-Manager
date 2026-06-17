@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/profile.dart';
 import '../services/api_client.dart';
 import '../services/pfsense_service.dart';
+import 'profile_provider.dart';
 
 /// Holds the active pfSense API session.
 ///
@@ -37,7 +38,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     _service?.dispose();
     _service = null;
-    _selectedProfile = profile;
+    _selectedProfile = profile.copyWith(apiKey: '');
     _connected = false;
     _connecting = true;
     _connectionError = null;
@@ -45,7 +46,11 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     PfSenseService? candidate;
     try {
-      candidate = PfSenseService(PfSenseApiClient(profile));
+      final connectionProfile =
+          await ProfileProvider.resolveForConnection(profile);
+      if (generation != _sessionGeneration || _suspendedForLock) return;
+
+      candidate = PfSenseService(PfSenseApiClient(connectionProfile));
       final healthy = await candidate.healthCheck();
 
       if (generation != _sessionGeneration || _suspendedForLock) {

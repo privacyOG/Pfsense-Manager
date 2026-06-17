@@ -40,8 +40,26 @@ class ProfileProvider extends ChangeNotifier {
     return null;
   }
 
+  static Future<PfSenseProfile> resolveForConnection(
+    PfSenseProfile profile,
+  ) async {
+    if (profile.apiKey.isNotEmpty) return profile;
+    final apiKey = await _defaultSecureStorage.read(
+      key: '$_securePrefix${profile.id}',
+    );
+    return profile.copyWith(apiKey: apiKey ?? '');
+  }
+
+  Future<PfSenseProfile> profileForConnection(PfSenseProfile profile) async {
+    if (profile.apiKey.isNotEmpty) return profile;
+    final apiKey = await _secureStorage.read(
+      key: '$_securePrefix${profile.id}',
+    );
+    return profile.copyWith(apiKey: apiKey ?? '');
+  }
+
   Future<void> addProfile(PfSenseProfile profile) async {
-    _profiles.add(profile);
+    _profiles.add(profile.copyWith(apiKey: ''));
     _selectedProfileId ??= profile.id;
     notifyListeners();
     await _persistProfile(profile);
@@ -52,9 +70,13 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updateProfile(PfSenseProfile updated) async {
     final index = _profiles.indexWhere((p) => p.id == updated.id);
     if (index == -1) return;
-    _profiles[index] = updated;
+
+    _profiles[index] = updated.copyWith(apiKey: '');
     notifyListeners();
-    await _persistProfile(updated);
+
+    if (updated.apiKey.isNotEmpty) {
+      await _persistProfile(updated);
+    }
     await _saveProfiles();
   }
 
@@ -90,7 +112,7 @@ class ProfileProvider extends ChangeNotifier {
     var count = 0;
     for (final item in decoded) {
       if (item is Map<String, dynamic>) {
-        final profile = PfSenseProfile.fromJson(item);
+        final profile = PfSenseProfile.fromJson(item).copyWith(apiKey: '');
         if (!_profiles.any((p) => p.id == profile.id)) {
           _profiles.add(profile);
           count++;
@@ -116,17 +138,11 @@ class ProfileProvider extends ChangeNotifier {
     if (rawProfiles != null && rawProfiles.isNotEmpty) {
       final decoded = jsonDecode(rawProfiles);
       if (decoded is List) {
-        final loaded = <PfSenseProfile>[];
-        for (final item in decoded) {
-          if (item is Map<String, dynamic>) {
-            final profile = PfSenseProfile.fromJson(item);
-            final apiKey = await _secureStorage.read(
-              key: '$_securePrefix${profile.id}',
-            );
-            loaded.add(profile.copyWith(apiKey: apiKey ?? ''));
-          }
-        }
-        _profiles = loaded;
+        _profiles = [
+          for (final item in decoded)
+            if (item is Map<String, dynamic>)
+              PfSenseProfile.fromJson(item).copyWith(apiKey: ''),
+        ];
       }
     }
 
