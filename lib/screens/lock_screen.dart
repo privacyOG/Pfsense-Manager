@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
@@ -18,10 +20,13 @@ class LockScreen extends StatefulWidget {
 class _LockScreenState extends State<LockScreen> {
   final _pinController = TextEditingController();
   final _auth = LocalAuthentication();
+  Timer? _retryTimer;
   String? _error;
+  bool _checkingPin = false;
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _pinController.dispose();
     super.dispose();
   }
@@ -33,23 +38,66 @@ class _LockScreenState extends State<LockScreen> {
         options: const AuthenticationOptions(biometricOnly: false),
       );
       if (ok && mounted) widget.onUnlock();
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
     }
   }
 
-  void _pinUnlock(AppSettingsProvider settings) {
-    if (settings.verifyPin(_pinController.text.trim())) {
-      widget.onUnlock();
-    } else {
-      setState(() => _error = 'Incorrect PIN');
+  Future<void> _pinUnlock(AppSettingsProvider settings) async {
+    if (_checkingPin) return;
+
+    final currentDelay = settings.pinRetrySeconds;
+    if (currentDelay > 0) {
+      setState(() => _error = 'Try again in $currentDelay seconds');
+      _startRetryTimer(settings);
+      return;
     }
+
+    setState(() {
+      _checkingPin = true;
+      _error = null;
+    });
+
+    final matches = await settings.verifyPin(_pinController.text.trim());
+    if (!mounted) return;
+
+    if (matches) {
+      _checkingPin = false;
+      widget.onUnlock();
+      return;
+    }
+
+    _pinController.clear();
+    final delay = settings.pinRetrySeconds;
+    setState(() {
+      _checkingPin = false;
+      _error = delay > 0 ? 'Try again in $delay seconds' : 'Incorrect PIN';
+    });
+    if (delay > 0) _startRetryTimer(settings);
+  }
+
+  void _startRetryTimer(AppSettingsProvider settings) {
+    _retryTimer?.cancel();
+    _retryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      final remaining = settings.pinRetrySeconds;
+      setState(() {
+        _error = remaining > 0 ? 'Try again in $remaining seconds' : null;
+      });
+      if (remaining == 0) timer.cancel();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final settings = context.watch<AppSettingsProvider>();
+    final retrying = settings.pinRetrySeconds > 0;
+
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -69,6 +117,7 @@ class _LockScreenState extends State<LockScreen> {
                 if (settings.pinEnabled) ...[
                   TextField(
                     controller: _pinController,
+                    enabled: !_checkingPin && !retrying,
                     keyboardType: TextInputType.number,
                     obscureText: true,
                     maxLength: 8,
@@ -97,8 +146,15 @@ class _LockScreenState extends State<LockScreen> {
                   children: [
                     if (settings.pinEnabled)
                       FilledButton.icon(
-                        onPressed: () => _pinUnlock(settings),
-                        icon: const Icon(Icons.lock_open),
+                        onPressed: _checkingPin || retrying
+                            ? null
+                            : () => _pinUnlock(settings),
+                        icon: _checkingPin
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.lock_open),
                         label: Text(strings.t('unlock')),
                       ),
                     if (settings.biometricEnabled)

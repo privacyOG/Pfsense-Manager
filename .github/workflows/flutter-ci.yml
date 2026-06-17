@@ -109,6 +109,9 @@ jobs:
             dart analyze lib/providers/app_settings_provider.dart
             dart analyze lib/providers/profile_provider.dart
             dart analyze lib/providers/session_provider.dart
+            dart analyze lib/services/pin_verifier.dart
+            dart analyze test/helpers/memory_pin_verifier_store.dart
+            dart analyze test/pin_retry_test.dart
             dart analyze test/profile_loading_test.dart
             dart analyze test/app_lock_gate_test.dart
             dart analyze lib/screens/home_shell.dart

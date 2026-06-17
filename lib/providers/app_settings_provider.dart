@@ -1,39 +1,86 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../services/pin_verifier.dart';
+
+typedef PinVerifierCreator = Future<String> Function(String pin);
+typedef PinVerifierChecker = Future<bool> Function(
+  String pin,
+  String encodedVerifier,
+);
 
 class AppSettingsProvider extends ChangeNotifier {
   static const _localeKey = 'localeCode';
   static const _lockTimeoutKey = 'lockTimeoutMinutes';
-  static const _pinKey = 'pinCode';
+  static const _legacyPinKey = 'pinCode';
   static const _pinEnabledKey = 'pinEnabled';
   static const _biometricEnabledKey = 'biometricEnabled';
 
+  AppSettingsProvider({
+    PinVerifierStore? pinStore,
+    DateTime Function()? now,
+    PinVerifierCreator? createVerifier,
+    PinVerifierChecker? checkVerifier,
+  })  : _pinStore = pinStore ?? SecurePinVerifierStore(),
+        _now = now ?? DateTime.now,
+        _createVerifier = createVerifier ?? createPinVerifier,
+        _checkVerifier = checkVerifier ?? verifyPinVerifier;
+
+  final PinVerifierStore _pinStore;
+  final DateTime Function() _now;
+  final PinVerifierCreator _createVerifier;
+  final PinVerifierChecker _checkVerifier;
+
   Locale _locale = const Locale('en');
   int _lockTimeoutMinutes = 5;
-  String? _pinCode;
+  String? _pinVerifier;
   bool _pinEnabled = false;
   bool _biometricEnabled = false;
   bool _hasLoaded = false;
+  int _failedPinAttempts = 0;
+  DateTime? _pinRetryAfter;
 
   Locale get locale => _locale;
   int get lockTimeoutMinutes => _lockTimeoutMinutes;
-  bool get pinEnabled => _pinEnabled && (_pinCode?.isNotEmpty ?? false);
+  bool get pinEnabled => _pinEnabled && hasPin;
   bool get biometricEnabled => _biometricEnabled;
-  bool get hasPin => _pinCode?.isNotEmpty ?? false;
+  bool get hasPin => _pinVerifier?.isNotEmpty ?? false;
   bool get hasLoaded => _hasLoaded;
   bool get lockEnabled => pinEnabled || biometricEnabled;
 
+  int get pinRetrySeconds {
+    final retryAfter = _pinRetryAfter;
+    if (retryAfter == null) return 0;
+    final remaining = retryAfter.difference(_now()).inMilliseconds;
+    if (remaining <= 0) return 0;
+    return (remaining / Duration.millisecondsPerSecond).ceil();
+  }
+
   Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
     try {
-      final prefs = await SharedPreferences.getInstance();
       final localeCode = prefs.getString(_localeKey);
       if (localeCode != null && localeCode.isNotEmpty) {
         _locale = Locale(localeCode);
       }
       _lockTimeoutMinutes = prefs.getInt(_lockTimeoutKey) ?? 5;
-      _pinCode = prefs.getString(_pinKey);
       _pinEnabled = prefs.getBool(_pinEnabledKey) ?? false;
       _biometricEnabled = prefs.getBool(_biometricEnabledKey) ?? false;
+
+      _pinVerifier = await _pinStore.read();
+      final legacyPin = prefs.getString(_legacyPinKey);
+      if ((_pinVerifier?.isEmpty ?? true) &&
+          legacyPin != null &&
+          legacyPin.isNotEmpty) {
+        final migratedVerifier = await _createVerifier(legacyPin);
+        await _pinStore.write(migratedVerifier);
+        _pinVerifier = migratedVerifier;
+        await prefs.remove(_legacyPinKey);
+      } else if (legacyPin != null && _pinVerifier != null) {
+        await prefs.remove(_legacyPinKey);
+      }
     } finally {
       _hasLoaded = true;
       notifyListeners();
@@ -55,23 +102,40 @@ class AppSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setPin(String pin) async {
-    _pinCode = pin;
-    _pinEnabled = pin.isNotEmpty;
-    notifyListeners();
+    final normalizedPin = pin.trim();
+    if (normalizedPin.isEmpty) {
+      await clearPin();
+      return;
+    }
+
+    final verifier = await _createVerifier(normalizedPin);
+    await _pinStore.write(verifier);
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pinKey, pin);
-    await prefs.setBool(_pinEnabledKey, _pinEnabled);
+    await prefs.remove(_legacyPinKey);
+    await prefs.setBool(_pinEnabledKey, true);
+
+    _pinVerifier = verifier;
+    _pinEnabled = true;
+    _failedPinAttempts = 0;
+    _pinRetryAfter = null;
+    notifyListeners();
   }
 
   Future<void> clearPin() async {
-    _pinCode = null;
-    _pinEnabled = false;
-    _biometricEnabled = false;
-    notifyListeners();
+    await _pinStore.delete();
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_pinKey);
+    await prefs.remove(_legacyPinKey);
     await prefs.setBool(_pinEnabledKey, false);
     await prefs.setBool(_biometricEnabledKey, false);
+
+    _pinVerifier = null;
+    _pinEnabled = false;
+    _biometricEnabled = false;
+    _failedPinAttempts = 0;
+    _pinRetryAfter = null;
+    notifyListeners();
   }
 
   Future<void> setPinEnabled(bool enabled) async {
@@ -88,5 +152,27 @@ class AppSettingsProvider extends ChangeNotifier {
     await prefs.setBool(_biometricEnabledKey, enabled);
   }
 
-  bool verifyPin(String pin) => hasPin && _pinCode == pin;
+  Future<bool> verifyPin(String pin) async {
+    final verifier = _pinVerifier;
+    if (verifier == null || verifier.isEmpty || pinRetrySeconds > 0) {
+      return false;
+    }
+
+    final matches = await _checkVerifier(pin.trim(), verifier);
+    if (matches) {
+      _failedPinAttempts = 0;
+      _pinRetryAfter = null;
+      notifyListeners();
+      return true;
+    }
+
+    _failedPinAttempts++;
+    if (_failedPinAttempts >= 3) {
+      final exponent = math.min(5, _failedPinAttempts - 3);
+      final delaySeconds = math.min(30, 1 << exponent);
+      _pinRetryAfter = _now().add(Duration(seconds: delaySeconds));
+    }
+    notifyListeners();
+    return false;
+  }
 }
