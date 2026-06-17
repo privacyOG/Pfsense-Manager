@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
 import '../providers/session_provider.dart';
+import '../widgets/slide_to_confirm.dart';
 
 class SystemScreen extends StatefulWidget {
   const SystemScreen({super.key});
@@ -99,26 +100,14 @@ class _SystemScreenState extends State<SystemScreen> {
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
 
-    final strings = AppStrings.of(context);
     final profileName = session.selectedProfile?.name ?? 'selected firewall';
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSlideToConfirmSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(strings.t('reboot')),
-        content: Text(
+      title: 'Reboot firewall?',
+      body:
           'This will reboot $profileName. Network access and all services may be unavailable for several minutes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(strings.t('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(strings.t('confirm')),
-          ),
-        ],
-      ),
+      slideLabel: 'Slide to reboot',
+      icon: Icons.restart_alt,
     );
     if (confirmed != true || !mounted) return;
 

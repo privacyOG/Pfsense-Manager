@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/system_service.dart';
 import '../providers/session_provider.dart';
+import '../widgets/slide_to_confirm.dart';
 import '../widgets/state_message.dart';
 
 class ServicesScreen extends StatefulWidget {
@@ -103,27 +104,38 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   Future<void> _act(SystemService service, String action) async {
     if (_busyService != null) return;
-    final strings = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(strings?.confirm ?? 'Confirm'),
-        content: Text(
-          '${action.toUpperCase()} ${service.displayName}?\n\n'
-          'This changes a live service on the selected pfSense firewall.',
+    final bool? confirmed;
+    if (action == 'stop' || action == 'restart') {
+      confirmed = await showSlideToConfirmSheet(
+        context: context,
+        title: '${action == 'stop' ? 'Stop' : 'Restart'} ${service.displayName}?',
+        body: 'This changes a live service on the selected pfSense firewall.',
+        slideLabel: 'Slide to ${action == 'stop' ? 'stop' : 'restart'}',
+        icon: action == 'stop' ? Icons.stop_circle_outlined : Icons.refresh,
+      );
+    } else {
+      final strings = AppLocalizations.of(context);
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(strings?.confirm ?? 'Confirm'),
+          content: Text(
+            'START ${service.displayName}?\n\n'
+            'This changes a live service on the selected pfSense firewall.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(strings?.cancel ?? 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(strings?.confirm ?? 'Confirm'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(strings?.cancel ?? 'Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(strings?.confirm ?? 'Confirm'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
     if (confirmed != true || !mounted) return;
 
     final session = context.read<PfSenseSessionProvider>();
