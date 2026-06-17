@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppThemePalette { emerald, pfsenseNavy }
+enum AppThemePalette { emerald, pfsenseNavy, dynamic }
 
 /// Theme provider for dark/light mode switching.
 class ThemeProvider extends ChangeNotifier {
@@ -15,6 +15,58 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeData get themeData {
     return _buildTheme(_isDarkMode, _palette);
+  }
+
+  /// Builds the active theme, honouring dynamic color schemes from the OS
+  /// when the user has selected the Material You palette.
+  ThemeData buildThemeData({
+    ColorScheme? lightDynamic,
+    ColorScheme? darkDynamic,
+  }) {
+    if (_palette == AppThemePalette.dynamic) {
+      final scheme = _isDarkMode ? darkDynamic : lightDynamic;
+      if (scheme != null) {
+        return _buildThemeFromScheme(_isDarkMode, scheme);
+      }
+    }
+    return _buildTheme(_isDarkMode, _palette);
+  }
+
+  static ThemeData _buildThemeFromScheme(bool dark, ColorScheme scheme) {
+    final nav = dark ? const Color(0xFF091B2E) : Colors.white;
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: scheme.surface,
+      ),
+      cardTheme: CardThemeData(
+        elevation: 2,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+        color: scheme.surfaceContainerLow,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: nav,
+        indicatorColor: scheme.primary.withValues(alpha: dark ? .32 : .18),
+      ),
+      navigationDrawerTheme: NavigationDrawerThemeData(backgroundColor: nav),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
   }
 
   Future<void> load() async {

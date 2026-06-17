@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../models/dashboard.dart';
 import '../models/dashboard_layout.dart';
 import '../providers/session_provider.dart';
+import '../services/home_widget_service.dart';
 import '../widgets/dashboard_alert_strip.dart';
 import '../widgets/thermal_sensors_panel.dart';
 
@@ -175,6 +176,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _data = data;
         _error = null;
       });
+      _pushToHomeWidget(data, session.selectedProfile?.name);
     } catch (error) {
       if (mounted && request == _requestGeneration) {
         setState(() => _error = error);
@@ -184,6 +186,31 @@ class _DashboardScreenState extends State<DashboardScreen>
         setState(() => _loading = false);
       }
     }
+  }
+
+  void _pushToHomeWidget(DashboardData data, String? profileName) {
+    final topGateway = data.gateways.isNotEmpty ? data.gateways.first : null;
+    final topSensor = data.thermalSensors.isNotEmpty
+        ? data.thermalSensors.first
+        : null;
+
+    final now = DateTime.now();
+    final timestamp =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    HomeWidgetService.updateStatusWidget(
+      profileName: profileName,
+      cpuTemp: topSensor != null
+          ? '${topSensor.temperatureC.toStringAsFixed(0)}°C'
+          : '--',
+      gatewayName: topGateway?.name,
+      gatewayLatency: topGateway != null
+          ? '${topGateway.latency.toStringAsFixed(1)} ms'
+          : '--',
+      trafficIn: null,
+      trafficOut: null,
+      lastUpdated: timestamp,
+    );
   }
 
   void _reorderCards(int oldIndex, int newIndex) {

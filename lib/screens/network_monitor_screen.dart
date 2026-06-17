@@ -786,7 +786,7 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-class _BandwidthChart extends StatelessWidget {
+class _BandwidthChart extends StatefulWidget {
   const _BandwidthChart({
     required this.history,
     required this.unit,
@@ -800,17 +800,24 @@ class _BandwidthChart extends StatelessWidget {
   final bool compact;
 
   @override
+  State<_BandwidthChart> createState() => _BandwidthChartState();
+}
+
+class _BandwidthChartState extends State<_BandwidthChart> {
+  int? _touchedIndex;
+
+  @override
   Widget build(BuildContext context) {
-    if (history.length < 2) {
-      return _ChartPlaceholder(compact: compact);
+    if (widget.history.length < 2) {
+      return _ChartPlaceholder(compact: widget.compact);
     }
 
     final inbound = <FlSpot>[];
     final outbound = <FlSpot>[];
     var visiblePeak = 0.0;
-    for (var index = 0; index < history.length; index++) {
-      final inValue = _displayRate(history[index].inBps, unit);
-      final outValue = _displayRate(history[index].outBps, unit);
+    for (var index = 0; index < widget.history.length; index++) {
+      final inValue = _displayRate(widget.history[index].inBps, widget.unit);
+      final outValue = _displayRate(widget.history[index].outBps, widget.unit);
       visiblePeak = math.max(visiblePeak, math.max(inValue, outValue));
       inbound.add(FlSpot(index.toDouble(), inValue));
       outbound.add(FlSpot(index.toDouble(), -outValue));
@@ -818,7 +825,7 @@ class _BandwidthChart extends StatelessWidget {
 
     final scale = _niceScale(visiblePeak);
     final interval = scale / 2;
-    final maxX = math.max(1, history.length - 1).toDouble();
+    final maxX = math.max(1, widget.history.length - 1).toDouble();
 
     return LineChart(
       LineChartData(
@@ -829,9 +836,9 @@ class _BandwidthChart extends StatelessWidget {
         clipData: const FlClipData.all(),
         gridData: FlGridData(
           show: true,
-          drawVerticalLine: !compact,
+          drawVerticalLine: !widget.compact,
           horizontalInterval: interval,
-          verticalInterval: compact ? 1 : math.max(1, maxX / 4),
+          verticalInterval: widget.compact ? 1 : math.max(1, maxX / 4),
           getDrawingHorizontalLine: (value) => FlLine(
             color: value == 0
                 ? Colors.white.withOpacity(0.42)
@@ -853,7 +860,7 @@ class _BandwidthChart extends StatelessWidget {
           rightTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: compact ? 48 : 62,
+              reservedSize: widget.compact ? 48 : 62,
               interval: interval,
               getTitlesWidget: (value, meta) {
                 if (value.abs() < interval / 10) {
@@ -872,12 +879,12 @@ class _BandwidthChart extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: Text(
-                    _formatAxis(value.abs(), unit),
+                    _formatAxis(value.abs(), widget.unit),
                     style: TextStyle(
                       color: value > 0
                           ? const Color(0xFF81D4FA)
                           : const Color(0xFFFFB74D),
-                      fontSize: compact ? 9 : 10,
+                      fontSize: widget.compact ? 9 : 10,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -888,25 +895,25 @@ class _BandwidthChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: compact ? 22 : 28,
+              reservedSize: widget.compact ? 22 : 28,
               interval: math.max(1, maxX / 2),
               getTitlesWidget: (value, meta) {
                 final index =
-                    value.round().clamp(0, history.length - 1).toInt();
+                    value.round().clamp(0, widget.history.length - 1).toInt();
                 final isStart = index == 0;
                 final isMiddle =
-                    (index - (history.length - 1) / 2).abs() <= 1;
-                final isEnd = index == history.length - 1;
+                    (index - (widget.history.length - 1) / 2).abs() <= 1;
+                final isEnd = index == widget.history.length - 1;
                 if (!isStart && !isMiddle && !isEnd) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    _formatClock(history[index].capturedAt),
+                    _formatClock(widget.history[index].capturedAt),
                     style: TextStyle(
                       color: const Color(0xFF9CB3CA),
-                      fontSize: compact ? 9 : 10,
+                      fontSize: widget.compact ? 9 : 10,
                       fontWeight:
                           isStart || isEnd ? FontWeight.w700 : FontWeight.w500,
                     ),
@@ -924,28 +931,77 @@ class _BandwidthChart extends StatelessWidget {
           ),
         ),
         lineTouchData: LineTouchData(
-          enabled: !compact,
+          enabled: !widget.compact,
+          handleBuiltInTouches: true,
+          touchCallback: (event, response) {
+            if (!mounted) return;
+            setState(() {
+              final spots = response?.lineBarSpots;
+              if (event is FlPointerExitEvent ||
+                  event is FlPanEndEvent ||
+                  spots == null ||
+                  spots.isEmpty) {
+                _touchedIndex = null;
+              } else {
+                _touchedIndex = spots.first.spotIndex;
+              }
+            });
+          },
+          getTouchedSpotIndicator: (barData, spotIndexes) {
+            return spotIndexes.map((_) {
+              return TouchedSpotIndicatorData(
+                FlLine(
+                  color: Colors.white.withOpacity(0.55),
+                  strokeWidth: 1.5,
+                  dashArray: [4, 3],
+                ),
+                FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, barData, index) {
+                    return FlDotCirclePainter(
+                      radius: 4.5,
+                      color: barData.color ?? Colors.white,
+                      strokeWidth: 2,
+                      strokeColor: Colors.white,
+                    );
+                  },
+                ),
+              );
+            }).toList();
+          },
           touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (spots) => spots
-                .map(
-                  (spot) => LineTooltipItem(
-                    '${spot.barIndex == 0 ? 'Inbound' : 'Outbound'}\n'
-                    '${_formatDisplayValue(spot.y.abs(), unit)}',
-                    TextStyle(
-                      color: spot.barIndex == 0
-                          ? const Color(0xFF81D4FA)
-                          : const Color(0xFFFFB74D),
-                      fontWeight: FontWeight.w700,
-                    ),
+            getTooltipColor: (_) => const Color(0xFF0E2844),
+            tooltipRoundedRadius: 10,
+            tooltipPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            getTooltipItems: (spots) {
+              return List.generate(spots.length, (i) {
+                final spot = spots[i];
+                final idx =
+                    spot.spotIndex.clamp(0, widget.history.length - 1);
+                final time = _formatClock(widget.history[idx].capturedAt);
+                final label = spot.barIndex == 0 ? '↑ In' : '↓ Out';
+                final value =
+                    _formatDisplayValue(spot.y.abs(), widget.unit);
+                return LineTooltipItem(
+                  i == 0 ? '$time\n$label  $value' : '$label  $value',
+                  TextStyle(
+                    color: spot.barIndex == 0
+                        ? const Color(0xFF81D4FA)
+                        : const Color(0xFFFFB74D),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    height: 1.45,
                   ),
-                )
-                .toList(),
+                );
+              });
+            },
           ),
         ),
         lineBarsData: [
           _lineData(
             inbound,
-            inboundColor,
+            widget.inboundColor,
             fillToZero: true,
             aboveZero: true,
           ),
