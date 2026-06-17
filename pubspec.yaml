@@ -51,6 +51,10 @@ dependencies:
   # Android home screen widgets
   home_widget: ^0.6.0
 
+  # Background alerts
+  flutter_local_notifications: ^17.2.4
+  workmanager: ^0.5.2
+
   # Utilities
   intl: ^0.20.2
   uuid: ^4.3.0

@@ -87,6 +87,26 @@ class PfSenseApiClient {
     return _request('GET', path, queryParameters: queryParameters);
   }
 
+  Future<List<int>> getRawBytes(String path) async {
+    _ensureActive();
+    try {
+      final response = await _dio.get<List<int>>(
+        path,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      _ensureActive();
+      if (response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300) {
+        return response.data ?? [];
+      }
+      throw ApiException('Download failed', response.statusCode);
+    } on DioException catch (e) {
+      if (_disposed) throw const ApiException('The pfSense session was closed.');
+      throw ApiException.fromDio(e);
+    }
+  }
+
   Future<Response> post(String path, {dynamic data}) async {
     return _request('POST', path, data: data);
   }
