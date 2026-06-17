@@ -72,7 +72,7 @@ void main() {
     expect(find.byType(LockScreen), findsNothing);
     expect(find.text('Protected content'), findsOneWidget);
 
-    await tester.binding.handleAppLifecycleStateChanged(
+    tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.paused,
     );
     await tester.pump();
@@ -80,7 +80,7 @@ void main() {
     expect(find.byType(LockScreen), findsOneWidget);
     expect(session.suspendedForLock, isTrue);
 
-    await tester.binding.handleAppLifecycleStateChanged(
+    tester.binding.handleAppLifecycleStateChanged(
       AppLifecycleState.resumed,
     );
     await tester.pump();
