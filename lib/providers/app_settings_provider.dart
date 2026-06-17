@@ -13,24 +13,31 @@ class AppSettingsProvider extends ChangeNotifier {
   String? _pinCode;
   bool _pinEnabled = false;
   bool _biometricEnabled = false;
+  bool _hasLoaded = false;
 
   Locale get locale => _locale;
   int get lockTimeoutMinutes => _lockTimeoutMinutes;
   bool get pinEnabled => _pinEnabled && (_pinCode?.isNotEmpty ?? false);
   bool get biometricEnabled => _biometricEnabled;
   bool get hasPin => _pinCode?.isNotEmpty ?? false;
+  bool get hasLoaded => _hasLoaded;
+  bool get lockEnabled => pinEnabled || biometricEnabled;
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final localeCode = prefs.getString(_localeKey);
-    if (localeCode != null && localeCode.isNotEmpty) {
-      _locale = Locale(localeCode);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localeCode = prefs.getString(_localeKey);
+      if (localeCode != null && localeCode.isNotEmpty) {
+        _locale = Locale(localeCode);
+      }
+      _lockTimeoutMinutes = prefs.getInt(_lockTimeoutKey) ?? 5;
+      _pinCode = prefs.getString(_pinKey);
+      _pinEnabled = prefs.getBool(_pinEnabledKey) ?? false;
+      _biometricEnabled = prefs.getBool(_biometricEnabledKey) ?? false;
+    } finally {
+      _hasLoaded = true;
+      notifyListeners();
     }
-    _lockTimeoutMinutes = prefs.getInt(_lockTimeoutKey) ?? 5;
-    _pinCode = prefs.getString(_pinKey);
-    _pinEnabled = prefs.getBool(_pinEnabledKey) ?? false;
-    _biometricEnabled = prefs.getBool(_biometricEnabledKey) ?? false;
-    notifyListeners();
   }
 
   Future<void> setLocale(Locale locale) async {
