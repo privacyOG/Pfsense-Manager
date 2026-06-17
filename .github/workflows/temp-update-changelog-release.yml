@@ -3,7 +3,7 @@ name: Temporary changelog release updater
 on:
   push:
     branches:
-      - main
+      - retired-changelog-migration
     paths:
       - '.github/workflows/temp-update-changelog-release.yml'
 
