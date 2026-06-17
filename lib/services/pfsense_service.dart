@@ -3,6 +3,7 @@ import '../models/dhcp_lease.dart';
 import '../models/firewall_rule.dart';
 import '../models/firewall_log.dart';
 import '../models/network_state.dart';
+import '../models/smart_drive.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
 import 'api_client.dart';
@@ -191,6 +192,24 @@ class PfSenseService {
   Future<void> rebootSystem() async {
     _ensureActive();
     await _client.post('/api/v2/diagnostics/reboot');
+  }
+
+  Future<DashboardData> getHardwareHealth() async {
+    _ensureActive();
+    final response = await _client.get('/api/v2/status/system');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    return DashboardData.fromJson(data);
+  }
+
+  Future<List<SmartDrive>> getSmartStatus() async {
+    _ensureActive();
+    try {
+      final response = await _client.get('/api/v2/diagnostics/smart_status');
+      final data = response.data['data'] as List? ?? [];
+      return data.whereType<Map<String, dynamic>>().map(SmartDrive.fromJson).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<bool> healthCheck() async {
