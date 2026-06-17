@@ -19,6 +19,7 @@ class _LockScreenState extends State<LockScreen> {
   final _pinController = TextEditingController();
   final _auth = LocalAuthentication();
   String? _error;
+  bool _checkingPin = false;
 
   @override
   void dispose() {
@@ -38,12 +39,28 @@ class _LockScreenState extends State<LockScreen> {
     }
   }
 
-  void _pinUnlock(AppSettingsProvider settings) {
-    if (settings.verifyPin(_pinController.text.trim())) {
+  Future<void> _pinUnlock(AppSettingsProvider settings) async {
+    if (_checkingPin) return;
+
+    setState(() {
+      _checkingPin = true;
+      _error = null;
+    });
+
+    final matches = await settings.verifyPin(_pinController.text.trim());
+    if (!mounted) return;
+
+    if (matches) {
+      _checkingPin = false;
       widget.onUnlock();
-    } else {
-      setState(() => _error = 'Incorrect PIN');
+      return;
     }
+
+    _pinController.clear();
+    setState(() {
+      _checkingPin = false;
+      _error = 'Incorrect PIN';
+    });
   }
 
   @override
@@ -69,6 +86,7 @@ class _LockScreenState extends State<LockScreen> {
                 if (settings.pinEnabled) ...[
                   TextField(
                     controller: _pinController,
+                    enabled: !_checkingPin,
                     keyboardType: TextInputType.number,
                     obscureText: true,
                     maxLength: 8,
@@ -97,8 +115,14 @@ class _LockScreenState extends State<LockScreen> {
                   children: [
                     if (settings.pinEnabled)
                       FilledButton.icon(
-                        onPressed: () => _pinUnlock(settings),
-                        icon: const Icon(Icons.lock_open),
+                        onPressed:
+                            _checkingPin ? null : () => _pinUnlock(settings),
+                        icon: _checkingPin
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.lock_open),
                         label: Text(strings.t('unlock')),
                       ),
                     if (settings.biometricEnabled)
