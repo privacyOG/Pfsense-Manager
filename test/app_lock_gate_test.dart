@@ -12,6 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/memory_pin_verifier_store.dart';
 
+Future<String> _createTestVerifier(String pin) async => 'test:$pin';
+
+Future<bool> _checkTestVerifier(String pin, String verifier) async =>
+    verifier == 'test:$pin';
+
 Widget _buildApp({
   required AppSettingsProvider settings,
   required ProfileProvider profiles,
@@ -51,12 +56,16 @@ void main() {
     });
 
     final pinStore = MemoryPinVerifierStore();
-    final settings = AppSettingsProvider(pinStore: pinStore);
+    final settings = AppSettingsProvider(
+      pinStore: pinStore,
+      createVerifier: _createTestVerifier,
+      checkVerifier: _checkTestVerifier,
+    );
     await settings.load();
 
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.containsKey('pinCode'), isFalse);
-    expect(pinStore.value, isNotNull);
+    expect(pinStore.value, 'test:1234');
     expect(pinStore.value, isNot('1234'));
 
     final profiles = ProfileProvider();
@@ -109,6 +118,8 @@ void main() {
 
     final settings = AppSettingsProvider(
       pinStore: MemoryPinVerifierStore(),
+      createVerifier: _createTestVerifier,
+      checkVerifier: _checkTestVerifier,
     );
     await settings.load();
 
