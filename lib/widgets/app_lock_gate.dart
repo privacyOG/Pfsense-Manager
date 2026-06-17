@@ -151,6 +151,16 @@ class _AppLockGateState extends State<AppLockGate>
     }
   }
 
+  Widget _buildLockSurface() {
+    return Navigator(
+      key: const ValueKey<String>('app-lock-navigator'),
+      onGenerateRoute: (_) => MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/locked'),
+        builder: (_) => LockScreen(onUnlock: () => unawaited(_unlock())),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettingsProvider>();
@@ -163,7 +173,7 @@ class _AppLockGateState extends State<AppLockGate>
     }
 
     if (_locked && !_hasPresentedChild) {
-      return LockScreen(onUnlock: () => unawaited(_unlock()));
+      return _buildLockSurface();
     }
 
     return Listener(
@@ -174,10 +184,7 @@ class _AppLockGateState extends State<AppLockGate>
         fit: StackFit.expand,
         children: [
           widget.child,
-          if (_locked)
-            Positioned.fill(
-              child: LockScreen(onUnlock: () => unawaited(_unlock())),
-            ),
+          if (_locked) Positioned.fill(child: _buildLockSurface()),
         ],
       ),
     );
