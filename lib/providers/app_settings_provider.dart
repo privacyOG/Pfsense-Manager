@@ -5,6 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/pin_verifier.dart';
 
+typedef PinVerifierCreator = Future<String> Function(String pin);
+typedef PinVerifierChecker = Future<bool> Function(
+  String pin,
+  String encodedVerifier,
+);
+
 class AppSettingsProvider extends ChangeNotifier {
   static const _localeKey = 'localeCode';
   static const _lockTimeoutKey = 'lockTimeoutMinutes';
@@ -15,11 +21,17 @@ class AppSettingsProvider extends ChangeNotifier {
   AppSettingsProvider({
     PinVerifierStore? pinStore,
     DateTime Function()? now,
+    PinVerifierCreator? createVerifier,
+    PinVerifierChecker? checkVerifier,
   })  : _pinStore = pinStore ?? SecurePinVerifierStore(),
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        _createVerifier = createVerifier ?? createPinVerifier,
+        _checkVerifier = checkVerifier ?? verifyPinVerifier;
 
   final PinVerifierStore _pinStore;
   final DateTime Function() _now;
+  final PinVerifierCreator _createVerifier;
+  final PinVerifierChecker _checkVerifier;
 
   Locale _locale = const Locale('en');
   int _lockTimeoutMinutes = 5;
@@ -62,7 +74,7 @@ class AppSettingsProvider extends ChangeNotifier {
       if ((_pinVerifier?.isEmpty ?? true) &&
           legacyPin != null &&
           legacyPin.isNotEmpty) {
-        final migratedVerifier = await createPinVerifier(legacyPin);
+        final migratedVerifier = await _createVerifier(legacyPin);
         await _pinStore.write(migratedVerifier);
         _pinVerifier = migratedVerifier;
         await prefs.remove(_legacyPinKey);
@@ -96,7 +108,7 @@ class AppSettingsProvider extends ChangeNotifier {
       return;
     }
 
-    final verifier = await createPinVerifier(normalizedPin);
+    final verifier = await _createVerifier(normalizedPin);
     await _pinStore.write(verifier);
 
     final prefs = await SharedPreferences.getInstance();
@@ -146,7 +158,7 @@ class AppSettingsProvider extends ChangeNotifier {
       return false;
     }
 
-    final matches = await verifyPinVerifier(pin.trim(), verifier);
+    final matches = await _checkVerifier(pin.trim(), verifier);
     if (matches) {
       _failedPinAttempts = 0;
       _pinRetryAfter = null;
