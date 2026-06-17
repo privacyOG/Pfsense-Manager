@@ -40,7 +40,18 @@ class ProfileProvider extends ChangeNotifier {
     return null;
   }
 
+  static Future<PfSenseProfile> resolveForConnection(
+    PfSenseProfile profile,
+  ) async {
+    if (profile.apiKey.isNotEmpty) return profile;
+    final apiKey = await _defaultSecureStorage.read(
+      key: '$_securePrefix${profile.id}',
+    );
+    return profile.copyWith(apiKey: apiKey ?? '');
+  }
+
   Future<PfSenseProfile> profileForConnection(PfSenseProfile profile) async {
+    if (profile.apiKey.isNotEmpty) return profile;
     final apiKey = await _secureStorage.read(
       key: '$_securePrefix${profile.id}',
     );
