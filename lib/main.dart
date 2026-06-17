@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -30,24 +31,31 @@ class PfSenseManagerApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => PfSenseSessionProvider()),
       ],
-      child: Consumer2<ThemeProvider, AppSettingsProvider>(
-        builder: (context, themeProvider, settings, _) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'pfSense Manager',
-            theme: themeProvider.themeData,
-            locale: settings.locale,
-            supportedLocales: AppStrings.supportedLocales,
-            localizationsDelegates: const [
-              AppStrings.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            builder: (context, child) => AppLockGate(
-              child: child ?? const SizedBox.shrink(),
-            ),
-            home: const ReleaseNotice(child: StartupScreen()),
+      child: DynamicColorBuilder(
+        builder: (lightDynamic, darkDynamic) {
+          return Consumer2<ThemeProvider, AppSettingsProvider>(
+            builder: (context, themeProvider, settings, _) {
+              return MaterialApp(
+                debugShowCheckedModeBanner: false,
+                title: 'pfSense Manager',
+                theme: themeProvider.buildThemeData(
+                  lightDynamic: lightDynamic,
+                  darkDynamic: darkDynamic,
+                ),
+                locale: settings.locale,
+                supportedLocales: AppStrings.supportedLocales,
+                localizationsDelegates: const [
+                  AppStrings.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                builder: (context, child) => AppLockGate(
+                  child: child ?? const SizedBox.shrink(),
+                ),
+                home: const ReleaseNotice(child: StartupScreen()),
+              );
+            },
           );
         },
       ),

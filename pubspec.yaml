@@ -45,6 +45,12 @@ dependencies:
   # Charts
   fl_chart: ^0.68.0
 
+  # Material You dynamic theming
+  dynamic_color: ^1.7.0
+
+  # Android home screen widgets
+  home_widget: ^0.6.0
+
   # Utilities
   intl: ^0.20.2
   uuid: ^4.3.0
