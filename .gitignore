@@ -27,3 +27,6 @@ Thumbs.db
 *.apk
 *.aab
 *.sha256
+
+# Claude Code agent state
+.claude/
