@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../l10n/app_strings.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
+import 'alert_settings_screen.dart';
 import 'dashboard_screen.dart';
 import 'dhcp_leases_screen.dart';
 import 'firewall_logs_screen.dart';
 import 'firewall_rules_screen.dart';
 import 'network_monitor_screen.dart';
+import 'pfblocker_screen.dart';
 import 'profiles_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
@@ -531,11 +538,56 @@ class _ConnectionStrip extends StatelessWidget {
   }
 }
 
-class _MoreSection extends StatelessWidget {
+class _MoreSection extends StatefulWidget {
   const _MoreSection();
 
   @override
+  State<_MoreSection> createState() => _MoreSectionState();
+}
+
+class _MoreSectionState extends State<_MoreSection> {
+  bool _backingUp = false;
+
+  Future<void> _downloadBackup() async {
+    if (_backingUp) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Connect to a firewall first.')),
+      );
+      return;
+    }
+    setState(() => _backingUp = true);
+    try {
+      final bytes = await session.service!.getConfigBackup();
+      if (!mounted) return;
+      final dir = await getTemporaryDirectory();
+      final profileName = session.selectedProfile?.name ?? 'pfsense';
+      final safeName = profileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final now = DateTime.now();
+      final ts =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      final file = File('${dir.path}/${safeName}_config_$ts.xml');
+      await file.writeAsBytes(bytes);
+      if (!mounted) return;
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'pfSense config backup – $profileName',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _backingUp = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final session = context.watch<PfSenseSessionProvider>();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -545,9 +597,44 @@ class _MoreSection extends StatelessWidget {
             title: const Text('Firewall profiles'),
             subtitle: const Text('Add, edit, import or test connections'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const ProfilesScreen())),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfilesScreen())),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.security_outlined),
+            title: const Text('pfBlockerNG'),
+            subtitle: const Text('DNSBL stats, blocklist updates and controls'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PfBlockerScreen())),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            enabled: session.connected && !_backingUp,
+            leading: _backingUp
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.backup_outlined),
+            title: const Text('Configuration backup'),
+            subtitle: const Text('Download pfSense XML config to your device'),
+            trailing: const Icon(Icons.download_outlined),
+            onTap: _downloadBackup,
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.notifications_active_outlined),
+            title: const Text('Background alerts'),
+            subtitle:
+                const Text('Get notified when gateways drop or temps spike'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const AlertSettingsScreen())),
           ),
         ),
         Card(
@@ -556,9 +643,8 @@ class _MoreSection extends StatelessWidget {
             title: const Text('Settings'),
             subtitle: const Text('Appearance, language and app security'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ),
       ],

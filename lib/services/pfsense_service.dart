@@ -5,6 +5,7 @@ import '../models/firewall_log.dart';
 import '../models/network_state.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
+import '../models/wireguard_tunnel.dart';
 import 'api_client.dart';
 
 /// Service layer for all pfSense API operations.
@@ -191,6 +192,71 @@ class PfSenseService {
   Future<void> rebootSystem() async {
     _ensureActive();
     await _client.post('/api/v2/diagnostics/reboot');
+  }
+
+  Future<List<WireGuardTunnel>> getWireGuardStatus() async {
+    _ensureActive();
+    try {
+      final results = await Future.wait([
+        _client.get('/api/v2/vpn/wireguard/servers'),
+        _client.get('/api/v2/vpn/wireguard/peers'),
+      ]);
+      final tunnelData = results[0].data['data'] as List? ?? [];
+      final peerData = results[1].data['data'] as List? ?? [];
+
+      return tunnelData.whereType<Map<String, dynamic>>().map((tunnel) {
+        final tunnelName = tunnel['name']?.toString() ?? '';
+        final peers = peerData.whereType<Map<String, dynamic>>().where((p) {
+          final tun = p['tun']?.toString() ?? p['tunnel']?.toString() ?? '';
+          return tun == tunnelName || tun.isEmpty;
+        }).toList();
+        return WireGuardTunnel.fromJson({...tunnel, 'peers': peers});
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> restartWireGuard() async {
+    _ensureActive();
+    await _client.post('/api/v2/status/service',
+        data: await _serviceActionData('wireguard', 'restart'));
+  }
+
+  Future<void> sendWakeOnLan(String mac, {String? broadcast}) async {
+    _ensureActive();
+    await _client.post('/api/v2/services/wake_on_lan', data: {
+      'mac': mac,
+      if (broadcast != null) 'broadcast': broadcast,
+    });
+  }
+
+  Future<List<int>> getConfigBackup() async {
+    _ensureActive();
+    return _client.getRawBytes('/api/v2/system/config');
+  }
+
+  Future<Map<String, dynamic>?> getPfBlockerStatus() async {
+    _ensureActive();
+    try {
+      final response = await _client.get('/api/v2/status/pfblockerng');
+      final data = response.data['data'];
+      if (data is Map<String, dynamic>) return data;
+      return {};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> updatePfBlockerLists() async {
+    _ensureActive();
+    await _client.post('/api/v2/status/pfblockerng/update');
+  }
+
+  Future<void> setPfBlockerEnabled(bool enabled) async {
+    _ensureActive();
+    await _client.patch('/api/v2/status/pfblockerng',
+        data: {'enable': enabled});
   }
 
   Future<bool> healthCheck() async {

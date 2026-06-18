@@ -9,11 +9,13 @@ import 'providers/profile_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/startup_screen.dart';
+import 'services/alert_service.dart';
 import 'widgets/app_lock_gate.dart';
 import 'widgets/release_notice.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AlertService.initialize();
   runApp(const PfSenseManagerApp());
 }
 

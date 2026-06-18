@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/system_service.dart';
+import '../models/wireguard_tunnel.dart';
 import '../providers/session_provider.dart';
 import '../widgets/slide_to_confirm.dart';
 
@@ -16,6 +17,7 @@ class VpnScreen extends StatefulWidget {
 class _VpnScreenState extends State<VpnScreen> {
   List<Map<String, dynamic>> _openVpn = [];
   SystemService? _tailscale;
+  List<WireGuardTunnel> _wireGuard = [];
   Object? _error;
   bool _loading = false;
   String? _busyAction;
@@ -35,6 +37,7 @@ class _VpnScreenState extends State<VpnScreen> {
       _requestGeneration++;
       _openVpn = [];
       _tailscale = null;
+      _wireGuard = [];
       _error = null;
       _lastSuccessfulRefresh = null;
       _loadedSessionGeneration = session.sessionGeneration;
@@ -61,6 +64,7 @@ class _VpnScreenState extends State<VpnScreen> {
       setState(() {
         _openVpn = [];
         _tailscale = null;
+        _wireGuard = [];
         _lastSuccessfulRefresh = null;
         _error = AppStrings.of(context).t('offline');
       });
@@ -79,6 +83,7 @@ class _VpnScreenState extends State<VpnScreen> {
       final results = await Future.wait([
         session.service!.getOpenVPNStatus(),
         session.service!.getServices(),
+        session.service!.getWireGuardStatus(),
       ]);
       if (!mounted ||
           request != _requestGeneration ||
@@ -99,6 +104,7 @@ class _VpnScreenState extends State<VpnScreen> {
       setState(() {
         _openVpn = results[0] as List<Map<String, dynamic>>;
         _tailscale = tailscale;
+        _wireGuard = results[2] as List<WireGuardTunnel>;
         _lastSuccessfulRefresh = DateTime.now();
       });
     } catch (error) {
@@ -174,6 +180,8 @@ class _VpnScreenState extends State<VpnScreen> {
                 title: Text(_error.toString()),
               ),
             ),
+
+          // ── OpenVPN ──────────────────────────────────────────────────────
           Card(
             child: ListTile(
               leading: const Icon(Icons.vpn_lock),
@@ -196,12 +204,44 @@ class _VpnScreenState extends State<VpnScreen> {
           for (final item in _openVpn)
             Card(
               child: ListTile(
-                title: Text(_firstText(item, const ['common_name', 'name'], 'OpenVPN')),
+                title: Text(
+                    _firstText(item, const ['common_name', 'name'], 'OpenVPN')),
                 subtitle: Text(
-                  _firstText(item, const ['remote_host', 'status'], 'No additional status'),
+                  _firstText(
+                      item, const ['remote_host', 'status'], 'No additional status'),
                 ),
               ),
             ),
+
+          // ── WireGuard ─────────────────────────────────────────────────────
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lock_outlined),
+              title: const Text('WireGuard'),
+              subtitle: Text(
+                _wireGuard.isEmpty
+                    ? 'No tunnels found'
+                    : '${_wireGuard.length} tunnel(s)',
+              ),
+              trailing: _busyAction == 'WireGuard'
+                  ? const CircularProgressIndicator()
+                  : IconButton(
+                      tooltip: 'Restart WireGuard',
+                      onPressed: session.connected && !_loading && _wireGuard.isNotEmpty
+                          ? () => _restart(
+                                'WireGuard',
+                                () => session.service!.restartWireGuard(),
+                              )
+                          : null,
+                      icon: const Icon(Icons.restart_alt),
+                    ),
+            ),
+          ),
+          for (final tunnel in _wireGuard) ...[
+            _WireGuardTunnelCard(tunnel: tunnel),
+          ],
+
+          // ── Tailscale ─────────────────────────────────────────────────────
           if (_tailscale != null)
             Card(
               child: ListTile(
@@ -215,7 +255,8 @@ class _VpnScreenState extends State<VpnScreen> {
                         onPressed: session.connected && !_loading
                             ? () => _restart(
                                   'Tailscale',
-                                  () => session.service!.restartService(_tailscale!.name),
+                                  () => session.service!
+                                      .restartService(_tailscale!.name),
                                 )
                             : null,
                         icon: const Icon(Icons.restart_alt),
@@ -227,7 +268,8 @@ class _VpnScreenState extends State<VpnScreen> {
     );
   }
 
-  String _firstText(Map<String, dynamic> item, List<String> keys, String fallback) {
+  String _firstText(
+      Map<String, dynamic> item, List<String> keys, String fallback) {
     for (final key in keys) {
       final value = item[key]?.toString().trim();
       if (value != null && value.isNotEmpty) return value;
@@ -237,6 +279,144 @@ class _VpnScreenState extends State<VpnScreen> {
 
   String _formatTime(DateTime value) {
     final local = value.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}';
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}:'
+        '${local.second.toString().padLeft(2, '0')}';
+  }
+}
+
+class _WireGuardTunnelCard extends StatelessWidget {
+  const _WireGuardTunnelCard({required this.tunnel});
+  final WireGuardTunnel tunnel;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabledColor = tunnel.enabled ? const Color(0xFF00C2A8) : scheme.error;
+
+    return Card(
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundColor: enabledColor.withValues(alpha: 0.12),
+          child: Icon(Icons.lock_outlined, color: enabledColor, size: 20),
+        ),
+        title: Text(
+          tunnel.description.isNotEmpty ? tunnel.description : tunnel.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          [
+            tunnel.enabled ? 'Active' : 'Disabled',
+            if (tunnel.listenPort.isNotEmpty) 'Port ${tunnel.listenPort}',
+            '${tunnel.peers.length} peer(s)',
+          ].join('  ·  '),
+        ),
+        children: [
+          if (tunnel.publicKey.isNotEmpty)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.vpn_key_outlined, size: 18),
+              title: const Text('Public key'),
+              subtitle: Text(
+                tunnel.publicKey,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          for (final peer in tunnel.peers)
+            _PeerTile(peer: peer),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeerTile extends StatelessWidget {
+  const _PeerTile({required this.peer});
+  final WireGuardPeer peer;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final handshake = peer.lastHandshake;
+    final handshakeAge = handshake != null
+        ? DateTime.now().difference(handshake)
+        : null;
+    final recentHandshake =
+        handshakeAge != null && handshakeAge.inMinutes < 3;
+    final handshakeColor = handshake == null
+        ? scheme.onSurfaceVariant
+        : recentHandshake
+            ? const Color(0xFF00C2A8)
+            : scheme.error;
+
+    String handshakeLabel = 'Never';
+    if (handshake != null) {
+      if (handshakeAge!.inSeconds < 60) {
+        handshakeLabel = '${handshakeAge.inSeconds}s ago';
+      } else if (handshakeAge.inMinutes < 60) {
+        handshakeLabel = '${handshakeAge.inMinutes}m ago';
+      } else if (handshakeAge.inHours < 24) {
+        handshakeLabel = '${handshakeAge.inHours}h ago';
+      } else {
+        handshakeLabel = '${handshakeAge.inDays}d ago';
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.devices_other, size: 16, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    peer.description.isNotEmpty ? peer.description : 'Peer',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.handshake_outlined, size: 14, color: handshakeColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      handshakeLabel,
+                      style: TextStyle(fontSize: 12, color: handshakeColor),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (peer.endpoint != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Endpoint: ${peer.endpoint}',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+            ],
+            if (peer.allowedIps.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Allowed IPs: ${peer.allowedIps.join(', ')}',
+                style: TextStyle(
+                    fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -107,6 +107,33 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
     }
   }
 
+  Future<void> _wake(DhcpLease lease) async {
+    if (_actionBusy) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return;
+    setState(() => _actionBusy = true);
+    try {
+      await session.service!.sendWakeOnLan(lease.macAddress);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Magic packet sent to ${lease.hostname.isNotEmpty ? lease.hostname : lease.macAddress}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
   Future<void> _delete(DhcpLease lease) async {
     if (_actionBusy) return;
     final ok = await showDialog<bool>(
@@ -210,6 +237,9 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
               _LeaseTile(
                 lease: lease,
                 onDelete: _actionBusy ? null : () => _delete(lease),
+                onWake: (lease.macAddress.isNotEmpty && !_actionBusy)
+                    ? () => _wake(lease)
+                    : null,
               ),
         ],
       ),
@@ -265,10 +295,15 @@ class _LeaseSummary extends StatelessWidget {
 }
 
 class _LeaseTile extends StatelessWidget {
-  const _LeaseTile({required this.lease, required this.onDelete});
+  const _LeaseTile({
+    required this.lease,
+    required this.onDelete,
+    required this.onWake,
+  });
 
   final DhcpLease lease;
   final VoidCallback? onDelete;
+  final VoidCallback? onWake;
 
   @override
   Widget build(BuildContext context) {
@@ -294,10 +329,21 @@ class _LeaseTile extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: IconButton(
-          tooltip: 'Delete lease',
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (lease.macAddress.isNotEmpty)
+              IconButton(
+                tooltip: 'Wake on LAN',
+                onPressed: onWake,
+                icon: const Icon(Icons.power_settings_new_outlined),
+              ),
+            IconButton(
+              tooltip: 'Delete lease',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
     );
