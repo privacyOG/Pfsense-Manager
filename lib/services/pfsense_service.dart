@@ -210,6 +210,20 @@ class PfSenseService {
     return {if (id != null) 'id': id, 'name': serviceName, 'action': action};
   }
 
+  Future<Map<String, dynamic>> runDnsLookup(
+    String host, {
+    String type = 'PTR',
+  }) async {
+    _ensureActive();
+    final response = await _client.post(
+      '/api/v2/diagnostics/dns_lookup',
+      data: {'host': host, 'type': type},
+    );
+    return response.data['data'] as Map<String, dynamic>? ??
+        response.data as Map<String, dynamic>? ??
+        {};
+  }
+
   void _ensureActive() {
     if (_disposed) throw StateError('This pfSense session is no longer active.');
   }
