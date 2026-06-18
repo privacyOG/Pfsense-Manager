@@ -3,6 +3,7 @@ import '../models/dhcp_lease.dart';
 import '../models/firewall_rule.dart';
 import '../models/firewall_log.dart';
 import '../models/network_state.dart';
+import '../models/smart_drive.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
 import '../models/wireguard_tunnel.dart';
@@ -217,6 +218,24 @@ class PfSenseService {
     }
   }
 
+  Future<DashboardData> getHardwareHealth() async {
+    _ensureActive();
+    final response = await _client.get('/api/v2/status/system');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    return DashboardData.fromJson(data);
+  }
+
+  Future<List<SmartDrive>> getSmartStatus() async {
+    _ensureActive();
+    try {
+      final response = await _client.get('/api/v2/diagnostics/smart_status');
+      final data = response.data['data'] as List? ?? [];
+      return data.whereType<Map<String, dynamic>>().map(SmartDrive.fromJson).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<void> restartWireGuard() async {
     _ensureActive();
     await _client.post('/api/v2/status/service',
@@ -258,6 +277,7 @@ class PfSenseService {
     await _client.patch('/api/v2/status/pfblockerng',
         data: {'enable': enabled});
   }
+
 
   Future<bool> healthCheck() async {
     _ensureActive();
