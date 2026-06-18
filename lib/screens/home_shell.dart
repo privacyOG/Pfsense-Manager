@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
+import 'captive_portal_screen.dart';
 import 'dashboard_screen.dart';
 import 'dhcp_leases_screen.dart';
 import 'firewall_logs_screen.dart';
@@ -548,6 +549,17 @@ class _MoreSection extends StatelessWidget {
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ProfilesScreen())),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.wifi_password_outlined),
+            title: const Text('Captive portal'),
+            subtitle: const Text('Manage guest sessions and access vouchers'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CaptivePortalScreen()),
+            ),
           ),
         ),
         Card(
