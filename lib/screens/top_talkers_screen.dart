@@ -99,7 +99,7 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
-    final maxBytes = _talkers.isEmpty ? 1 : _talkers.first.bytes.toDouble();
+    final maxBytes = _talkers.isEmpty ? 1.0 : _talkers.first.bytes.toDouble();
 
     return RefreshIndicator(
       onRefresh: () => _load(showSpinner: true),
