@@ -56,7 +56,7 @@ class AlertService {
         _taskUniqueName,
         frequency: const Duration(minutes: 15),
         constraints: Constraints(networkType: NetworkType.connected),
-        existingWorkPolicy: ExistingWorkPolicy.keep,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       );
     } else {
       await Workmanager().cancelByUniqueName(_taskUniqueName);
