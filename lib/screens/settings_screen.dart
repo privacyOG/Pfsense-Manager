@@ -177,9 +177,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             child: SwitchListTile(
               value: theme.isDarkMode,
-              onChanged: context.read<ThemeProvider>().setDarkMode,
+              onChanged: theme.isAmoled
+                  ? null
+                  : context.read<ThemeProvider>().setDarkMode,
               title: Text(l10n?.darkMode ?? 'Dark mode'),
-              subtitle: const Text('Theme control'),
+              subtitle: Text(theme.isAmoled
+                  ? 'Overridden by AMOLED mode'
+                  : 'Theme control'),
               secondary: Icon(theme.isDarkMode
                   ? Icons.dark_mode_outlined
                   : Icons.light_mode_outlined),
@@ -192,6 +196,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: const Text('Choose the app accent'),
               trailing: DropdownButton<AppThemePalette>(
                 value: theme.palette,
+                onChanged: theme.isAmoled
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          context.read<ThemeProvider>().setPalette(value);
+                        }
+                      },
                 items: const [
                   DropdownMenuItem(
                     value: AppThemePalette.pfsenseNavy,
@@ -206,14 +217,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Text('Material You'),
                   ),
                 ],
-                onChanged: (value) {
-                  if (value != null) {
-                    context.read<ThemeProvider>().setPalette(value);
-                  }
-                },
               ),
             ),
           ),
+          const SizedBox(height: 18),
+          const _Heading(Icons.brightness_1, 'AMOLED Mode'),
+          Card(
+            child: SwitchListTile(
+              value: theme.isAmoled,
+              onChanged: context.read<ThemeProvider>().setAmoledMode,
+              title: const Text('True AMOLED black'),
+              subtitle: const Text(
+                'Pure #000000 background — saves battery on OLED screens',
+              ),
+              secondary: const Icon(Icons.phone_android_outlined),
+            ),
+          ),
+          if (theme.isAmoled) ...[
+            const SizedBox(height: 8),
+            _AmoledAccentPicker(
+              selected: theme.amoledAccent,
+              onChanged: context.read<ThemeProvider>().setAmoledAccent,
+            ),
+          ],
           Card(
             child: ListTile(
               leading: const Icon(Icons.language_outlined),
@@ -405,6 +431,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AmoledAccentPicker extends StatelessWidget {
+  const _AmoledAccentPicker({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final AmoledAccent selected;
+  final ValueChanged<AmoledAccent> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            'Accent colour',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+        ),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 2.6,
+          children: [
+            for (final accent in AmoledAccent.values)
+              _AccentTile(
+                accent: accent,
+                selected: accent == selected,
+                onTap: () => onChanged(accent),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AccentTile extends StatelessWidget {
+  const _AccentTile({
+    required this.accent,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AmoledAccent accent;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = accent.color;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.15)
+              : Theme.of(context).cardTheme.color ??
+                  Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.25),
+            width: selected ? 2 : 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.5),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        )
+                      ]
+                    : null,
+              ),
+              child: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.black)
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    accent.label,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: selected ? color : null,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '#${color.value.toRadixString(16).substring(2).toUpperCase()}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: color.withValues(alpha: 0.8),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
