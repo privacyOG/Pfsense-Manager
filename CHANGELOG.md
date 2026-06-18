@@ -11,6 +11,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
 - Application PINs are migrated from plaintext preferences to salted verification values in secure storage, with retry delays after repeated incorrect attempts.
 
+## [1.8.0] - 2026-06-18
+
+### Added
+
+- **WireGuard VPN support** — tunnel and peer status alongside OpenVPN and Tailscale, with per-peer last-handshake timestamps and a restart button.
+- **pfBlockerNG dashboard** — active/paused status banner, DNSBL and IP block counters, update blocklists action, and pause/resume blocking with confirmation.
+- **Configuration backup and export** — downloads the pfSense XML config and opens the system share sheet so it can be saved to Files, emailed, or sent anywhere.
+- **Wake-on-LAN** — magic packet button on every DHCP lease tile that has a MAC address.
+- **Background alerts** — 15-minute periodic checks via WorkManager fire local notifications when a gateway goes offline, packet loss exceeds threshold, or a thermal sensor exceeds the configured CPU temperature limit. Configurable from More → Background alerts.
+- **Hardware health screen** — CPU and per-core thermal sensors, S.M.A.R.T. drive status with expandable per-drive detail (temperature, power-on hours, reallocated and pending sector counts), and memory/swap trend charts that accumulate up to 30 in-session samples.
+- **True AMOLED multi-theme** — pure `#000000` scaffold and app bar, `#0A0A0A` surface cards, and four selectable neon accent profiles: Matrix Green, Midnight Neon, Dracula Purple, and Inferno Red. Palette choice persists across restarts.
+- **Top Talkers screen** — real-time bandwidth ranking by device under Network → Talkers, auto-refreshing every 10 seconds with relative progress bars and pull-to-refresh.
+- **Remote diagnostics screen** — ping, traceroute, and DNS lookup executed from the pfSense box (not the phone), with configurable packet count, hop limit, and record type. Results are shown in a selectable monospace block with a copy button.
+- **Global spotlight search** — search icon in the app bar opens a full-screen overlay that queries DHCP leases, firewall rules, and services in parallel and filters locally on every keystroke.
+- **NetworkAssetText widget** — IP and MAC addresses render with a dotted underline indicating they are tappable. Tapping opens a sheet with copy-to-clipboard and PTR reverse-DNS lookup actions.
+- **Captive portal management** — Sessions tab lists active guest connections with uptime and byte counters and a one-tap disconnect; Vouchers tab generates and shares time-limited access codes in batch.
+
+### Changed
+
+- AMOLED mode overrides the dark-mode toggle and theme palette picker in Settings while active.
+- VPN tunnel restart confirmation replaced with slide-to-confirm gesture.
+
 ## [1.7.4] - 2026-06-16
 
 ### Added
