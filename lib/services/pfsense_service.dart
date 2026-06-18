@@ -210,6 +210,42 @@ class PfSenseService {
     return {if (id != null) 'id': id, 'name': serviceName, 'action': action};
   }
 
+  Future<Map<String, dynamic>> runPing(
+    String host, {
+    int count = 4,
+    String? interface,
+  }) async {
+    _ensureActive();
+    final data = <String, dynamic>{'host': host, 'count': count};
+    if (interface != null && interface.isNotEmpty) data['interface'] = interface;
+    final response = await _client.post('/api/v2/diagnostics/ping', data: data);
+    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> runTraceroute(
+    String host, {
+    int maxHops = 30,
+  }) async {
+    _ensureActive();
+    final response = await _client.post(
+      '/api/v2/diagnostics/traceroute',
+      data: {'host': host, 'max_hops': maxHops},
+    );
+    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> runDnsLookup(
+    String host, {
+    String type = 'A',
+  }) async {
+    _ensureActive();
+    final response = await _client.post(
+      '/api/v2/diagnostics/dns_lookup',
+      data: {'host': host, 'type': type},
+    );
+    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+  }
+
   void _ensureActive() {
     if (_disposed) throw StateError('This pfSense session is no longer active.');
   }
