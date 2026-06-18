@@ -13,6 +13,7 @@ import 'firewall_logs_screen.dart';
 import 'firewall_rules_screen.dart';
 import 'network_monitor_screen.dart';
 import 'profiles_screen.dart';
+import 'top_talkers_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
 import 'system_screen.dart';
@@ -146,6 +147,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           tabs: [
             _SectionTab('Live', Icons.radar_outlined, NetworkMonitorScreen()),
             _SectionTab('DHCP', Icons.router_outlined, DhcpLeasesScreen()),
+            _SectionTab('Talkers', Icons.bar_chart_outlined, TopTalkersScreen()),
           ],
         ),
       ),

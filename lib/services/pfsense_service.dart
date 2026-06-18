@@ -5,6 +5,7 @@ import '../models/firewall_log.dart';
 import '../models/network_state.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
+import '../models/top_talker.dart';
 import 'api_client.dart';
 
 /// Service layer for all pfSense API operations.
@@ -88,6 +89,32 @@ class PfSenseService {
     final response = await _client.get('/api/v2/status/logs/firewall', queryParameters: params);
     final logsData = response.data['data'] as List? ?? [];
     return logsData.map((json) => FirewallLog.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<TopTalker>> getTopTalkers({int limit = 25}) async {
+    _ensureActive();
+    final states = await getFirewallStates(limit: 1000);
+    final map = <String, _TopTalkerAgg>{};
+    for (final state in states) {
+      final ip = state.sourceIp.split(':').first.trim();
+      if (ip.isEmpty || ip == '*') continue;
+      final agg = map.putIfAbsent(ip, () => _TopTalkerAgg(ip));
+      agg.bytes += state.bytes;
+      agg.connections++;
+      if (state.interface.isNotEmpty && agg.iface.isEmpty) {
+        agg.iface = state.interface;
+      }
+    }
+    final result = map.values
+        .map((a) => TopTalker(
+              ipAddress: a.ip,
+              bytes: a.bytes,
+              connections: a.connections,
+              interface: a.iface,
+            ))
+        .toList()
+      ..sort((a, b) => b.bytes.compareTo(a.bytes));
+    return result.take(limit).toList();
   }
 
   Future<List<NetworkState>> getFirewallStates({int limit = 200}) {
@@ -223,4 +250,12 @@ class PfSenseService {
     _serviceIds.clear();
     _client.dispose();
   }
+}
+
+class _TopTalkerAgg {
+  _TopTalkerAgg(this.ip);
+  final String ip;
+  String iface = '';
+  int bytes = 0;
+  int connections = 0;
 }
