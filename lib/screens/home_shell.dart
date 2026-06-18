@@ -14,6 +14,7 @@ import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/spotlight_search.dart';
 import 'alert_settings_screen.dart';
+import 'captive_portal_screen.dart';
 import 'dashboard_screen.dart';
 import 'diagnostics_screen.dart';
 import 'dhcp_leases_screen.dart';
@@ -684,6 +685,17 @@ class _MoreSectionState extends State<_MoreSection> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+            ),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.wifi_password_outlined),
+            title: const Text('Captive portal'),
+            subtitle: const Text('Manage guest sessions and access vouchers'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CaptivePortalScreen()),
             ),
           ),
         ),

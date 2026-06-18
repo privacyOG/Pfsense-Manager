@@ -1,3 +1,5 @@
+import '../models/captive_portal_session.dart';
+import '../models/captive_portal_voucher.dart';
 import '../models/dashboard.dart';
 import '../models/dhcp_lease.dart';
 import '../models/firewall_rule.dart';
@@ -357,6 +359,65 @@ class PfSenseService {
       data: {'host': host, 'type': type},
     );
     return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+  }
+
+  Future<List<CaptivePortalSession>> getCaptivePortalSessions({String? zone}) async {
+    _ensureActive();
+    final params = <String, dynamic>{};
+    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+    try {
+      final response = await _client.get('/api/v2/services/captiveportal/sessions', queryParameters: params.isNotEmpty ? params : null);
+      final data = response.data['data'] as List? ?? [];
+      return data.whereType<Map<String, dynamic>>().map(CaptivePortalSession.fromJson).toList();
+    } catch (_) {
+      rethrow;
+    }
+  }
+
+  Future<void> disconnectCaptivePortalSession({
+    required String ipAddress,
+    String? macAddress,
+    String? zone,
+  }) async {
+    _ensureActive();
+    final params = <String, dynamic>{'ip': ipAddress};
+    if (macAddress != null && macAddress.isNotEmpty) params['mac'] = macAddress;
+    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+    await _client.delete('/api/v2/services/captiveportal/session', queryParameters: params);
+  }
+
+  Future<List<String>> generateCaptivePortalVouchers({
+    required String zone,
+    required int count,
+    int minutes = 60,
+  }) async {
+    _ensureActive();
+    final response = await _client.post(
+      '/api/v2/services/captiveportal/vouchers',
+      data: {'zone': zone, 'count': count, 'minutes': minutes},
+    );
+    final data = response.data['data'];
+    if (data is List) {
+      return data.map((v) {
+        if (v is Map<String, dynamic>) {
+          return (v['voucher'] ?? v['code'] ?? v['username'] ?? '').toString();
+        }
+        return v.toString();
+      }).where((s) => s.isNotEmpty).toList();
+    }
+    return [];
+  }
+
+  Future<List<CaptivePortalVoucher>> getCaptivePortalVouchers({String? zone}) async {
+    _ensureActive();
+    final params = <String, dynamic>{};
+    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+    final response = await _client.get(
+      '/api/v2/services/captiveportal/vouchers',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final data = response.data['data'] as List? ?? [];
+    return data.whereType<Map<String, dynamic>>().map(CaptivePortalVoucher.fromJson).toList();
   }
 
   void _ensureActive() {
