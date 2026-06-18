@@ -12,6 +12,7 @@ import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/spotlight_search.dart';
 import 'alert_settings_screen.dart';
 import 'dashboard_screen.dart';
 import 'diagnostics_screen.dart';
@@ -205,6 +206,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         titleSpacing: 12,
         title: _ProfileTitle(profile: selectedProfile),
         actions: [
+          _SearchAction(profiles: profiles),
           _ProfileMenu(
             profiles: profiles.profiles,
             selectedProfile: selectedProfile,
@@ -492,6 +494,28 @@ class _ConnectionAction extends StatelessWidget {
               }
             },
       icon: Icon(session.connected ? Icons.link_off : Icons.link),
+    );
+  }
+}
+
+class _SearchAction extends StatelessWidget {
+  const _SearchAction({required this.profiles});
+  final ProfileProvider profiles;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<PfSenseSessionProvider>();
+    return IconButton(
+      tooltip: 'Search',
+      icon: const Icon(Icons.search),
+      onPressed: (session.connected && session.service != null)
+          ? () {
+              showSearch<Object?>(
+                context: context,
+                delegate: SpotlightSearchDelegate(service: session.service!),
+              );
+            }
+          : null,
     );
   }
 }
