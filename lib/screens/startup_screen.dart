@@ -6,6 +6,7 @@ import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
 import 'home_shell.dart';
+import 'onboarding_screen.dart';
 import 'profile_form_screen.dart';
 import 'profiles_screen.dart';
 
@@ -21,7 +22,7 @@ class StartupScreen extends StatelessWidget {
         }
 
         if (profiles.profiles.isEmpty) {
-          return const WelcomeProfileScreen();
+          return const OnboardingScreen();
         }
 
         return const SecureApiLoginScreen();

@@ -25,6 +25,15 @@ class _LockScreenState extends State<LockScreen> {
   bool _checkingPin = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final settings = context.read<AppSettingsProvider>();
+      if (mounted && settings.biometricEnabled) _biometricUnlock();
+    });
+  }
+
+  @override
   void dispose() {
     _retryTimer?.cancel();
     _pinController.dispose();

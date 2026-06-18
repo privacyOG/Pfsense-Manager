@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_strings.dart';
 import '../models/system_service.dart';
 import '../providers/session_provider.dart';
+import '../widgets/slide_to_confirm.dart';
 
 class VpnScreen extends StatefulWidget {
   const VpnScreen({super.key});
@@ -113,22 +114,12 @@ class _VpnScreenState extends State<VpnScreen> {
 
   Future<void> _restart(String title, Future<void> Function() action) async {
     if (_busyAction != null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSlideToConfirmSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Restart $title?'),
-        content: Text('Active $title connections may be interrupted.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Restart'),
-          ),
-        ],
-      ),
+      title: 'Restart $title?',
+      body: 'Active $title connections may be interrupted.',
+      slideLabel: 'Slide to restart',
+      icon: Icons.refresh,
     );
     if (confirmed != true || !mounted) return;
     setState(() => _busyAction = title);
