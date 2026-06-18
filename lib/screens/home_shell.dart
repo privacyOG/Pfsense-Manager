@@ -14,6 +14,7 @@ import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
 import 'alert_settings_screen.dart';
 import 'dashboard_screen.dart';
+import 'diagnostics_screen.dart';
 import 'dhcp_leases_screen.dart';
 import 'hardware_health_screen.dart';
 import 'firewall_logs_screen.dart';
@@ -648,6 +649,17 @@ class _MoreSectionState extends State<_MoreSection> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HardwareHealthScreen()),
+            ),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.network_ping_outlined),
+            title: const Text('Remote diagnostics'),
+            subtitle: const Text('Ping, traceroute and DNS lookup via pfSense'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
             ),
           ),
         ),
