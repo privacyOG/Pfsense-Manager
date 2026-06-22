@@ -365,13 +365,9 @@ class PfSenseService {
     _ensureActive();
     final params = <String, dynamic>{};
     if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    try {
-      final response = await _client.get('/api/v2/services/captiveportal/sessions', queryParameters: params.isNotEmpty ? params : null);
-      final data = response.data['data'] as List? ?? [];
-      return data.whereType<Map<String, dynamic>>().map(CaptivePortalSession.fromJson).toList();
-    } catch (_) {
-      rethrow;
-    }
+    final response = await _client.get('/api/v2/services/captiveportal/sessions', queryParameters: params.isNotEmpty ? params : null);
+    final data = response.data['data'] as List? ?? [];
+    return data.whereType<Map<String, dynamic>>().map(CaptivePortalSession.fromJson).toList();
   }
 
   Future<void> disconnectCaptivePortalSession({

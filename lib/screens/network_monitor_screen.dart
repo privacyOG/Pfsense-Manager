@@ -387,7 +387,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.22),
+            color: Colors.black.withValues(alpha: 0.22),
             blurRadius: 22,
             offset: const Offset(0, 10),
           ),
@@ -599,10 +599,10 @@ class _InterfaceTrafficCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         color: const Color(0xFF102741),
-        border: Border.all(color: accent.withOpacity(0.32)),
+        border: Border.all(color: accent.withValues(alpha: 0.32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
+            color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 16,
             offset: const Offset(0, 7),
           ),
@@ -620,7 +620,7 @@ class _InterfaceTrafficCard extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.14),
+                    color: accent.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(13),
                   ),
                   child: Icon(
@@ -804,8 +804,6 @@ class _BandwidthChart extends StatefulWidget {
 }
 
 class _BandwidthChartState extends State<_BandwidthChart> {
-  int? _touchedIndex;
-
   @override
   Widget build(BuildContext context) {
     if (widget.history.length < 2) {
@@ -841,12 +839,12 @@ class _BandwidthChartState extends State<_BandwidthChart> {
           verticalInterval: widget.compact ? 1 : math.max(1, maxX / 4),
           getDrawingHorizontalLine: (value) => FlLine(
             color: value == 0
-                ? Colors.white.withOpacity(0.42)
-                : Colors.white.withOpacity(0.10),
+                ? Colors.white.withValues(alpha: 0.42)
+                : Colors.white.withValues(alpha: 0.10),
             strokeWidth: value == 0 ? 1.4 : 1,
           ),
           getDrawingVerticalLine: (_) => FlLine(
-            color: Colors.white.withOpacity(0.07),
+            color: Colors.white.withValues(alpha: 0.07),
             strokeWidth: 1,
           ),
         ),
@@ -926,32 +924,18 @@ class _BandwidthChartState extends State<_BandwidthChart> {
         borderData: FlBorderData(
           show: true,
           border: Border(
-            right: BorderSide(color: Colors.white.withOpacity(0.35)),
-            bottom: BorderSide(color: Colors.white.withOpacity(0.18)),
+            right: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
           ),
         ),
         lineTouchData: LineTouchData(
           enabled: !widget.compact,
           handleBuiltInTouches: true,
-          touchCallback: (event, response) {
-            if (!mounted) return;
-            setState(() {
-              final spots = response?.lineBarSpots;
-              if (event is FlPointerExitEvent ||
-                  event is FlPanEndEvent ||
-                  spots == null ||
-                  spots.isEmpty) {
-                _touchedIndex = null;
-              } else {
-                _touchedIndex = spots.first.spotIndex;
-              }
-            });
-          },
           getTouchedSpotIndicator: (barData, spotIndexes) {
             return spotIndexes.map((_) {
               return TouchedSpotIndicatorData(
                 FlLine(
-                  color: Colors.white.withOpacity(0.55),
+                  color: Colors.white.withValues(alpha: 0.55),
                   strokeWidth: 1.5,
                   dashArray: [4, 3],
                 ),
@@ -1034,13 +1018,13 @@ LineChartBarData _lineData(
     dotData: const FlDotData(show: false),
     belowBarData: BarAreaData(
       show: fillToZero && aboveZero,
-      color: color.withOpacity(0.28),
+      color: color.withValues(alpha: 0.28),
       cutOffY: 0,
       applyCutOffY: true,
     ),
     aboveBarData: BarAreaData(
       show: fillToZero && !aboveZero,
-      color: color.withOpacity(0.30),
+      color: color.withValues(alpha: 0.30),
       cutOffY: 0,
       applyCutOffY: true,
     ),
@@ -1161,7 +1145,7 @@ class _MetricTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

@@ -60,7 +60,7 @@ class FirewallRule {
           : destinationPorts.$2,
       description:
           json['description'] as String? ?? json['descr'] as String? ?? '',
-      enabled: (json['disabled'] as bool?) == false,
+      enabled: !(json['disabled'] as bool? ?? false),
       createdTime: json['created_time']?.toString() ??
           ((json['created'] is Map<String, dynamic>)
           ? json['created']['utc'] as String? ?? ''
