@@ -43,7 +43,7 @@ void main() {
     expect(provider.profiles, hasLength(2));
     expect(provider.profiles.every((profile) => profile.apiKey.isEmpty), isTrue);
 
-    final resolved = await provider.profileForConnection(
+    final resolved = await ProfileProvider.resolveForConnection(
       provider.profiles.first,
     );
     expect(resolved.apiKey, 'first-value');

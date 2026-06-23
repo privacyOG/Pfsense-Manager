@@ -50,14 +50,6 @@ class ProfileProvider extends ChangeNotifier {
     return profile.copyWith(apiKey: apiKey ?? '');
   }
 
-  Future<PfSenseProfile> profileForConnection(PfSenseProfile profile) async {
-    if (profile.apiKey.isNotEmpty) return profile;
-    final apiKey = await _secureStorage.read(
-      key: '$_securePrefix${profile.id}',
-    );
-    return profile.copyWith(apiKey: apiKey ?? '');
-  }
-
   Future<void> addProfile(PfSenseProfile profile) async {
     _profiles.add(profile.copyWith(apiKey: ''));
     _selectedProfileId ??= profile.id;

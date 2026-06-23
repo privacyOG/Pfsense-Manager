@@ -76,7 +76,7 @@ class ProfilesScreen extends StatelessWidget {
         throw const FormatException('Unable to read selected file.');
       }
       if (!context.mounted) return;
-      final count = context
+      final count = await context
           .read<ProfileProvider>()
           .importProfiles(String.fromCharCodes(b));
       if (context.mounted) {
@@ -105,8 +105,11 @@ class _ProfileTileState extends State<_ProfileTile> {
   Future<void> _test() async {
     final l = AppLocalizations.of(context);
     setState(() => _testing = true);
-    final svc = PfSenseService(PfSenseApiClient(widget.profile));
+    PfSenseService? svc;
     try {
+      final resolved = await ProfileProvider.resolveForConnection(widget.profile);
+      if (!mounted) return;
+      svc = PfSenseService(PfSenseApiClient(resolved));
       final ok = await svc.healthCheck();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -114,8 +117,13 @@ class _ProfileTileState extends State<_ProfileTile> {
                 ? (l?.connectionSuccessful ?? 'Connection successful')
                 : (l?.connectionFailed ?? 'Connection failed'))));
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } finally {
-      svc.dispose();
+      svc?.dispose();
       if (mounted) setState(() => _testing = false);
     }
   }
