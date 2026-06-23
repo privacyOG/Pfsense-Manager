@@ -866,8 +866,8 @@ class _BandwidthChartState extends State<_BandwidthChart> {
               interval: interval,
               getTitlesWidget: (value, meta) {
                 if (value.abs() < interval / 10) {
-                  return const Padding(
-                    padding: EdgeInsets.only(left: 6),
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
                     child: Text(
                       '0',
                       style: TextStyle(
