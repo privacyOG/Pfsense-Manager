@@ -115,9 +115,9 @@ class _CounterTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
+        color: Colors.white.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: counter.color.withOpacity(0.24)),
+        border: Border.all(color: counter.color.withValues(alpha: 0.24)),
       ),
       child: Row(
         children: [
@@ -168,11 +168,11 @@ class _InlineCounter extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: alert
-            ? Colors.orangeAccent.withOpacity(0.10)
-            : Colors.white.withOpacity(0.05),
+            ? Colors.orangeAccent.withValues(alpha: 0.10)
+            : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: alert
-            ? Border.all(color: Colors.orangeAccent.withOpacity(0.35))
+            ? Border.all(color: Colors.orangeAccent.withValues(alpha: 0.35))
             : null,
       ),
       child: Column(

@@ -110,12 +110,7 @@ class _SlideToConfirmState extends State<SlideToConfirm>
               ),
               if (!_confirmed)
                 Padding(
-                  padding: EdgeInsets.only(
-                    left: (_thumbSize + 12) +
-                        (_dragOffset / (trackWidth > _thumbSize ? trackWidth - _thumbSize : 1)) *
-                            (trackWidth - _thumbSize - 24) *
-                            0,
-                  ),
+                  padding: const EdgeInsets.only(left: _thumbSize + 12),
                   child: Center(
                     child: Opacity(
                       opacity: (1.0 - progress * 2).clamp(0.0, 1.0),

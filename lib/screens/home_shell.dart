@@ -186,11 +186,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ],
         ),
       ),
-      const _PrimaryDestination(
+      _PrimaryDestination(
         label: 'More',
         icon: Icons.more_horiz,
         selectedIcon: Icons.more,
-        child: _MoreSection(),
+        child: _MoreSection(onDestinationSelected: _setSelectedDestination),
       ),
     ];
 
@@ -568,7 +568,9 @@ class _ConnectionStrip extends StatelessWidget {
 }
 
 class _MoreSection extends StatefulWidget {
-  const _MoreSection();
+  const _MoreSection({required this.onDestinationSelected});
+
+  final void Function(int) onDestinationSelected;
 
   @override
   State<_MoreSection> createState() => _MoreSectionState();
@@ -705,8 +707,12 @@ class _MoreSectionState extends State<_MoreSection> {
             title: const Text('Settings'),
             subtitle: const Text('Appearance, language and app security'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            onTap: () async {
+              final dest = await Navigator.of(context).push<int>(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+              if (dest != null && mounted) widget.onDestinationSelected(dest);
+            },
           ),
         ),
       ],

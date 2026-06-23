@@ -256,19 +256,19 @@ class _HistoryChartState extends State<_HistoryChart> {
                 horizontalInterval: maxY / 4,
                 verticalInterval: math.max(1, maxX / 4),
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: Colors.white.withOpacity(0.08),
+                  color: Colors.white.withValues(alpha: 0.08),
                   strokeWidth: 1,
                 ),
                 getDrawingVerticalLine: (_) => FlLine(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   strokeWidth: 1,
                 ),
               ),
               borderData: FlBorderData(
                 show: true,
                 border: Border(
-                  left: BorderSide(color: Colors.white.withOpacity(0.18)),
-                  bottom: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  left: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+                  bottom: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
                 ),
               ),
               titlesData: FlTitlesData(
@@ -338,7 +338,7 @@ class _HistoryChartState extends State<_HistoryChart> {
                   return spotIndexes.map((_) {
                     return TouchedSpotIndicatorData(
                       FlLine(
-                        color: widget.color.withOpacity(0.65),
+                        color: widget.color.withValues(alpha: 0.65),
                         strokeWidth: 1.5,
                         dashArray: [4, 3],
                       ),
@@ -392,7 +392,7 @@ class _HistoryChartState extends State<_HistoryChart> {
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: widget.color.withOpacity(0.12),
+                    color: widget.color.withValues(alpha: 0.12),
                   ),
                 ),
               ],
@@ -445,7 +445,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

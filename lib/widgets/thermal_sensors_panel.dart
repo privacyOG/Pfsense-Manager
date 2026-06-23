@@ -115,9 +115,9 @@ class ThermalSensorTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.34)),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
       ),
       child: Row(
         children: [
@@ -125,7 +125,7 @@ class ThermalSensorTile extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.14),
+              color: color.withValues(alpha: 0.14),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.thermostat, color: color, size: 21),

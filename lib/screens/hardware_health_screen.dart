@@ -233,8 +233,8 @@ class _HeaderCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        color: scheme.surfaceContainerHighest.withOpacity(.55),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(.5)),
+        color: scheme.surfaceContainerHighest.withValues(alpha: .55),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .5)),
       ),
       child: Row(
         children: [
@@ -342,7 +342,7 @@ class _SmartDriveCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(.12),
+          backgroundColor: statusColor.withValues(alpha: .12),
           child: Icon(Icons.storage_outlined, color: statusColor, size: 20),
         ),
         title: Text(
@@ -355,7 +355,7 @@ class _SmartDriveCard extends StatelessWidget {
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(.12),
+            color: statusColor.withValues(alpha: .12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -610,8 +610,6 @@ class _MemSwapChart extends StatefulWidget {
 }
 
 class _MemSwapChartState extends State<_MemSwapChart> {
-  int? _touchedIndex;
-
   @override
   Widget build(BuildContext context) {
     final maxX = math.max(1, widget.memSamples.length - 1).toDouble();
@@ -639,19 +637,19 @@ class _MemSwapChartState extends State<_MemSwapChart> {
             horizontalInterval: 25,
             verticalInterval: math.max(1, maxX / 4),
             getDrawingHorizontalLine: (_) => FlLine(
-              color: Colors.white.withOpacity(.08),
+              color: Colors.white.withValues(alpha: .08),
               strokeWidth: 1,
             ),
             getDrawingVerticalLine: (_) => FlLine(
-              color: Colors.white.withOpacity(.05),
+              color: Colors.white.withValues(alpha: .05),
               strokeWidth: 1,
             ),
           ),
           borderData: FlBorderData(
             show: true,
             border: Border(
-              left: BorderSide(color: Colors.white.withOpacity(.18)),
-              bottom: BorderSide(color: Colors.white.withOpacity(.18)),
+              left: BorderSide(color: Colors.white.withValues(alpha: .18)),
+              bottom: BorderSide(color: Colors.white.withValues(alpha: .18)),
             ),
           ),
           titlesData: FlTitlesData(
@@ -700,25 +698,11 @@ class _MemSwapChartState extends State<_MemSwapChart> {
           lineTouchData: LineTouchData(
             enabled: true,
             handleBuiltInTouches: true,
-            touchCallback: (event, response) {
-              if (!mounted) return;
-              setState(() {
-                final spots = response?.lineBarSpots;
-                if (event is FlPointerExitEvent ||
-                    event is FlPanEndEvent ||
-                    spots == null ||
-                    spots.isEmpty) {
-                  _touchedIndex = null;
-                } else {
-                  _touchedIndex = spots.first.spotIndex;
-                }
-              });
-            },
             getTouchedSpotIndicator: (barData, spotIndexes) {
               return spotIndexes.map((_) {
                 return TouchedSpotIndicatorData(
                   FlLine(
-                    color: widget.memColor.withOpacity(.65),
+                    color: widget.memColor.withValues(alpha: .65),
                     strokeWidth: 1.5,
                     dashArray: [4, 3],
                   ),
@@ -772,7 +756,7 @@ class _MemSwapChartState extends State<_MemSwapChart> {
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: widget.memColor.withOpacity(.10),
+                color: widget.memColor.withValues(alpha: .10),
               ),
             ),
             LineChartBarData(
@@ -784,7 +768,7 @@ class _MemSwapChartState extends State<_MemSwapChart> {
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: widget.swapColor.withOpacity(.10),
+                color: widget.swapColor.withValues(alpha: .10),
               ),
             ),
           ],

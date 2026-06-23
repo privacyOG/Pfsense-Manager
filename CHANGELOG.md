@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
 - Application PINs are migrated from plaintext preferences to salted verification values in secure storage, with retry delays after repeated incorrect attempts.
+- **Test connection** button on the firewall profiles screen always failed with an authentication error because it used the in-memory profile (which never holds an API key). It now resolves credentials from the secure keystore before dialling.
+- **Profile import** count displayed as a raw object reference instead of a number due to a missing `await`. The correct count is now shown in the confirmation snackbar.
+- **Firewall rules** with no explicit `disabled` field in the API response were incorrectly rendered as disabled. The parser now treats an absent key as enabled.
+- **Network monitor screen** was painted entirely in hardcoded dark-navy hex values, making the screen unreadable in light mode. All colours now use Material Design 3 `colorScheme` tokens.
+- **Settings navigation** now returns the user to the same tab they were on instead of tearing down and rebuilding the home shell and losing scroll position and loaded data.
+- Stale async responses triggered by a profile switch or reconnection no longer overwrite the data currently on screen (pfBlockerNG screen was missing the generation guard that all other screens already had).
+- WireGuard, S.M.A.R.T., and pfBlockerNG status errors that indicate network or authentication failures now propagate to the UI instead of being silently swallowed.
+- Background alert service Dio instance now sets `followRedirects: false`, matching the main API client and preventing silent credential exposure on redirect.
+- Replaced all remaining `Color.withOpacity()` calls with the non-deprecated `Color.withValues(alpha:)` equivalent.
 
 ## [1.8.0] - 2026-06-18
 

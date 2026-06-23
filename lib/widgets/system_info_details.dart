@@ -90,9 +90,9 @@ class SystemInfoDetails extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withOpacity(0.55),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [

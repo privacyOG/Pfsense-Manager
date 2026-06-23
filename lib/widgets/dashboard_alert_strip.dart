@@ -428,9 +428,9 @@ class _AlertChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: alert.color.withOpacity(0.14),
+            color: alert.color.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: alert.color.withOpacity(0.36)),
+            border: Border.all(color: alert.color.withValues(alpha: 0.36)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

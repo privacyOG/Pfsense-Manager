@@ -7,7 +7,6 @@ import '../providers/session_provider.dart';
 import '../widgets/brand_mark.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
-import 'profile_form_screen.dart';
 import 'profiles_screen.dart';
 
 class StartupScreen extends StatelessWidget {
@@ -44,93 +43,6 @@ class _BrandSplashScreen extends StatelessWidget {
             PfSenseBrandMark(size: 92),
             SizedBox(height: 24),
             CircularProgressIndicator(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class WelcomeProfileScreen extends StatelessWidget {
-  const WelcomeProfileScreen({super.key});
-
-  Future<void> _createProfile(BuildContext context) async {
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const ProfileFormScreen()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-          children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: PfSenseBrandMark(size: 88),
-            ),
-            const SizedBox(height: 28),
-            Text(
-              'Welcome to PfSense Manager',
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.05,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Create a secure local profile to connect directly to your firewall. Credentials are encrypted on-device and never exported with profile metadata.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-            ),
-            const SizedBox(height: 28),
-            const Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _TrustChip(
-                  icon: Icons.lock_outline,
-                  label: 'Keystore secured',
-                ),
-                _TrustChip(
-                  icon: Icons.https_outlined,
-                  label: 'HTTPS only',
-                ),
-                _TrustChip(
-                  icon: Icons.verified_user_outlined,
-                  label: 'Self-signed ready',
-                ),
-              ],
-            ),
-            const SizedBox(height: 34),
-            const _SecurityPanel(
-              title: 'Security foundation',
-              items: [
-                'API credentials use platform secure storage.',
-                'HTTPS is required for all API traffic.',
-                'Self-signed certificates are opt-in per profile.',
-                'Production builds do not log or display secrets.',
-              ],
-            ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: () => _createProfile(context),
-              icon: const Icon(Icons.add_link_outlined),
-              label: const Text('Create secure profile'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfilesScreen()),
-              ),
-              icon: const Icon(Icons.file_upload_outlined),
-              label: const Text('Import or manage profiles'),
-            ),
           ],
         ),
       ),
@@ -364,24 +276,6 @@ class _SecurityPanel extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _TrustChip extends StatelessWidget {
-  const _TrustChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Chip(
-      avatar: Icon(icon, size: 18, color: scheme.primary),
-      label: Text(label),
-      side: BorderSide(color: scheme.outlineVariant),
-      backgroundColor: scheme.surface,
     );
   }
 }
