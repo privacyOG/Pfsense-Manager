@@ -948,9 +948,9 @@ class _BandwidthChartState extends State<_BandwidthChart> {
                   getDotPainter: (spot, percent, barData, index) {
                     return FlDotCirclePainter(
                       radius: 4.5,
-                      color: barData.color ?? Colors.white,
+                      color: barData.color ?? scheme.primary,
                       strokeWidth: 2,
-                      strokeColor: Colors.white,
+                      strokeColor: scheme.surface,
                     );
                   },
                 ),
@@ -958,7 +958,7 @@ class _BandwidthChartState extends State<_BandwidthChart> {
             }).toList();
           },
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF0E2844),
+            getTooltipColor: (_) => scheme.surfaceContainerHigh,
             tooltipRoundedRadius: 10,
             tooltipPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

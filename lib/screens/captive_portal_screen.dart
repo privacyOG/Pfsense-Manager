@@ -433,7 +433,13 @@ class _VouchersTabState extends State<_VouchersTab>
                     FilledButton.icon(
                       onPressed: _generating ? null : _generate,
                       icon: _generating
-                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Theme.of(context).colorScheme.onPrimary,
+                              ),
+                            )
                           : const Icon(Icons.add_outlined),
                       label: Text(_generating ? 'Generating…' : 'Generate'),
                     ),

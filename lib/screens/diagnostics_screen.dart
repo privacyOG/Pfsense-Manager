@@ -337,9 +337,12 @@ class _RunButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: running ? null : onPressed,
       icon: running
-          ? const SizedBox.square(
+          ? SizedBox.square(
               dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.onPrimary,
+              ),
             )
           : const Icon(Icons.play_arrow_outlined),
       label: Text(running ? 'Running…' : label),

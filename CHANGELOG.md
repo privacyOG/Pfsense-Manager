@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - WireGuard, S.M.A.R.T., and pfBlockerNG status errors that indicate network or authentication failures now propagate to the UI instead of being silently swallowed.
 - Background alert service Dio instance now sets `followRedirects: false`, matching the main API client and preventing silent credential exposure on redirect.
 - Replaced all remaining `Color.withOpacity()` calls with the non-deprecated `Color.withValues(alpha:)` equivalent.
+- **Chart and counter-tile colours** in the gateway history panel, hardware health screen, network monitor screen, and interface traffic totals were hardcoded to dark-navy hex values. All are now resolved from the active Material Design 3 `colorScheme` so they render correctly in light mode and AMOLED themes.
+- **Loading spinner in FilledButton** used hardcoded `Colors.white` for the `CircularProgressIndicator` colour. The AMOLED theme sets `onPrimary` to black, making the spinner invisible. Both the diagnostics run button and the captive-portal voucher generate button now derive the spinner colour from `colorScheme.onPrimary`.
 
 ## [1.8.0] - 2026-06-18
 

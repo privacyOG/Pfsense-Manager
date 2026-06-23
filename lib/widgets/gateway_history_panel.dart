@@ -162,12 +162,14 @@ class GatewayHistoryPanel extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             if (samples.length < 2)
-              const SizedBox(
+              SizedBox(
                 height: 150,
                 child: Center(
                   child: Text(
                     'Collecting gateway samples…',
-                    style: TextStyle(color: Color(0xFF8199B2)),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               )
@@ -224,6 +226,7 @@ class _HistoryChartState extends State<_HistoryChart> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final peak = widget.values.fold<double>(0, math.max);
     final maxY = widget.fixedMaximum ?? _niceScale(peak, minimum: 10);
     final maxX = math.max(1, widget.values.length - 1).toDouble();
@@ -256,19 +259,19 @@ class _HistoryChartState extends State<_HistoryChart> {
                 horizontalInterval: maxY / 4,
                 verticalInterval: math.max(1, maxX / 4),
                 getDrawingHorizontalLine: (_) => FlLine(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: scheme.outlineVariant.withValues(alpha: 0.3),
                   strokeWidth: 1,
                 ),
                 getDrawingVerticalLine: (_) => FlLine(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: scheme.outlineVariant.withValues(alpha: 0.2),
                   strokeWidth: 1,
                 ),
               ),
               borderData: FlBorderData(
                 show: true,
                 border: Border(
-                  left: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
-                  bottom: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+                  left: BorderSide(color: scheme.outlineVariant),
+                  bottom: BorderSide(color: scheme.outlineVariant),
                 ),
               ),
               titlesData: FlTitlesData(
@@ -349,7 +352,7 @@ class _HistoryChartState extends State<_HistoryChart> {
                             radius: 4,
                             color: widget.color,
                             strokeWidth: 1.5,
-                            strokeColor: Colors.white,
+                            strokeColor: scheme.surface,
                           );
                         },
                       ),
@@ -357,7 +360,7 @@ class _HistoryChartState extends State<_HistoryChart> {
                   }).toList();
                 },
                 touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => const Color(0xFF0E2844),
+                  getTooltipColor: (_) => scheme.surfaceContainerHigh,
                   tooltipRoundedRadius: 8,
                   tooltipPadding: const EdgeInsets.symmetric(
                     horizontal: 10,
