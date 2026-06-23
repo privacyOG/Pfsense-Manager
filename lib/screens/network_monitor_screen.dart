@@ -377,13 +377,14 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
 
   Widget _summaryCard({required _InterfaceRates rates}) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF17385D), Color(0xFF0A1F36)],
+          colors: [colorScheme.primaryContainer, colorScheme.primary.withValues(alpha: 0.85)],
         ),
         boxShadow: [
           BoxShadow(
@@ -399,9 +400,9 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.monitor_heart_outlined,
-                color: Color(0xFF8BC1FF),
+                color: colorScheme.onPrimaryContainer,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -409,7 +410,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
                   'Real-time Network Activity',
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: colorScheme.onPrimaryContainer,
                   ),
                 ),
               ),
@@ -595,10 +596,11 @@ class _InterfaceTrafficCard extends StatelessWidget {
     final label = _interfaceLabel(interface);
     final inRate = rates?.inBps ?? 0;
     final outRate = rates?.outBps ?? 0;
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: const Color(0xFF102741),
+        color: colorScheme.surfaceContainer,
         border: Border.all(color: accent.withValues(alpha: 0.32)),
         boxShadow: [
           BoxShadow(
@@ -636,7 +638,7 @@ class _InterfaceTrafficCard extends StatelessWidget {
                       Text(
                         label,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
+                              color: colorScheme.onSurface,
                               fontWeight: FontWeight.w800,
                             ),
                       ),
@@ -708,11 +710,12 @@ class _TrafficChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: const Color(0xFF0B1C30),
-        border: Border.all(color: const Color(0xFF2B4E72)),
+        color: colorScheme.surfaceContainerHigh,
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       padding: const EdgeInsets.fromLTRB(16, 16, 10, 12),
       child: Column(
@@ -721,14 +724,14 @@ class _TrafficChartCard extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.w800,
                 ),
           ),
           const SizedBox(height: 3),
           Text(
             '$subtitle • ${unit == _BandwidthUnit.bits ? 'bits/s' : 'Bytes/s'}',
-            style: const TextStyle(color: Color(0xFF9CB3CA)),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
           const _ChartLegend(),
@@ -780,7 +783,7 @@ class _LegendItem extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: Color(0xFFD4E1EC))),
+        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }
@@ -824,6 +827,7 @@ class _BandwidthChartState extends State<_BandwidthChart> {
     final scale = _niceScale(visiblePeak);
     final interval = scale / 2;
     final maxX = math.max(1, widget.history.length - 1).toDouble();
+    final scheme = Theme.of(context).colorScheme;
 
     return LineChart(
       LineChartData(
@@ -839,12 +843,12 @@ class _BandwidthChartState extends State<_BandwidthChart> {
           verticalInterval: widget.compact ? 1 : math.max(1, maxX / 4),
           getDrawingHorizontalLine: (value) => FlLine(
             color: value == 0
-                ? Colors.white.withValues(alpha: 0.42)
-                : Colors.white.withValues(alpha: 0.10),
+                ? scheme.onSurface.withValues(alpha: 0.42)
+                : scheme.onSurface.withValues(alpha: 0.10),
             strokeWidth: value == 0 ? 1.4 : 1,
           ),
           getDrawingVerticalLine: (_) => FlLine(
-            color: Colors.white.withValues(alpha: 0.07),
+            color: scheme.onSurface.withValues(alpha: 0.07),
             strokeWidth: 1,
           ),
         ),
@@ -867,7 +871,7 @@ class _BandwidthChartState extends State<_BandwidthChart> {
                     child: Text(
                       '0',
                       style: TextStyle(
-                        color: Color(0xFFD7E3EE),
+                        color: scheme.onSurface,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
@@ -910,7 +914,7 @@ class _BandwidthChartState extends State<_BandwidthChart> {
                   child: Text(
                     _formatClock(widget.history[index].capturedAt),
                     style: TextStyle(
-                      color: const Color(0xFF9CB3CA),
+                      color: scheme.onSurfaceVariant,
                       fontSize: widget.compact ? 9 : 10,
                       fontWeight:
                           isStart || isEnd ? FontWeight.w700 : FontWeight.w500,
@@ -924,8 +928,8 @@ class _BandwidthChartState extends State<_BandwidthChart> {
         borderData: FlBorderData(
           show: true,
           border: Border(
-            right: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
-            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+            right: BorderSide(color: scheme.outlineVariant),
+            bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
           ),
         ),
         lineTouchData: LineTouchData(
@@ -935,7 +939,7 @@ class _BandwidthChartState extends State<_BandwidthChart> {
             return spotIndexes.map((_) {
               return TouchedSpotIndicatorData(
                 FlLine(
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: scheme.onSurface.withValues(alpha: 0.55),
                   strokeWidth: 1.5,
                   dashArray: [4, 3],
                 ),
@@ -1121,7 +1125,7 @@ class _ChartPlaceholder extends StatelessWidget {
             ? 'Collecting traffic samples…'
             : 'Live chart starts after the next sample',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Color(0xFF8199B2)),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }
@@ -1142,10 +1146,11 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: colorScheme.onPrimaryContainer.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1158,8 +1163,8 @@ class _MetricTile extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: Color(0xFFAFC0D1),
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer.withValues(alpha: 0.65),
                     fontSize: 12,
                   ),
                 ),
@@ -1168,8 +1173,8 @@ class _MetricTile extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
