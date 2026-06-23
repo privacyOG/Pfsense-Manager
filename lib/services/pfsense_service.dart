@@ -8,6 +8,7 @@ import '../models/network_state.dart';
 import '../models/smart_drive.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
+import '../models/system_log_entry.dart';
 import '../models/top_talker.dart';
 import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
@@ -94,6 +95,21 @@ class PfSenseService {
     final response = await _client.get('/api/v2/status/logs/firewall', queryParameters: params);
     final logsData = response.data['data'] as List? ?? [];
     return logsData.map((json) => FirewallLog.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  /// Fetches a pfSense system log by type (e.g. `system`, `dhcpd`, `resolver`,
+  /// `gateways`). Returns the most recent [limit] lines.
+  Future<List<SystemLogEntry>> getSystemLog(
+    String logType, {
+    int limit = 200,
+  }) async {
+    _ensureActive();
+    final response = await _client.get(
+      '/api/v2/status/logs/$logType',
+      queryParameters: {'limit': limit.toString()},
+    );
+    final data = response.data['data'] as List? ?? const [];
+    return data.map(SystemLogEntry.fromJson).toList();
   }
 
   Future<List<TopTalker>> getTopTalkers({int limit = 25}) async {

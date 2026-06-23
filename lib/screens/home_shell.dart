@@ -27,6 +27,7 @@ import 'profiles_screen.dart';
 import 'top_talkers_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
+import 'system_logs_screen.dart';
 import 'system_screen.dart';
 import 'vpn_screen.dart';
 
@@ -676,6 +677,17 @@ class _MoreSectionState extends State<_MoreSection> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const HardwareHealthScreen()),
+            ),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.subject_outlined),
+            title: const Text('System logs'),
+            subtitle: const Text('System, DHCP, DNS and gateway log streams'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SystemLogsScreen()),
             ),
           ),
         ),
