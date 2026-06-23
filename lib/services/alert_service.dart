@@ -141,6 +141,8 @@ class AlertService {
       headers: {'X-API-Key': apiKey},
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
+      followRedirects: false,
+      maxRedirects: 0,
     ));
 
     if (allowSelfSigned) {
