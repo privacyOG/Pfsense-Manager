@@ -524,7 +524,7 @@ class _MemorySwapSection extends StatelessWidget {
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
-                      ?.copyWith(color: const Color(0xFF8199B2)),
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
             ],
@@ -612,6 +612,7 @@ class _MemSwapChart extends StatefulWidget {
 class _MemSwapChartState extends State<_MemSwapChart> {
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final maxX = math.max(1, widget.memSamples.length - 1).toDouble();
 
     final memSpots = [
@@ -637,19 +638,19 @@ class _MemSwapChartState extends State<_MemSwapChart> {
             horizontalInterval: 25,
             verticalInterval: math.max(1, maxX / 4),
             getDrawingHorizontalLine: (_) => FlLine(
-              color: Colors.white.withValues(alpha: .08),
+              color: scheme.outlineVariant.withValues(alpha: 0.3),
               strokeWidth: 1,
             ),
             getDrawingVerticalLine: (_) => FlLine(
-              color: Colors.white.withValues(alpha: .05),
+              color: scheme.outlineVariant.withValues(alpha: 0.2),
               strokeWidth: 1,
             ),
           ),
           borderData: FlBorderData(
             show: true,
             border: Border(
-              left: BorderSide(color: Colors.white.withValues(alpha: .18)),
-              bottom: BorderSide(color: Colors.white.withValues(alpha: .18)),
+              left: BorderSide(color: scheme.outlineVariant),
+              bottom: BorderSide(color: scheme.outlineVariant),
             ),
           ),
           titlesData: FlTitlesData(
@@ -713,7 +714,7 @@ class _MemSwapChartState extends State<_MemSwapChart> {
                         radius: 4,
                         color: barData.color ?? widget.memColor,
                         strokeWidth: 1.5,
-                        strokeColor: Colors.white,
+                        strokeColor: scheme.surface,
                       );
                     },
                   ),
@@ -721,7 +722,7 @@ class _MemSwapChartState extends State<_MemSwapChart> {
               }).toList();
             },
             touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => const Color(0xFF0E2844),
+              getTooltipColor: (_) => scheme.surfaceContainerHigh,
               tooltipRoundedRadius: 8,
               tooltipPadding: const EdgeInsets.symmetric(
                 horizontal: 10,

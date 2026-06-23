@@ -112,10 +112,11 @@ class _CounterTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: counter.color.withValues(alpha: 0.24)),
       ),
@@ -129,7 +130,7 @@ class _CounterTile extends StatelessWidget {
               children: [
                 Text(
                   counter.label,
-                  style: const TextStyle(color: Color(0xFFAFC0D1), fontSize: 11),
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -163,13 +164,14 @@ class _InlineCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = alert ? Colors.orangeAccent : Colors.white;
+    final scheme = Theme.of(context).colorScheme;
+    final color = alert ? Colors.orangeAccent : scheme.onSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: alert
             ? Colors.orangeAccent.withValues(alpha: 0.10)
-            : Colors.white.withValues(alpha: 0.05),
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(12),
         border: alert
             ? Border.all(color: Colors.orangeAccent.withValues(alpha: 0.35))
@@ -179,7 +181,7 @@ class _InlineCounter extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF9CB3CA), fontSize: 10)),
+          Text(label, style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 10)),
           const SizedBox(height: 2),
           Text(
             value,
