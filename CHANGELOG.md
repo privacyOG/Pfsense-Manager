@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Localization (Network screens)** — the DHCP leases and Top Talkers screens now route every user-facing string through the app's localization system with complete English, Arabic, Spanish, French, and German translations, instead of being hardcoded in English. A new `AppStrings.f(key, params)` helper supplies placeholder substitution for interpolated strings (timestamps, counts, device names). This is the first batch of a wider pass to localize the remaining feature screens.
+
 ### Fixed
 
 - The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
