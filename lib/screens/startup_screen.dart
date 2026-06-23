@@ -280,24 +280,6 @@ class _SecurityPanel extends StatelessWidget {
   }
 }
 
-class _TrustChip extends StatelessWidget {
-  const _TrustChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Chip(
-      avatar: Icon(icon, size: 18, color: scheme.primary),
-      label: Text(label),
-      side: BorderSide(color: scheme.outlineVariant),
-      backgroundColor: scheme.surface,
-    );
-  }
-}
-
 class _StatusNotice extends StatelessWidget {
   const _StatusNotice({
     required this.icon,
