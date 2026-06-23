@@ -10,6 +10,7 @@ import '../models/system_service.dart';
 import '../models/system_info.dart';
 import '../models/top_talker.dart';
 import '../models/wireguard_tunnel.dart';
+import '../utils/api_exception.dart';
 import 'api_client.dart';
 
 /// Service layer for all pfSense API operations.
@@ -242,7 +243,8 @@ class PfSenseService {
         }).toList();
         return WireGuardTunnel.fromJson({...tunnel, 'peers': peers});
       }).toList();
-    } catch (_) {
+    } on ApiException catch (e) {
+      if (e.isNetworkError || e.isTimeout || e.isAuthError) rethrow;
       return [];
     }
   }
@@ -260,7 +262,8 @@ class PfSenseService {
       final response = await _client.get('/api/v2/diagnostics/smart_status');
       final data = response.data['data'] as List? ?? [];
       return data.whereType<Map<String, dynamic>>().map(SmartDrive.fromJson).toList();
-    } catch (_) {
+    } on ApiException catch (e) {
+      if (e.isNetworkError || e.isTimeout || e.isAuthError) rethrow;
       return [];
     }
   }
@@ -291,7 +294,8 @@ class PfSenseService {
       final data = response.data['data'];
       if (data is Map<String, dynamic>) return data;
       return {};
-    } catch (_) {
+    } on ApiException catch (e) {
+      if (e.isNetworkError || e.isTimeout || e.isAuthError) rethrow;
       return null;
     }
   }

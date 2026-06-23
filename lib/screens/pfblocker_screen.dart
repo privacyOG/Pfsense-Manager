@@ -18,6 +18,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
   bool _toggling = false;
   Object? _error;
   DateTime? _lastRefresh;
+  int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
 
@@ -29,6 +30,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     final changed = _loadedSessionGeneration != session.sessionGeneration ||
         _loadedProfileId != profileId;
     if (changed) {
+      _requestGeneration++;
       _status = null;
       _error = null;
       _lastRefresh = null;
@@ -47,22 +49,30 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
+    final request = ++_requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final data = await session.service!.getPfBlockerStatus();
-      if (!mounted) return;
+      if (!mounted ||
+          request != _requestGeneration ||
+          sessionGeneration != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
       setState(() {
         _status = data;
         _available = data != null;
         _lastRefresh = DateTime.now();
       });
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (mounted && request == _requestGeneration) setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && request == _requestGeneration) setState(() => _loading = false);
     }
   }
 

@@ -9,7 +9,6 @@ import '../providers/app_settings_provider.dart';
 import '../providers/profile_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/dashboard_warning_preferences.dart';
-import 'home_shell.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -77,10 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setInt(_destinationKey, index);
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const HomeShell()),
-      (_) => false,
-    );
+    Navigator.of(context).pop(index);
   }
 
 
