@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/dhcp_lease.dart';
 import '../providers/session_provider.dart';
 import '../widgets/state_message.dart';
@@ -68,10 +69,11 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) {
       if (!mounted) return;
+      final disconnected = AppStrings.of(context).t('disconnected');
       setState(() {
         _leases = [];
         _lastSuccessfulRefresh = null;
-        _error = 'Disconnected';
+        _error = disconnected;
       });
       return;
     }
@@ -118,7 +120,11 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Magic packet sent to ${lease.hostname.isNotEmpty ? lease.hostname : lease.macAddress}',
+              AppStrings.of(context).f('magicPacketSent', {
+                'target': lease.hostname.isNotEmpty
+                    ? lease.hostname
+                    : lease.macAddress,
+              }),
             ),
           ),
         );
@@ -136,21 +142,25 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
 
   Future<void> _delete(DhcpLease lease) async {
     if (_actionBusy) return;
+    final strings = AppStrings.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete DHCP lease'),
+        title: Text(strings.t('deleteDhcpLease')),
         content: Text(
-          'Remove ${lease.ipAddress.isEmpty ? lease.macAddress : lease.ipAddress} from the lease table?',
+          strings.f('removeLeaseConfirm', {
+            'target':
+                lease.ipAddress.isEmpty ? lease.macAddress : lease.ipAddress,
+          }),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(strings.t('cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(strings.t('delete')),
           ),
         ],
       ),
@@ -177,6 +187,7 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final session = context.watch<PfSenseSessionProvider>();
     final query = _search.text.trim().toLowerCase();
     final visible = _leases
@@ -203,24 +214,24 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
           if (_lastSuccessfulRefresh != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Last updated ${_formatTime(_lastSuccessfulRefresh!)}',
+              strings.f('lastUpdated', {'time': _formatTime(_lastSuccessfulRefresh!)}),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
           const SizedBox(height: 14),
           TextField(
             controller: _search,
-            decoration: const InputDecoration(
-              labelText: 'Search IP, MAC, hostname, interface',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: strings.t('searchLeases'),
+              prefixIcon: const Icon(Icons.search),
             ),
           ),
           const SizedBox(height: 14),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
-            const StateMessage(
+            StateMessage(
               icon: Icons.cloud_off_outlined,
-              text: 'Disconnected',
+              text: strings.t('disconnected'),
             )
           else if (_error != null)
             StateMessage(
@@ -228,9 +239,9 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
               text: _error.toString(),
             )
           else if (!_loading && visible.isEmpty)
-            const StateMessage(
+            StateMessage(
               icon: Icons.dns_outlined,
-              text: 'No DHCP leases reported by pfREST.',
+              text: strings.t('noLeases'),
             ),
           if (session.connected)
             for (final lease in visible)
@@ -268,6 +279,7 @@ class _LeaseSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final strings = AppStrings.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -281,13 +293,13 @@ class _LeaseSummary extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'DHCP Lease Management',
+              strings.t('dhcpManagement'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
-          _MiniStat('Active', active.toString()),
-          _MiniStat('Static', staticCount.toString()),
-          _MiniStat('Total', total.toString()),
+          _MiniStat(strings.t('active'), active.toString()),
+          _MiniStat(strings.t('static'), staticCount.toString()),
+          _MiniStat(strings.t('total'), total.toString()),
         ],
       ),
     );
@@ -307,6 +319,7 @@ class _LeaseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final color = lease.active ? const Color(0xFF00C2A8) : Colors.orangeAccent;
     return Card(
       child: ListTile(
@@ -334,12 +347,12 @@ class _LeaseTile extends StatelessWidget {
           children: [
             if (lease.macAddress.isNotEmpty)
               IconButton(
-                tooltip: 'Wake on LAN',
+                tooltip: strings.t('wakeOnLan'),
                 onPressed: onWake,
                 icon: const Icon(Icons.power_settings_new_outlined),
               ),
             IconButton(
-              tooltip: 'Delete lease',
+              tooltip: strings.t('deleteLease'),
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline),
             ),

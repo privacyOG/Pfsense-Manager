@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/top_talker.dart';
 import '../providers/session_provider.dart';
 import '../widgets/state_message.dart';
@@ -64,9 +65,10 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) {
       if (!mounted) return;
+      final disconnected = AppStrings.of(context).t('disconnected');
       setState(() {
         _talkers = [];
-        _error = 'Not connected';
+        _error = disconnected;
       });
       return;
     }
@@ -98,6 +100,7 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final session = context.watch<PfSenseSessionProvider>();
     final maxBytes = _talkers.isEmpty ? 1.0 : _talkers.first.bytes.toDouble();
 
@@ -110,11 +113,11 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
           const SizedBox(height: 8),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
-            const StateMessage(icon: Icons.cloud_off_outlined, text: 'Disconnected — connect to a firewall first')
+            StateMessage(icon: Icons.cloud_off_outlined, text: strings.t('disconnectedConnectFirst'))
           else if (_error != null)
-            StateMessage(icon: Icons.error_outline, text: _error.toString(), action: TextButton(onPressed: () => _load(showSpinner: true), child: const Text('Retry')))
+            StateMessage(icon: Icons.error_outline, text: _error.toString(), action: TextButton(onPressed: () => _load(showSpinner: true), child: Text(strings.t('retry'))))
           else if (_talkers.isEmpty && !_loading)
-            const StateMessage(icon: Icons.bar_chart_outlined, text: 'No active connection states found', details: 'Traffic will appear once devices start communicating')
+            StateMessage(icon: Icons.bar_chart_outlined, text: strings.t('noActiveStates'), details: strings.t('trafficWillAppear'))
           else
             for (final talker in _talkers)
               Padding(
@@ -135,6 +138,7 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final strings = AppStrings.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -154,11 +158,11 @@ class _SummaryCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Top Talkers', style: Theme.of(context).textTheme.titleMedium),
+                  Text(strings.t('topTalkers'), style: Theme.of(context).textTheme.titleMedium),
                   Text(
                     lastRefresh == null
-                        ? 'Aggregated by active connection state bytes'
-                        : 'Updated ${_clock(lastRefresh!)} · refreshes every 10 s',
+                        ? strings.t('topTalkersSubtitle')
+                        : strings.f('topTalkersUpdated', {'time': _clock(lastRefresh!)}),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -233,7 +237,12 @@ class _TalkerTile extends StatelessWidget {
                 Icon(Icons.link_outlined, size: 13, color: scheme.onSurfaceVariant),
                 const SizedBox(width: 4),
                 Text(
-                  '${talker.connections} connection${talker.connections == 1 ? '' : 's'}',
+                  talker.connections == 1
+                      ? AppStrings.of(context).t('connectionOne')
+                      : AppStrings.of(context).f(
+                          'connectionsMany',
+                          {'count': talker.connections.toString()},
+                        ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (talker.interface.isNotEmpty) ...[

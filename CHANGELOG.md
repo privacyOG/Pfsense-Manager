@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **System log viewer** — a new More → System logs screen with tabs for the system, DHCP, DNS resolver, and gateway logs. Each tab streams the latest lines from the pfSense REST API, parses the syslog timestamp and originating process into a readable layout, supports text filtering, optional 10-second auto-refresh, pull-to-refresh, and one-tap copy of the visible lines.
 
+### Changed
+
+- **Localization (Network screens)** — the DHCP leases and Top Talkers screens now route every user-facing string through the app's localization system with complete English, Arabic, Spanish, French, and German translations, instead of being hardcoded in English. A new `AppStrings.f(key, params)` helper supplies placeholder substitution for interpolated strings (timestamps, counts, device names). VPN and pfBlockerNG feature strings are also localized across all supported languages.
+
 ### Fixed
 
 - The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
