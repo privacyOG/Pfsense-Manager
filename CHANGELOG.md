@@ -6,9 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **System log viewer** — a new More → System logs screen with tabs for the system, DHCP, DNS resolver, and gateway logs. Each tab streams the latest lines from the pfSense REST API, parses the syslog timestamp and originating process into a readable layout, supports text filtering, optional 10-second auto-refresh, pull-to-refresh, and one-tap copy of the visible lines.
+
 ### Changed
 
-- **Localization (Network screens)** — the DHCP leases and Top Talkers screens now route every user-facing string through the app's localization system with complete English, Arabic, Spanish, French, and German translations, instead of being hardcoded in English. A new `AppStrings.f(key, params)` helper supplies placeholder substitution for interpolated strings (timestamps, counts, device names). This is the first batch of a wider pass to localize the remaining feature screens.
+- **Localization (Network screens)** — the DHCP leases and Top Talkers screens now route every user-facing string through the app's localization system with complete English, Arabic, Spanish, French, and German translations, instead of being hardcoded in English. A new `AppStrings.f(key, params)` helper supplies placeholder substitution for interpolated strings (timestamps, counts, device names). VPN and pfBlockerNG feature strings are also localized across all supported languages.
 
 ### Fixed
 
@@ -25,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced all remaining `Color.withOpacity()` calls with the non-deprecated `Color.withValues(alpha:)` equivalent.
 - **Chart and counter-tile colours** in the gateway history panel, hardware health screen, network monitor screen, and interface traffic totals were hardcoded to dark-navy hex values. All are now resolved from the active Material Design 3 `colorScheme` so they render correctly in light mode and AMOLED themes.
 - **Loading spinner in FilledButton** used hardcoded `Colors.white` for the `CircularProgressIndicator` colour. The AMOLED theme sets `onPrimary` to black, making the spinner invisible. Both the diagnostics run button and the captive-portal voucher generate button now derive the spinner colour from `colorScheme.onPrimary`.
+- **Spotlight search results were not actionable** — tapping a DHCP lease, firewall rule, or service result simply dismissed the search overlay and did nothing. Selecting a result now opens a detail sheet showing the item's key fields, with one-tap copy for IP, MAC, source, and destination values.
 
 ## [1.8.0] - 2026-06-18
 
