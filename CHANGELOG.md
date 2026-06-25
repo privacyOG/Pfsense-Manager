@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **System log viewer** — a new More → System logs screen with tabs for the system, DHCP, DNS resolver, and gateway logs. Each tab streams the latest lines from the pfSense REST API, parses the syslog timestamp and originating process into a readable layout, supports text filtering, optional 10-second auto-refresh, pull-to-refresh, and one-tap copy of the visible lines.
+
 ### Fixed
 
 - The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
