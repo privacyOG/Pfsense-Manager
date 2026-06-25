@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../providers/session_provider.dart';
 
 class PfBlockerScreen extends StatefulWidget {
@@ -80,14 +81,13 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     if (_updating) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
+    final updateMsg = AppStrings.of(context).t('pfblockerUpdateTriggered');
     setState(() => _updating = true);
     try {
       await session.service!.updatePfBlockerLists();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('pfBlockerNG update triggered. This may take a few minutes.'),
-          ),
+          SnackBar(content: Text(updateMsg)),
         );
       }
     } catch (e) {
@@ -124,22 +124,23 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pause pfBlockerNG?'),
-        content: const Text(
-          'DNS blocking and IP lists will be disabled. All traffic will pass unfiltered until you re-enable it.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Pause blocking'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final s = AppStrings.of(ctx);
+        return AlertDialog(
+          title: Text(s.t('pausePfblocker')),
+          content: Text(s.t('pausePfblockerBody')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(s.t('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(s.t('pauseBlocking')),
+            ),
+          ],
+        );
+      },
     );
     if (confirmed != true || !mounted) return;
 
@@ -161,6 +162,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
     final scheme = Theme.of(context).colorScheme;
+    final strings = AppStrings.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -168,7 +170,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
         actions: [
           if (_lastRefresh != null)
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: strings.t('refresh'),
               onPressed: _loading ? null : _load,
               icon: const Icon(Icons.refresh),
             ),
@@ -184,22 +186,21 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
               _InfoCard(
                 icon: Icons.cloud_off_outlined,
                 color: scheme.error,
-                title: 'Disconnected',
-                subtitle: 'Connect to a pfSense firewall to view pfBlockerNG status.',
+                title: strings.t('disconnected'),
+                subtitle: strings.t('pfblockerConnectFirst'),
               )
             else if (!_available)
               _InfoCard(
                 icon: Icons.extension_off_outlined,
                 color: scheme.tertiary,
-                title: 'pfBlockerNG not available',
-                subtitle:
-                    'The pfSense REST API did not return pfBlockerNG data. Make sure the package is installed and the API endpoint is accessible.',
+                title: strings.t('pfblockerNotAvailable'),
+                subtitle: strings.t('pfblockerNotAvailableDetail'),
               )
             else if (_error != null)
               _InfoCard(
                 icon: Icons.error_outline,
                 color: scheme.error,
-                title: 'Failed to load',
+                title: strings.t('pfblockerLoadFailed'),
                 subtitle: _error.toString(),
               )
             else if (_status != null) ...[
@@ -216,7 +217,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
               const SizedBox(height: 16),
               if (_lastRefresh != null)
                 Text(
-                  'Last updated ${_formatTime(_lastRefresh!)}',
+                  strings.f('lastUpdated', {'time': _formatTime(_lastRefresh!)}),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
             ] else if (!_loading)
@@ -224,7 +225,7 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
                 icon: Icons.shield_outlined,
                 color: scheme.primary,
                 title: 'pfBlockerNG',
-                subtitle: 'Pull down to load status, or wait for auto-load after connecting.',
+                subtitle: strings.t('pfblockerLoadHint'),
               ),
           ],
         ),
@@ -264,7 +265,7 @@ class _StatusHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  enabled ? 'pfBlockerNG Active' : 'pfBlockerNG Paused',
+                  AppStrings.of(context).t(enabled ? 'pfblockerActive' : 'pfblockerPaused'),
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -300,25 +301,25 @@ class _StatsGrid extends StatelessWidget {
       runSpacing: 10,
       children: [
         _StatCard(
-          label: 'DNSBL Blocked',
+          label: AppStrings.of(context).t('dnsblBlocked'),
           value: _fmt(dnsbl['blocked'] ?? status['dnsbl_blocked']),
           icon: Icons.dns_outlined,
           color: const Color(0xFFE53935),
         ),
         _StatCard(
-          label: 'DNSBL Allowed',
+          label: AppStrings.of(context).t('dnsblAllowed'),
           value: _fmt(dnsbl['allowed'] ?? status['dnsbl_allowed']),
           icon: Icons.check_circle_outline,
           color: const Color(0xFF00C2A8),
         ),
         _StatCard(
-          label: 'IP Blocked',
+          label: AppStrings.of(context).t('ipBlocked'),
           value: _fmt(ip['blocked'] ?? status['ip_blocked']),
           icon: Icons.block_outlined,
           color: const Color(0xFFFF6F00),
         ),
         _StatCard(
-          label: 'Lists Loaded',
+          label: AppStrings.of(context).t('listsLoaded'),
           value: _fmt(status['lists_loaded'] ?? status['list_count']),
           icon: Icons.list_alt_outlined,
           color: const Color(0xFF7B61FF),
@@ -410,7 +411,7 @@ class _ActionRow extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.sync),
-          label: const Text('Update blocklists now'),
+          label: Text(AppStrings.of(context).t('updateBlocklists')),
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(48),
           ),
@@ -419,7 +420,7 @@ class _ActionRow extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: loading ? null : onToggle,
           icon: Icon(enabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-          label: Text(enabled ? 'Pause blocking' : 'Resume blocking'),
+          label: Text(AppStrings.of(context).t(enabled ? 'pauseBlocking' : 'resumeBlocking')),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(48),
             foregroundColor: enabled ? Theme.of(context).colorScheme.error : null,
