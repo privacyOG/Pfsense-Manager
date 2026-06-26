@@ -46,10 +46,22 @@ class NetworkState {
       destination: _endpoint(destinationIp, destinationPort),
       interface: (json['interface'] ?? json['if'] ?? '').toString(),
       state: (json['state'] ?? json['tcp_state'] ?? '').toString(),
-      bytes: _parseInt(json['bytes']),
-      packets: _parseInt(json['packets']),
+      bytes: _parseCounter(
+        total: json['bytes_total'],
+        legacy: json['bytes'],
+        inbound: json['bytes_in'],
+        outbound: json['bytes_out'],
+      ),
+      packets: _parseCounter(
+        total: json['packets_total'],
+        legacy: json['packets'],
+        inbound: json['packets_in'],
+        outbound: json['packets_out'],
+      ),
       age: (json['age'] ?? '').toString(),
-      expires: (json['expires'] ?? json['expire'] ?? '').toString(),
+      expires:
+          (json['expires_in'] ?? json['expires'] ?? json['expire'] ?? '')
+              .toString(),
     );
   }
 
@@ -60,9 +72,26 @@ class NetworkState {
     return '$value:$portValue';
   }
 
-  static int _parseInt(dynamic value) {
+  static int _parseCounter({
+    required dynamic total,
+    required dynamic legacy,
+    required dynamic inbound,
+    required dynamic outbound,
+  }) {
+    final totalValue = _parseNullableInt(total);
+    if (totalValue != null) return totalValue;
+
+    final legacyValue = _parseNullableInt(legacy);
+    if (legacyValue != null) return legacyValue;
+
+    return (_parseNullableInt(inbound) ?? 0) +
+        (_parseNullableInt(outbound) ?? 0);
+  }
+
+  static int? _parseNullableInt(dynamic value) {
+    if (value == null) return null;
     if (value is int) return value;
     if (value is num) return value.round();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+    return int.tryParse(value.toString());
   }
 }
