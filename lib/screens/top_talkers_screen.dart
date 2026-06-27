@@ -81,7 +81,12 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
     });
     try {
       final data = await session.service!.getTopTalkers();
-      if (!mounted || req != _requestGeneration || gen != session.sessionGeneration || pid != session.selectedProfile?.id) return;
+      if (!mounted ||
+          req != _requestGeneration ||
+          gen != session.sessionGeneration ||
+          pid != session.selectedProfile?.id) {
+        return;
+      }
       setState(() {
         _talkers = data;
         _error = null;
@@ -102,7 +107,11 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final session = context.watch<PfSenseSessionProvider>();
-    final maxBytes = _talkers.isEmpty ? 1.0 : _talkers.first.bytes.toDouble();
+    final maxRate = _talkers.isEmpty
+        ? 1.0
+        : _talkers
+            .map((talker) => talker.bytesPerSecond)
+            .reduce((current, next) => current > next ? current : next);
 
     return RefreshIndicator(
       onRefresh: () => _load(showSpinner: true),
@@ -113,16 +122,30 @@ class _TopTalkersScreenState extends State<TopTalkersScreen> {
           const SizedBox(height: 8),
           if (_loading) const LinearProgressIndicator(minHeight: 3),
           if (!session.connected)
-            StateMessage(icon: Icons.cloud_off_outlined, text: strings.t('disconnectedConnectFirst'))
+            StateMessage(
+              icon: Icons.cloud_off_outlined,
+              text: strings.t('disconnectedConnectFirst'),
+            )
           else if (_error != null)
-            StateMessage(icon: Icons.error_outline, text: _error.toString(), action: TextButton(onPressed: () => _load(showSpinner: true), child: Text(strings.t('retry'))))
+            StateMessage(
+              icon: Icons.error_outline,
+              text: _error.toString(),
+              action: TextButton(
+                onPressed: () => _load(showSpinner: true),
+                child: Text(strings.t('retry')),
+              ),
+            )
           else if (_talkers.isEmpty && !_loading)
-            StateMessage(icon: Icons.bar_chart_outlined, text: strings.t('noActiveStates'), details: strings.t('trafficWillAppear'))
+            StateMessage(
+              icon: Icons.bar_chart_outlined,
+              text: strings.t('noActiveStates'),
+              details: strings.t('trafficWillAppear'),
+            )
           else
             for (final talker in _talkers)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _TalkerTile(talker: talker, maxBytes: maxBytes),
+                child: _TalkerTile(talker: talker, maxRate: maxRate),
               ),
         ],
       ),
@@ -158,17 +181,29 @@ class _SummaryCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(strings.t('topTalkers'), style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    strings.t('topTalkers'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   Text(
                     lastRefresh == null
                         ? strings.t('topTalkersSubtitle')
-                        : strings.f('topTalkersUpdated', {'time': _clock(lastRefresh!)}),
+                        : strings.f(
+                            'topTalkersUpdated',
+                            {'time': _clock(lastRefresh!)},
+                          ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
-            Text('$count', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+            Text(
+              '$count',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
           ],
         ),
       ),
@@ -177,19 +212,23 @@ class _SummaryCard extends StatelessWidget {
 
   static String _clock(DateTime dt) {
     final l = dt.toLocal();
-    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}:${l.second.toString().padLeft(2, '0')}';
+    return '${l.hour.toString().padLeft(2, '0')}:'
+        '${l.minute.toString().padLeft(2, '0')}:'
+        '${l.second.toString().padLeft(2, '0')}';
   }
 }
 
 class _TalkerTile extends StatelessWidget {
-  const _TalkerTile({required this.talker, required this.maxBytes});
+  const _TalkerTile({required this.talker, required this.maxRate});
   final TopTalker talker;
-  final double maxBytes;
+  final double maxRate;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fraction = maxBytes > 0 ? (talker.bytes / maxBytes).clamp(0.0, 1.0) : 0.0;
+    final fraction = maxRate > 0
+        ? (talker.bytesPerSecond / maxRate).clamp(0.0, 1.0)
+        : 0.0;
 
     return Card(
       child: Padding(
@@ -209,7 +248,7 @@ class _TalkerTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  _formatBytes(talker.bytes),
+                  _formatRate(talker.bytesPerSecond),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: scheme.primary,
                         fontWeight: FontWeight.w700,
@@ -219,7 +258,12 @@ class _TalkerTile extends StatelessWidget {
             ),
             if (talker.hostname != null && talker.hostname!.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(talker.ipAddress, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              Text(
+                talker.ipAddress,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
             ],
             const SizedBox(height: 8),
             ClipRRect(
@@ -232,6 +276,17 @@ class _TalkerTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.storage_outlined, size: 13, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  'Total ${_formatBytes(talker.bytes)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Icon(Icons.link_outlined, size: 13, color: scheme.onSurfaceVariant),
@@ -257,6 +312,10 @@ class _TalkerTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _formatRate(double bytesPerSecond) {
+    return '${_formatBytes(bytesPerSecond.round())}/s';
   }
 
   static String _formatBytes(int bytes) {
