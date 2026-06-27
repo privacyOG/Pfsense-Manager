@@ -4,6 +4,7 @@ class FirewallRule {
   final String section;
   final String type; // pass, block, reject
   final String interface;
+  final String ipProtocol;
   final String protocol;
   final String sourceType;
   final String sourceNetwork;
@@ -20,6 +21,7 @@ class FirewallRule {
     required this.section,
     required this.type,
     required this.interface,
+    this.ipProtocol = 'inet',
     required this.protocol,
     required this.sourceType,
     required this.sourceNetwork,
@@ -44,6 +46,7 @@ class FirewallRule {
       interface: interfaces is List
           ? interfaces.join(', ')
           : interfaces as String? ?? '',
+      ipProtocol: (json['ipprotocol'] as String?)?.toLowerCase() ?? 'inet',
       protocol: json['protocol'] as String? ?? 'any',
       sourceType: json['source_type'] as String? ?? 'network',
       sourceNetwork:
@@ -63,7 +66,7 @@ class FirewallRule {
       enabled: !(json['disabled'] as bool? ?? false),
       createdTime: json['created_time']?.toString() ??
           ((json['created'] is Map<String, dynamic>)
-          ? json['created']['utc'] as String? ?? ''
+              ? json['created']['utc'] as String? ?? ''
               : ''),
     );
   }
@@ -74,17 +77,17 @@ class FirewallRule {
         : destinationPortFrom == destinationPortTo || destinationPortTo == null
             ? destinationPortFrom.toString()
             : '$destinationPortFrom:$destinationPortTo';
+    final interfaces = interface
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
 
     return {
-      if (id != null) 'id': int.tryParse(id!) ?? id,
-      'section': section,
       'type': type.toLowerCase(),
-      'interface': interface
-          .split(',')
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .toList(),
-      if (protocol != 'any') 'protocol': protocol,
+      'interface': interfaces,
+      'ipprotocol': _resolveIpProtocol(),
+      'protocol': protocol.trim().isEmpty ? 'any' : protocol.toLowerCase(),
       'source': _normalizeAddress(sourceNetwork),
       'destination': _normalizeAddress(destinationNetwork),
       if (destinationPort != null) 'destination_port': destinationPort,
@@ -114,6 +117,22 @@ class FirewallRule {
     }
   }
 
+  String _resolveIpProtocol() {
+    final value = ipProtocol.trim().toLowerCase();
+    if (value == 'inet' || value == 'inet6' || value == 'inet46') {
+      return value;
+    }
+    final source = sourceNetwork.trim();
+    final destination = destinationNetwork.trim();
+    if (_looksIpv6(source) || _looksIpv6(destination)) return 'inet6';
+    return 'inet';
+  }
+
+  static bool _looksIpv6(String value) {
+    final trimmed = value.toLowerCase();
+    return trimmed.contains(':') && trimmed != 'any' && trimmed != '*';
+  }
+
   static (int?, int?) _parsePortRange(String? value) {
     if (value == null || value.isEmpty) return (null, null);
     final separator = value.contains(':') ? ':' : '-';
@@ -136,6 +155,7 @@ class FirewallRule {
     String? section,
     String? type,
     String? interface,
+    String? ipProtocol,
     String? protocol,
     String? sourceType,
     String? sourceNetwork,
@@ -151,6 +171,7 @@ class FirewallRule {
       section: section ?? this.section,
       type: type ?? this.type,
       interface: interface ?? this.interface,
+      ipProtocol: ipProtocol ?? this.ipProtocol,
       protocol: protocol ?? this.protocol,
       sourceType: sourceType ?? this.sourceType,
       sourceNetwork: sourceNetwork ?? this.sourceNetwork,
