@@ -121,7 +121,7 @@ _SelectedEndpoint? _selectLocalEndpoint(
     return _SelectedEndpoint(destination.address, state.interface);
   }
 
-  return source.address.isEmpty ? null : _SelectedEndpoint(source.address, state.interface);
+  return null;
 }
 
 _InterfaceSubnet? _matchingSubnet(
@@ -185,9 +185,10 @@ bool _isPrivateAddress(InternetAddress? address) {
   if (address.type == InternetAddressType.IPv6 && bytes.length == 16) {
     final first = bytes[0];
     final second = bytes[1];
+    final loopback = bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
     return (first & 0xfe) == 0xfc ||
         (first == 0xfe && (second & 0xc0) == 0x80) ||
-        bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
+        loopback;
   }
   return false;
 }
