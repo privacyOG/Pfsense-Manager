@@ -50,9 +50,16 @@ class PfSenseService {
     final data = statusResp.data['data'] as Map<String, dynamic>? ?? {};
     final interfacesData = interfacesResp.data['data'] as List? ?? const [];
     final gatewaysData = gatewaysResp.data['data'] as List? ?? const [];
+    final interfaces = interfacesData
+        .whereType<Map<String, dynamic>>()
+        .map(InterfaceStatus.fromJson)
+        .toList();
     return DashboardData.fromJson(data).copyWith(
-      interfaces: interfacesData.whereType<Map<String, dynamic>>().map(InterfaceStatus.fromJson).toList(),
-      gateways: gatewaysData.whereType<Map<String, dynamic>>().map(GatewayStatus.fromJson).toList(),
+      interfaces: _sortInterfaceStatuses(interfaces),
+      gateways: gatewaysData
+          .whereType<Map<String, dynamic>>()
+          .map(GatewayStatus.fromJson)
+          .toList(),
     );
   }
 
@@ -60,9 +67,14 @@ class PfSenseService {
     _ensureActive();
     final params = <String, dynamic>{};
     if (interface != null) params['if'] = interface;
-    final response = await _client.get('/api/v2/firewall/rules', queryParameters: params);
+    final response = await _client.get(
+      '/api/v2/firewall/rules',
+      queryParameters: params,
+    );
     final rulesData = response.data['data'] as List? ?? [];
-    return rulesData.map((json) => FirewallRule.fromJson(json as Map<String, dynamic>)).toList();
+    return rulesData
+        .map((json) => FirewallRule.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   Future<FirewallRule> createFirewallRule(Map<String, dynamic> ruleData) async {
@@ -74,7 +86,10 @@ class PfSenseService {
   Future<void> updateFirewallRule(String uuid, Map<String, dynamic> ruleData) async {
     _ensureActive();
     final id = int.tryParse(uuid);
-    await _client.patch('/api/v2/firewall/rule', data: {if (id != null) 'id': id, ...ruleData});
+    await _client.patch(
+      '/api/v2/firewall/rule',
+      data: {if (id != null) 'id': id, ...ruleData},
+    );
   }
 
   Future<void> deleteFirewallRule(String uuid) async {
@@ -84,17 +99,29 @@ class PfSenseService {
 
   Future<void> toggleFirewallRule(String uuid, bool enabled) async {
     _ensureActive();
-    await _client.patch('/api/v2/firewall/rule', data: {'id': int.tryParse(uuid) ?? uuid, 'disabled': !enabled});
+    await _client.patch(
+      '/api/v2/firewall/rule',
+      data: {'id': int.tryParse(uuid) ?? uuid, 'disabled': !enabled},
+    );
   }
 
-  Future<List<FirewallLog>> getFirewallLogs({String? action, int limit = 100, DateTime? since}) async {
+  Future<List<FirewallLog>> getFirewallLogs({
+    String? action,
+    int limit = 100,
+    DateTime? since,
+  }) async {
     _ensureActive();
     final params = <String, dynamic>{'limit': limit.toString()};
     if (action != null) params['action'] = action;
     if (since != null) params['since'] = since.toIso8601String();
-    final response = await _client.get('/api/v2/status/logs/firewall', queryParameters: params);
+    final response = await _client.get(
+      '/api/v2/status/logs/firewall',
+      queryParameters: params,
+    );
     final logsData = response.data['data'] as List? ?? [];
-    return logsData.map((json) => FirewallLog.fromJson(json as Map<String, dynamic>)).toList();
+    return logsData
+        .map((json) => FirewallLog.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
   /// Fetches a pfSense system log by type (e.g. `system`, `dhcpd`, `resolver`,
@@ -127,12 +154,14 @@ class PfSenseService {
       }
     }
     final result = map.values
-        .map((a) => TopTalker(
-              ipAddress: a.ip,
-              bytes: a.bytes,
-              connections: a.connections,
-              interface: a.iface,
-            ))
+        .map(
+          (a) => TopTalker(
+            ipAddress: a.ip,
+            bytes: a.bytes,
+            connections: a.connections,
+            interface: a.iface,
+          ),
+        )
         .toList()
       ..sort((a, b) => b.bytes.compareTo(a.bytes));
     return result.take(limit).toList();
@@ -153,10 +182,16 @@ class PfSenseService {
   }
 
   Future<List<NetworkState>> _loadFirewallStates(int limit) async {
-    final response = await _client.get('/api/v2/firewall/states', queryParameters: {'limit': limit.toString()});
+    final response = await _client.get(
+      '/api/v2/firewall/states',
+      queryParameters: {'limit': limit.toString()},
+    );
     _ensureActive();
     final statesData = response.data['data'] as List? ?? [];
-    return statesData.whereType<Map<String, dynamic>>().map(NetworkState.fromJson).toList();
+    return statesData
+        .whereType<Map<String, dynamic>>()
+        .map(NetworkState.fromJson)
+        .toList();
   }
 
   Future<List<InterfaceStatus>> getInterfaceStatuses() {
@@ -175,14 +210,21 @@ class PfSenseService {
     final response = await _client.get('/api/v2/status/interfaces');
     _ensureActive();
     final interfacesData = response.data['data'] as List? ?? const [];
-    return interfacesData.whereType<Map<String, dynamic>>().map(InterfaceStatus.fromJson).toList();
+    final interfaces = interfacesData
+        .whereType<Map<String, dynamic>>()
+        .map(InterfaceStatus.fromJson)
+        .toList();
+    return _sortInterfaceStatuses(interfaces);
   }
 
   Future<List<DhcpLease>> getDhcpLeases() async {
     _ensureActive();
     final response = await _client.get('/api/v2/status/dhcp_server/leases');
     final leasesData = response.data['data'] as List? ?? [];
-    return leasesData.whereType<Map<String, dynamic>>().map(DhcpLease.fromJson).toList();
+    return leasesData
+        .whereType<Map<String, dynamic>>()
+        .map(DhcpLease.fromJson)
+        .toList();
   }
 
   Future<void> deleteDhcpLease(DhcpLease lease) async {
@@ -197,26 +239,41 @@ class PfSenseService {
     _ensureActive();
     final response = await _client.get('/api/v2/status/services');
     final servicesData = response.data['data'] as List? ?? [];
-    final services = servicesData.map((json) => SystemService.fromJson(json as Map<String, dynamic>)).toList();
+    final services = servicesData
+        .map((json) => SystemService.fromJson(json as Map<String, dynamic>))
+        .toList();
     _serviceIds
       ..clear()
-      ..addEntries(services.where((service) => service.id != null).map((service) => MapEntry(service.name, service.id!)));
+      ..addEntries(
+        services
+            .where((service) => service.id != null)
+            .map((service) => MapEntry(service.name, service.id!)),
+      );
     return services;
   }
 
   Future<void> startService(String serviceName) async {
     _ensureActive();
-    await _client.post('/api/v2/status/service', data: await _serviceActionData(serviceName, 'start'));
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData(serviceName, 'start'),
+    );
   }
 
   Future<void> stopService(String serviceName) async {
     _ensureActive();
-    await _client.post('/api/v2/status/service', data: await _serviceActionData(serviceName, 'stop'));
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData(serviceName, 'stop'),
+    );
   }
 
   Future<void> restartService(String serviceName) async {
     _ensureActive();
-    await _client.post('/api/v2/status/service', data: await _serviceActionData(serviceName, 'restart'));
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData(serviceName, 'restart'),
+    );
   }
 
   Future<SystemInfo> getSystemInfo() async {
@@ -233,7 +290,10 @@ class PfSenseService {
 
   Future<void> restartOpenVPN() async {
     _ensureActive();
-    await _client.post('/api/v2/status/service', data: await _serviceActionData('openvpn', 'restart'));
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData('openvpn', 'restart'),
+    );
   }
 
   Future<void> rebootSystem() async {
@@ -286,8 +346,10 @@ class PfSenseService {
 
   Future<void> restartWireGuard() async {
     _ensureActive();
-    await _client.post('/api/v2/status/service',
-        data: await _serviceActionData('wireguard', 'restart'));
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData('wireguard', 'restart'),
+    );
   }
 
   Future<void> sendWakeOnLan(String mac, {String? broadcast}) async {
@@ -323,10 +385,11 @@ class PfSenseService {
 
   Future<void> setPfBlockerEnabled(bool enabled) async {
     _ensureActive();
-    await _client.patch('/api/v2/status/pfblockerng',
-        data: {'enable': enabled});
+    await _client.patch(
+      '/api/v2/status/pfblockerng',
+      data: {'enable': enabled},
+    );
   }
-
 
   Future<bool> healthCheck() async {
     _ensureActive();
@@ -338,7 +401,10 @@ class PfSenseService {
     }
   }
 
-  Future<Map<String, dynamic>> _serviceActionData(String serviceName, String action) async {
+  Future<Map<String, dynamic>> _serviceActionData(
+    String serviceName,
+    String action,
+  ) async {
     _ensureActive();
     if (!_serviceIds.containsKey(serviceName)) await getServices();
     final id = _serviceIds[serviceName];
@@ -354,7 +420,9 @@ class PfSenseService {
     final data = <String, dynamic>{'host': host, 'count': count};
     if (interface != null && interface.isNotEmpty) data['interface'] = interface;
     final response = await _client.post('/api/v2/diagnostics/ping', data: data);
-    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+    return response.data['data'] as Map<String, dynamic>? ??
+        response.data as Map<String, dynamic>? ??
+        {};
   }
 
   Future<Map<String, dynamic>> runTraceroute(
@@ -366,7 +434,9 @@ class PfSenseService {
       '/api/v2/diagnostics/traceroute',
       data: {'host': host, 'max_hops': maxHops},
     );
-    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+    return response.data['data'] as Map<String, dynamic>? ??
+        response.data as Map<String, dynamic>? ??
+        {};
   }
 
   Future<Map<String, dynamic>> runDnsLookup(
@@ -378,16 +448,24 @@ class PfSenseService {
       '/api/v2/diagnostics/dns_lookup',
       data: {'host': host, 'type': type},
     );
-    return response.data['data'] as Map<String, dynamic>? ?? response.data as Map<String, dynamic>? ?? {};
+    return response.data['data'] as Map<String, dynamic>? ??
+        response.data as Map<String, dynamic>? ??
+        {};
   }
 
   Future<List<CaptivePortalSession>> getCaptivePortalSessions({String? zone}) async {
     _ensureActive();
     final params = <String, dynamic>{};
     if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    final response = await _client.get('/api/v2/services/captiveportal/sessions', queryParameters: params.isNotEmpty ? params : null);
+    final response = await _client.get(
+      '/api/v2/services/captiveportal/sessions',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
     final data = response.data['data'] as List? ?? [];
-    return data.whereType<Map<String, dynamic>>().map(CaptivePortalSession.fromJson).toList();
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(CaptivePortalSession.fromJson)
+        .toList();
   }
 
   Future<void> disconnectCaptivePortalSession({
@@ -399,7 +477,10 @@ class PfSenseService {
     final params = <String, dynamic>{'ip': ipAddress};
     if (macAddress != null && macAddress.isNotEmpty) params['mac'] = macAddress;
     if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    await _client.delete('/api/v2/services/captiveportal/session', queryParameters: params);
+    await _client.delete(
+      '/api/v2/services/captiveportal/session',
+      queryParameters: params,
+    );
   }
 
   Future<List<String>> generateCaptivePortalVouchers({
@@ -414,12 +495,15 @@ class PfSenseService {
     );
     final data = response.data['data'];
     if (data is List) {
-      return data.map((v) {
-        if (v is Map<String, dynamic>) {
-          return (v['voucher'] ?? v['code'] ?? v['username'] ?? '').toString();
-        }
-        return v.toString();
-      }).where((s) => s.isNotEmpty).toList();
+      return data
+          .map((v) {
+            if (v is Map<String, dynamic>) {
+              return (v['voucher'] ?? v['code'] ?? v['username'] ?? '').toString();
+            }
+            return v.toString();
+          })
+          .where((s) => s.isNotEmpty)
+          .toList();
     }
     return [];
   }
@@ -433,7 +517,10 @@ class PfSenseService {
       queryParameters: params.isNotEmpty ? params : null,
     );
     final data = response.data['data'] as List? ?? [];
-    return data.whereType<Map<String, dynamic>>().map(CaptivePortalVoucher.fromJson).toList();
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(CaptivePortalVoucher.fromJson)
+        .toList();
   }
 
   void _ensureActive() {
@@ -449,6 +536,34 @@ class PfSenseService {
     _serviceIds.clear();
     _client.dispose();
   }
+}
+
+List<InterfaceStatus> _sortInterfaceStatuses(List<InterfaceStatus> interfaces) {
+  final sorted = [...interfaces];
+  sorted.sort((a, b) {
+    final aKey = _interfaceIdentity(a);
+    final bKey = _interfaceIdentity(b);
+    final rankCompare = _interfaceRank(aKey).compareTo(_interfaceRank(bKey));
+    if (rankCompare != 0) return rankCompare;
+    return aKey.compareTo(bKey);
+  });
+  return sorted;
+}
+
+String _interfaceIdentity(InterfaceStatus interface) {
+  final name = interface.name.trim();
+  if (name.isNotEmpty) return name.toLowerCase();
+  final hardware = interface.hardwareInterface.trim();
+  if (hardware.isNotEmpty) return hardware.toLowerCase();
+  final description = interface.description.trim();
+  return description.isEmpty ? 'unknown' : description.toLowerCase();
+}
+
+int _interfaceRank(String key) {
+  if (key == 'wan') return 0;
+  if (key == 'lan') return 1;
+  if (key.startsWith('opt')) return 2;
+  return 3;
 }
 
 class _TopTalkerAgg {
