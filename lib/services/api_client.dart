@@ -68,7 +68,7 @@ class PfSenseApiClient {
 
       final response = await _dio.post(
         '/api/v2/auth/jwt',
-        options: Options(headers: {'Authorization': 'Basic $encoded'}),
+        options: Options(headers: {'Authorization': 'Basic $encoded}),
       );
 
       if (response.statusCode == 200) {
@@ -133,9 +133,10 @@ class PfSenseApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     _ensureActive();
+    final requestPath = _normalisedPath(method, path);
     try {
       final response = await _dio.request(
-        path,
+        requestPath,
         data: data,
         queryParameters: queryParameters,
         options: Options(method: method),
@@ -145,7 +146,10 @@ class PfSenseApiClient {
       if (response.statusCode != null &&
           response.statusCode! >= 200 &&
           response.statusCode! < 300) {
-        _validateApiResponse(path, response.data);
+        _validateApiResponse(requestPath, response.data);
+        if (_requiresFirewallApply(method, requestPath)) {
+          await _applyFirewallChanges();
+        }
         return response;
       }
 
@@ -159,6 +163,30 @@ class PfSenseApiClient {
       }
       throw ApiException.fromDio(e);
     }
+  }
+
+  String _normalisedPath(String method, String path) {
+    if (method == 'POST' && path == '/api/v2/firewall/rules') {
+      return '/api/v2/firewall/rule';
+    }
+    return path;
+  }
+
+  bool _requiresFirewallApply(String method, String path) {
+    return path == '/api/v2/firewall/rule' &&
+        (method == 'POST' || method == 'PATCH' || method == 'DELETE');
+  }
+
+  Future<void> _applyFirewallChanges() async {
+    final response = await _dio.post('/api/v2/firewall/apply');
+    _ensureActive();
+    if (response.statusCode != null &&
+        response.statusCode! >= 200 &&
+        response.statusCode! < 300) {
+      _validateApiResponse('/api/v2/firewall/apply', response.data);
+      return;
+    }
+    throw ApiException(_extractErrorMessage(response.data), response.statusCode);
   }
 
   void _validateApiResponse(String path, dynamic data) {
