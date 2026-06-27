@@ -169,6 +169,9 @@ class PfSenseApiClient {
     if (method == 'POST' && path == '/api/v2/firewall/rules') {
       return '/api/v2/firewall/rule';
     }
+    if (method == 'GET' && path == '/api/v2/vpn/wireguard/servers') {
+      return '/api/v2/vpn/wireguard/tunnels';
+    }
     return path;
   }
 
