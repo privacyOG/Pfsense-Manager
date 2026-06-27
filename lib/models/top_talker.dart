@@ -5,6 +5,7 @@ class TopTalker {
     required this.connections,
     this.hostname,
     this.interface = '',
+    this.bytesPerSecond = 0,
   });
 
   final String ipAddress;
@@ -12,6 +13,10 @@ class TopTalker {
   final String interface;
   final int bytes;
   final int connections;
+  final double bytesPerSecond;
 
-  String get displayName => (hostname != null && hostname!.isNotEmpty) ? hostname! : ipAddress;
+  int get rateBytesPerSecond => bytesPerSecond.round();
+
+  String get displayName =>
+      (hostname != null && hostname!.isNotEmpty) ? hostname! : ipAddress;
 }
