@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_strings.dart';
+import '../models/openvpn_status.dart';
 import '../models/system_service.dart';
 import '../models/wireguard_tunnel.dart';
 import '../providers/session_provider.dart';
@@ -15,7 +16,7 @@ class VpnScreen extends StatefulWidget {
 }
 
 class _VpnScreenState extends State<VpnScreen> {
-  List<Map<String, dynamic>> _openVpn = [];
+  List<OpenVpnServerStatus> _openVpn = [];
   SystemService? _tailscale;
   List<WireGuardTunnel> _wireGuard = [];
   Object? _error;
@@ -102,7 +103,9 @@ class _VpnScreenState extends State<VpnScreen> {
         }
       }
       setState(() {
-        _openVpn = results[0] as List<Map<String, dynamic>>;
+        _openVpn = (results[0] as List<Map<String, dynamic>>)
+            .map(OpenVpnServerStatus.fromJson)
+            .toList();
         _tailscale = tailscale;
         _wireGuard = results[2] as List<WireGuardTunnel>;
         _lastSuccessfulRefresh = DateTime.now();
@@ -187,7 +190,9 @@ class _VpnScreenState extends State<VpnScreen> {
             child: ListTile(
               leading: const Icon(Icons.vpn_lock),
               title: Text(strings.t('openvpn')),
-              subtitle: Text(strings.f('vpnConnectionsCount', {'count': _openVpn.length.toString()})),
+              subtitle: Text(strings.f('vpnConnectionsCount', {
+                'count': openVpnConnectionCount(_openVpn).toString(),
+              })),
               trailing: _busyAction == 'OpenVPN'
                   ? const CircularProgressIndicator()
                   : IconButton(
@@ -202,17 +207,7 @@ class _VpnScreenState extends State<VpnScreen> {
                     ),
             ),
           ),
-          for (final item in _openVpn)
-            Card(
-              child: ListTile(
-                title: Text(
-                    _firstText(item, const ['common_name', 'name'], 'OpenVPN')),
-                subtitle: Text(
-                  _firstText(
-                      item, const ['remote_host', 'status'], strings.t('noAdditionalStatus')),
-                ),
-              ),
-            ),
+          for (final server in _openVpn) _OpenVpnServerCard(server: server),
 
           // ── WireGuard ─────────────────────────────────────────────────────
           Card(
@@ -269,20 +264,56 @@ class _VpnScreenState extends State<VpnScreen> {
     );
   }
 
-  String _firstText(
-      Map<String, dynamic> item, List<String> keys, String fallback) {
-    for (final key in keys) {
-      final value = item[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) return value;
-    }
-    return fallback;
-  }
-
   String _formatTime(DateTime value) {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:'
         '${local.minute.toString().padLeft(2, '0')}:'
         '${local.second.toString().padLeft(2, '0')}';
+  }
+}
+
+class _OpenVpnServerCard extends StatelessWidget {
+  const _OpenVpnServerCard({required this.server});
+  final OpenVpnServerStatus server;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final details = [
+      if (server.mode.isNotEmpty) server.mode,
+      if (server.port.isNotEmpty) 'Port ${server.port}',
+      strings.f('vpnConnectionsCount', {
+        'count': server.connections.length.toString(),
+      }),
+    ].join('  ·  ');
+
+    return Card(
+      child: ExpansionTile(
+        leading: const Icon(Icons.vpn_key_outlined),
+        title: Text(server.displayName),
+        subtitle: Text(details),
+        children: [
+          if (server.connections.isEmpty)
+            ListTile(
+              dense: true,
+              title: Text(strings.t('noAdditionalStatus')),
+            )
+          else
+            for (final connection in server.connections)
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.devices_other, size: 18),
+                title: Text(connection.displayName),
+                subtitle: Text(
+                  [
+                    if (connection.remoteHost.isNotEmpty) connection.remoteHost,
+                    if (connection.status.isNotEmpty) connection.status,
+                  ].join('  ·  '),
+                ),
+              ),
+        ],
+      ),
+    );
   }
 }
 
@@ -355,7 +386,7 @@ class _PeerTile extends StatelessWidget {
             : scheme.error;
 
     final strings = AppStrings.of(context);
-    String handshakeLabel = strings.t('handshakeNever');
+    String? handshakeLabel;
     if (handshake != null) {
       if (handshakeAge!.inSeconds < 60) {
         handshakeLabel = strings.f('handshakeSecondsAgo', {'n': handshakeAge.inSeconds.toString()});
@@ -390,17 +421,18 @@ class _PeerTile extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.handshake_outlined, size: 14, color: handshakeColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      handshakeLabel,
-                      style: TextStyle(fontSize: 12, color: handshakeColor),
-                    ),
-                  ],
-                ),
+                if (handshakeLabel != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.handshake_outlined, size: 14, color: handshakeColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        handshakeLabel,
+                        style: TextStyle(fontSize: 12, color: handshakeColor),
+                      ),
+                    ],
+                  ),
               ],
             ),
             if (peer.endpoint != null) ...[

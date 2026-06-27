@@ -293,7 +293,7 @@ class PfSenseService {
     _ensureActive();
     try {
       final results = await Future.wait([
-        _client.get('/api/v2/vpn/wireguard/servers'),
+        _client.get('/api/v2/vpn/wireguard/tunnels'),
         _client.get('/api/v2/vpn/wireguard/peers'),
       ]);
       final tunnelData = results[0].data['data'] as List? ?? [];
