@@ -5,22 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/system_log_entry.dart';
+import '../models/system_log_source.dart';
 import '../providers/session_provider.dart';
-
-/// A pfSense system log source surfaced as a tab.
-class _LogSource {
-  const _LogSource(this.label, this.logType, this.icon);
-  final String label;
-  final String logType;
-  final IconData icon;
-}
-
-const _logSources = <_LogSource>[
-  _LogSource('System', 'system', Icons.dns_outlined),
-  _LogSource('DHCP', 'dhcpd', Icons.router_outlined),
-  _LogSource('DNS', 'resolver', Icons.travel_explore_outlined),
-  _LogSource('Gateway', 'gateways', Icons.swap_horiz_outlined),
-];
+import '../utils/api_exception.dart';
 
 class SystemLogsScreen extends StatefulWidget {
   const SystemLogsScreen({super.key});
@@ -36,7 +23,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: _logSources.length, vsync: this);
+    _tabs = TabController(length: systemLogSources.length, vsync: this);
   }
 
   @override
@@ -54,7 +41,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen>
           controller: _tabs,
           isScrollable: true,
           tabs: [
-            for (final source in _logSources)
+            for (final source in systemLogSources)
               Tab(icon: Icon(source.icon), text: source.label),
           ],
         ),
@@ -62,7 +49,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen>
       body: TabBarView(
         controller: _tabs,
         children: [
-          for (final source in _logSources) _LogTab(source: source),
+          for (final source in systemLogSources) _LogTab(source: source),
         ],
       ),
     );
@@ -72,7 +59,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen>
 class _LogTab extends StatefulWidget {
   const _LogTab({required this.source});
 
-  final _LogSource source;
+  final SystemLogSource source;
 
   @override
   State<_LogTab> createState() => _LogTabState();
@@ -191,7 +178,10 @@ class _LogTabState extends State<_LogTab>
       });
     } catch (error) {
       if (!mounted || request != _requestGeneration) return;
-      setState(() => _error = error);
+      setState(() {
+        _entries = [];
+        _error = systemLogErrorMessage(widget.source, error);
+      });
     } finally {
       if (mounted && request == _requestGeneration) {
         setState(() => _loading = false);
@@ -271,7 +261,7 @@ class _LogTabState extends State<_LogTab>
           if (!session.connected)
             _message(Icons.cloud_off_outlined, 'Disconnected')
           else if (_error != null)
-            _message(Icons.error_outline, _error.toString())
+            _message(Icons.info_outline, _error.toString())
           else if (!_loading && visible.isEmpty)
             _message(
               Icons.article_outlined,
@@ -295,6 +285,18 @@ class _LogTabState extends State<_LogTab>
 
   Widget _message(IconData icon, String text) =>
       Card(child: ListTile(leading: Icon(icon), title: Text(text)));
+}
+
+String systemLogErrorMessage(SystemLogSource source, Object error) {
+  if (isUnsupportedSystemLogError(error)) {
+    return '${source.label} logs are not available from this pfSense REST API installation.';
+  }
+  return error.toString();
+}
+
+bool isUnsupportedSystemLogError(Object error) {
+  return error is ApiException &&
+      (error.statusCode == 404 || error.statusCode == 405);
 }
 
 class _LogTile extends StatelessWidget {
@@ -359,11 +361,7 @@ class _LogTile extends StatelessWidget {
               ),
             SelectableText(
               entry.message.isEmpty ? entry.raw : entry.message,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                height: 1.35,
-              ),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
             ),
           ],
         ),
