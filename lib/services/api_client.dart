@@ -68,7 +68,7 @@ class PfSenseApiClient {
 
       final response = await _dio.post(
         '/api/v2/auth/jwt',
-        options: Options(headers: {'Authorization': 'Basic $encoded}),
+        options: Options(headers: {'Authorization': "Basic $encoded"}),
       );
 
       if (response.statusCode == 200) {
