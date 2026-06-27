@@ -13,6 +13,7 @@ import '../models/top_talker.dart';
 import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
 import 'api_client.dart';
+import 'top_talker_analyzer.dart';
 
 /// Service layer for all pfSense API operations.
 class PfSenseService {
@@ -21,6 +22,7 @@ class PfSenseService {
   Future<DashboardData>? _dashboardRequest;
   final Map<int, Future<List<NetworkState>>> _firewallStateRequests = {};
   Future<List<InterfaceStatus>>? _interfaceStatusRequest;
+  final TopTalkerAnalyzer _topTalkerAnalyzer = TopTalkerAnalyzer();
   bool _disposed = false;
 
   PfSenseService(this._client);
@@ -141,30 +143,16 @@ class PfSenseService {
 
   Future<List<TopTalker>> getTopTalkers({int limit = 25}) async {
     _ensureActive();
-    final states = await getFirewallStates(limit: 1000);
-    final map = <String, _TopTalkerAgg>{};
-    for (final state in states) {
-      final ip = state.sourceIp.split(':').first.trim();
-      if (ip.isEmpty || ip == '*') continue;
-      final agg = map.putIfAbsent(ip, () => _TopTalkerAgg(ip));
-      agg.bytes += state.bytes;
-      agg.connections++;
-      if (state.interface.isNotEmpty && agg.iface.isEmpty) {
-        agg.iface = state.interface;
-      }
-    }
-    final result = map.values
-        .map(
-          (a) => TopTalker(
-            ipAddress: a.ip,
-            bytes: a.bytes,
-            connections: a.connections,
-            interface: a.iface,
-          ),
-        )
-        .toList()
-      ..sort((a, b) => b.bytes.compareTo(a.bytes));
-    return result.take(limit).toList();
+    final results = await Future.wait([
+      getFirewallStates(limit: 1000),
+      getInterfaceStatuses(),
+    ]);
+    _ensureActive();
+    return _topTalkerAnalyzer.build(
+      states: results[0] as List<NetworkState>,
+      interfaces: results[1] as List<InterfaceStatus>,
+      limit: limit,
+    );
   }
 
   Future<List<NetworkState>> getFirewallStates({int limit = 200}) {
@@ -533,6 +521,7 @@ class PfSenseService {
     _dashboardRequest = null;
     _firewallStateRequests.clear();
     _interfaceStatusRequest = null;
+    _topTalkerAnalyzer.reset();
     _serviceIds.clear();
     _client.dispose();
   }
@@ -564,12 +553,4 @@ int _interfaceRank(String key) {
   if (key == 'lan') return 1;
   if (key.startsWith('opt')) return 2;
   return 3;
-}
-
-class _TopTalkerAgg {
-  _TopTalkerAgg(this.ip);
-  final String ip;
-  String iface = '';
-  int bytes = 0;
-  int connections = 0;
 }
