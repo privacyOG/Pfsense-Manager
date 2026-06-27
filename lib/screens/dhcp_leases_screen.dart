@@ -111,11 +111,20 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
 
   Future<void> _wake(DhcpLease lease) async {
     if (_actionBusy) return;
+
+    final selectedInterface = await _selectWakeInterface(lease);
+    if (selectedInterface == null || selectedInterface.isEmpty || !mounted) {
+      return;
+    }
+
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
     setState(() => _actionBusy = true);
     try {
-      await session.service!.sendWakeOnLan(lease.macAddress);
+      await session.service!.sendWakeOnLan(
+        lease.macAddress,
+        interface: selectedInterface,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -138,6 +147,98 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
+  }
+
+  Future<String?> _selectWakeInterface(DhcpLease lease) async {
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return null;
+
+    final options = <String, String>{};
+    void addInterface(String value, [String? label]) {
+      final normalised = _normaliseWakeInterface(value);
+      if (normalised.isEmpty) return;
+      final cleanedLabel = label?.trim() ?? '';
+      options.putIfAbsent(
+        normalised,
+        () => cleanedLabel.isEmpty || cleanedLabel == normalised
+            ? normalised
+            : '$cleanedLabel ($normalised)',
+      );
+    }
+
+    addInterface(lease.interface);
+    try {
+      final interfaces = await session.service!.getInterfaceStatuses();
+      for (final interface in interfaces) {
+        final value = interface.name.trim().isNotEmpty
+            ? interface.name
+            : interface.description;
+        addInterface(value, interface.description);
+      }
+    } catch (_) {
+      // The lease interface is enough for Wake-on-LAN; interface list loading
+      // is best-effort so a status endpoint problem does not block the action.
+    }
+
+    if (!mounted) return null;
+    final leaseInterface = _normaliseWakeInterface(lease.interface);
+    var selected = options.containsKey(leaseInterface)
+        ? leaseInterface
+        : (options.isEmpty ? '' : options.keys.first);
+    final controller = TextEditingController(text: selected);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final canSend = selected.trim().isNotEmpty;
+          return AlertDialog(
+            title: Text(AppStrings.of(context).t('wakeOnLan')),
+            content: options.isEmpty
+                ? TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Interface'),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selected = _normaliseWakeInterface(value);
+                      });
+                    },
+                  )
+                : DropdownButtonFormField<String>(
+                    value: selected,
+                    decoration: const InputDecoration(labelText: 'Interface'),
+                    items: [
+                      for (final entry in options.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selected = value ?? '';
+                      });
+                    },
+                  ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(AppStrings.of(context).t('cancel')),
+              ),
+              FilledButton(
+                onPressed: canSend
+                    ? () => Navigator.pop(dialogContext, selected.trim())
+                    : null,
+                child: Text(AppStrings.of(context).t('confirm')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _delete(DhcpLease lease) async {
@@ -264,6 +365,8 @@ class _DhcpLeasesScreenState extends State<DhcpLeasesScreen> {
         '${local.second.toString().padLeft(2, '0')}';
   }
 }
+
+String _normaliseWakeInterface(String value) => value.trim().toLowerCase();
 
 class _LeaseSummary extends StatelessWidget {
   const _LeaseSummary({
