@@ -340,12 +340,12 @@ class PfSenseService {
     );
   }
 
-  Future<void> sendWakeOnLan(String mac, {String? broadcast}) async {
+  Future<void> sendWakeOnLan(String mac, {required String interface}) async {
     _ensureActive();
-    await _client.post('/api/v2/services/wake_on_lan', data: {
-      'mac': mac,
-      if (broadcast != null) 'broadcast': broadcast,
-    });
+    await _client.post(
+      '/api/v2/services/wake_on_lan/send',
+      data: buildWakeOnLanPayload(mac: mac, interface: interface),
+    );
   }
 
   Future<List<int>> getConfigBackup() async {
@@ -525,6 +525,13 @@ class PfSenseService {
     _serviceIds.clear();
     _client.dispose();
   }
+}
+
+Map<String, dynamic> buildWakeOnLanPayload({
+  required String mac,
+  required String interface,
+}) {
+  return {'interface': interface.trim(), 'mac_addr': mac.trim()};
 }
 
 List<InterfaceStatus> _sortInterfaceStatuses(List<InterfaceStatus> interfaces) {
