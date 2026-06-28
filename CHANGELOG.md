@@ -6,34 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-06-29
+
+Maintained by PrivacyOG.
+
+### Changed
+
+- **Network Monitor refresh load** — interface counters now refresh on the selected live interval while the heavier firewall state list refreshes on a slower schedule, reducing pfSense load and avoiding visible refresh flashes during routine background polling.
+- **Top Talkers ranking** — local devices are now selected from configured interface subnets, IPv4 and IPv6 endpoints are handled safely, current traffic rate is used as the primary ranking signal, and cumulative traffic remains visible as a total.
+- **VPN status reporting** — OpenVPN server status is parsed into dedicated status data, connected clients are counted from nested connection lists, and WireGuard status display avoids treating missing handshake metadata as a failed handshake.
+- **Optional feature handling** — optional pfrest endpoints now return a clear unsupported-feature response when the installed API package does not expose SMART status, traceroute, DNS lookup, configuration backup, pfBlockerNG, or captive portal support.
+
+### Fixed
+
+- **Top Talkers counters** now read pfrest `bytes_total`, `packets_total`, and `expires_in` fields, with compatibility fallbacks for older counter shapes.
+- **Interface cards** now stay in a stable WAN, LAN, and OPT-style order during live refreshes.
+- **Firewall rule writes** now use the correct pfrest rule workflow, include `ipprotocol`, omit unsupported client-only fields, and apply firewall changes after create, update, toggle, and delete operations.
+- **Wake-on-LAN** now sends requests to the pfrest send endpoint with the required `interface` and `mac_addr` fields and requires an interface before sending.
+- **System logs** now map DHCP logs to the correct pfrest log name and display unsupported-source messages when a log endpoint is not available.
+- **DHCP leases** now parse `active_status`, `online_status`, and `descr` fields correctly while preserving compatibility with older status field names.
+- **Diagnostics and alerts** now map ping source addresses, service running state, gateway packet loss, and system temperature fields to the current pfrest payload names.
+
+**Upgrade note:** Users running version 1.8.1 can install version 1.8.2 as a normal update when the APK is signed with the same release key.
+
 ## [1.8.1] - 2026-06-25
 
 Maintained by PrivacyOG.
 
 ### Added
 
-- **System log viewer** — a new More → System logs screen with tabs for the system, DHCP, DNS resolver, and gateway logs. Each tab streams the latest lines from the pfSense REST API, parses the syslog timestamp and originating process into a readable layout, supports text filtering, optional 10-second auto-refresh, pull-to-refresh, and one-tap copy of the visible lines.
+- System log viewer.
 
 ### Changed
 
-- **Localization (Network screens)** — the DHCP leases and Top Talkers screens now route every user-facing string through the app's localization system with complete English, Arabic, Spanish, French, and German translations, instead of being hardcoded in English. A new `AppStrings.f(key, params)` helper supplies placeholder substitution for interpolated strings (timestamps, counts, device names). VPN and pfBlockerNG feature strings are also localized across all supported languages.
+- Localized network, VPN, and pfBlockerNG screens.
 
 ### Fixed
 
-- The application lock now protects cold launch and app resume, and active pfSense sessions remain suspended until PIN or device authentication succeeds.
-- Application PINs are migrated from plaintext preferences to salted verification values in secure storage, with retry delays after repeated incorrect attempts.
-- **Test connection** button on the firewall profiles screen always failed with an authentication error because it used the in-memory profile (which never holds an API key). It now resolves credentials from the secure keystore before dialling.
-- **Profile import** count displayed as a raw object reference instead of a number due to a missing `await`. The correct count is now shown in the confirmation snackbar.
-- **Firewall rules** with no explicit `disabled` field in the API response were incorrectly rendered as disabled. The parser now treats an absent key as enabled.
-- **Network monitor screen** was painted entirely in hardcoded dark-navy hex values, making the screen unreadable in light mode. All colours now use Material Design 3 `colorScheme` tokens.
-- **Settings navigation** now returns the user to the same tab they were on instead of tearing down and rebuilding the home shell and losing scroll position and loaded data.
-- Stale async responses triggered by a profile switch or reconnection no longer overwrite the data currently on screen (pfBlockerNG screen was missing the generation guard that all other screens already had).
-- WireGuard, S.M.A.R.T., and pfBlockerNG status errors that indicate network or authentication failures now propagate to the UI instead of being silently swallowed.
-- Background alert service Dio instance now sets `followRedirects: false`, matching the main API client and preventing silent credential exposure on redirect.
-- Replaced all remaining `Color.withOpacity()` calls with the non-deprecated `Color.withValues(alpha:)` equivalent.
-- **Chart and counter-tile colours** in the gateway history panel, hardware health screen, network monitor screen, and interface traffic totals were hardcoded to dark-navy hex values. All are now resolved from the active Material Design 3 `colorScheme` so they render correctly in light mode and AMOLED themes.
-- **Loading spinner in FilledButton** used hardcoded `Colors.white` for the `CircularProgressIndicator` colour. The AMOLED theme sets `onPrimary` to black, making the spinner invisible. Both the diagnostics run button and the captive-portal voucher generate button now derive the spinner colour from `colorScheme.onPrimary`.
-- **Spotlight search results were not actionable** — tapping a DHCP lease, firewall rule, or service result simply dismissed the search overlay and did nothing. Selecting a result now opens a detail sheet showing the item's key fields, with one-tap copy for IP, MAC, source, and destination values.
+- App lock, profile import, firewall rule display, theme colours, settings navigation, stale response handling, background alert handling, and spotlight result actions.
 
 **Upgrade note:** Users running version 1.8.0 can install version 1.8.1 as a normal update when the APK is signed with the same release key.
 
@@ -41,100 +51,60 @@ Maintained by PrivacyOG.
 
 ### Added
 
-- **WireGuard VPN support** — tunnel and peer status alongside OpenVPN and Tailscale, with per-peer last-handshake timestamps and a restart button.
-- **pfBlockerNG dashboard** — active/paused status banner, DNSBL and IP block counters, update blocklists action, and pause/resume blocking with confirmation.
-- **Configuration backup and export** — downloads the pfSense XML config and opens the system share sheet so it can be saved to Files, emailed, or sent anywhere.
-- **Wake-on-LAN** — magic packet button on every DHCP lease tile that has a MAC address.
-- **Background alerts** — 15-minute periodic checks via WorkManager fire local notifications when a gateway goes offline, packet loss exceeds threshold, or a thermal sensor exceeds the configured CPU temperature limit. Configurable from More → Background alerts.
-- **Hardware health screen** — CPU and per-core thermal sensors, S.M.A.R.T. drive status with expandable per-drive detail (temperature, power-on hours, reallocated and pending sector counts), and memory/swap trend charts that accumulate up to 30 in-session samples.
-- **True AMOLED multi-theme** — pure `#000000` scaffold and app bar, `#0A0A0A` surface cards, and four selectable neon accent profiles: Matrix Green, Midnight Neon, Dracula Purple, and Inferno Red. Palette choice persists across restarts.
-- **Top Talkers screen** — real-time bandwidth ranking by device under Network → Talkers, auto-refreshing every 10 seconds with relative progress bars and pull-to-refresh.
-- **Remote diagnostics screen** — ping, traceroute, and DNS lookup executed from the pfSense box (not the phone), with configurable packet count, hop limit, and record type. Results are shown in a selectable monospace block with a copy button.
-- **Global spotlight search** — search icon in the app bar opens a full-screen overlay that queries DHCP leases, firewall rules, and services in parallel and filters locally on every keystroke.
-- **NetworkAssetText widget** — IP and MAC addresses render with a dotted underline indicating they are tappable. Tapping opens a sheet with copy-to-clipboard and PTR reverse-DNS lookup actions.
-- **Captive portal management** — Sessions tab lists active guest connections with uptime and byte counters and a one-tap disconnect; Vouchers tab generates and shares time-limited access codes in batch.
+- WireGuard VPN support, pfBlockerNG dashboard, configuration export, Wake-on-LAN, background alerts, hardware health, AMOLED themes, Top Talkers, remote diagnostics, spotlight search, network asset copy actions, and captive portal management.
 
 ### Changed
 
-- AMOLED mode overrides the dark-mode toggle and theme palette picker in Settings while active.
+- AMOLED mode overrides conflicting theme controls while active.
 - VPN tunnel restart confirmation replaced with slide-to-confirm gesture.
 
 ## [1.7.4] - 2026-06-16
 
 ### Added
 
-- Dashboard warning chips now open detailed explanations and recommended checks.
-- Warnings can be ignored per firewall profile or snoozed for 24 hours.
-- Ignored warnings can be restored from Settings.
+- Dashboard warning details, ignored warnings, and warning restore controls.
 
 ### Changed
 
-- Settings retains direct access to the five primary app destinations.
-- CPU and per-core temperature sensors are displayed separately.
-- System Information now handles nested pfSense Plus response fields and additional firmware, architecture, hostname, platform, kernel, and uptime aliases.
-- Router firmware and the installed pfSense Manager app version are displayed separately.
-- Numeric uptime values are converted to readable days, hours, and minutes.
-- Production release automation now validates dynamic version metadata, APK identity, APK signatures, checksums, and an explicit reviewed release authorization.
+- Settings navigation, temperature display, System Information parsing, version display, uptime display, and release automation checks were improved.
 
 ### Fixed
 
-- Fahrenheit helper values are filtered so they cannot produce false Celsius alerts such as `113.4 °C`.
+- Fahrenheit helper values are filtered so they cannot produce false Celsius alerts.
 
 ### Removed
 
 - Temporary repository marker and note files.
 
-**Upgrade note:** Users already running version 1.7.3 under the current Android application ID can install this release as a normal update, provided the APK is signed with the same release key.
-
 ## [1.7.3] - 2026-06-16
 
 ### Added
 
-- Live per-interface byte, packet, input-error, output-error, and collision counters.
-- Support for every reported CPU thermal sensor with hottest-sensor alerts.
-- A dedicated Gateways screen with live latency and packet-loss history charts.
-- Saved live and pause controls with selectable 1, 3, 5, or 10-second gateway refresh intervals.
-- Persistent Dashboard section ordering, visibility controls, long-press access, and layout reset.
-- GNU GPLv3 licensing, project notices, a privacy policy, and third-party notices.
+- Interface counters, thermal sensor support, gateway history charts, saved refresh controls, dashboard layout persistence, project notices, and privacy documentation.
 
 ### Changed
 
-- System Information was expanded with firmware, architecture, commit hash, package mirror, repository priorities, hostname, platform, uptime, and update timestamps.
-- README branding, donation details, supported-feature documentation, and version information were improved.
-- Session-safe polling, stale-response protection, lifecycle handling, and saved settings were preserved while monitoring features were expanded.
-
-**Upgrade note:** Users running version 1.7.2 can install 1.7.3 as a normal update when the APK is signed with the same release key.
+- System Information, README branding, polling safety, lifecycle handling, and saved settings were improved.
 
 ## [1.7.2] - 2026-06-15
 
 ### Added
 
-- Adaptive bandwidth scaling for changing traffic levels.
-- A persisted display-unit selector for bits/s and Bytes/s.
-- Live byte, packet, error, and collision counters for every interface.
-- All reported CPU thermal sensors on the Dashboard.
-- A dedicated Gateways screen with live latency and packet-loss history charts.
+- Bandwidth scaling, display-unit selection, interface counters, thermal sensors, and gateway charts.
 
 ### Changed
 
-- Network Monitor traffic graph readability was improved.
-- Bandwidth-axis labels, time labels, legends, fills, and tooltips were improved.
-- Existing session, polling, lifecycle, and saved-setting protections were preserved.
-
-**Upgrade note:** Users running version 1.7.1 can install 1.7.2 as a normal update when the APK is signed with the same release key.
+- Network Monitor charts, labels, legends, fills, tooltips, and session-safe polling were improved.
 
 ## [1.7.0]
 
 ### Added
 
-- Persistent Network Monitor settings, including the 1-second refresh option.
-- Shared state-message components for DHCP leases and Services.
-- Broader widget and lifecycle test coverage.
+- Persistent Network Monitor settings, shared state-message components, and broader widget and lifecycle test coverage.
 
 ### Changed
 
-- Navigation and screen-state handling were improved.
-- Firewall Logs, Services, VPN, System, Dashboard, and Network Monitor reliability were improved.
+- Navigation and screen reliability were improved.
 - The Android package was renamed to `com.privacyog.pfsense_manager`.
 
 ### Fixed
