@@ -13,6 +13,34 @@ import '../widgets/interface_traffic_totals.dart';
 
 enum _BandwidthUnit { bytes, bits }
 
+const networkMonitorMinimumInterfaceSeconds = 1;
+const networkMonitorMinimumStateSeconds = 15;
+const networkMonitorStateRefreshMultiplier = 5;
+const networkMonitorHistoryWindowSeconds = 120;
+
+Duration networkMonitorInterfacePollInterval(int refreshSeconds) {
+  return Duration(
+    seconds: math.max(networkMonitorMinimumInterfaceSeconds, refreshSeconds),
+  );
+}
+
+Duration networkMonitorStatePollInterval(int refreshSeconds) {
+  return Duration(
+    seconds: math.max(
+      networkMonitorMinimumStateSeconds,
+      refreshSeconds * networkMonitorStateRefreshMultiplier,
+    ),
+  );
+}
+
+int networkMonitorHistorySampleLimit(
+  int refreshSeconds, {
+  int historyWindowSeconds = networkMonitorHistoryWindowSeconds,
+}) {
+  final safeRefresh = math.max(networkMonitorMinimumInterfaceSeconds, refreshSeconds);
+  return math.max(12, (historyWindowSeconds / safeRefresh).ceil() + 2);
+}
+
 class NetworkMonitorScreen extends StatefulWidget {
   const NetworkMonitorScreen({super.key});
 
@@ -22,8 +50,6 @@ class NetworkMonitorScreen extends StatefulWidget {
 
 class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     with WidgetsBindingObserver {
-  static const _minimumRefreshSeconds = 1;
-  static const _historyWindowSeconds = 120;
   static const _prefLive = 'networkMonitor.live';
   static const _prefRefreshSeconds = 'networkMonitor.refreshSeconds';
   static const _prefQuickFilter = 'networkMonitor.quickFilter';
@@ -39,13 +65,16 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   List<InterfaceStatus> _interfaces = [];
   Object? _error;
   bool _loading = false;
+  bool _interfacesRefreshing = false;
+  bool _statesRefreshing = false;
   bool _live = true;
   bool _appActive = true;
   bool _preferencesLoaded = false;
   int _refreshSeconds = 3;
   String _quickFilter = 'all';
   _BandwidthUnit _bandwidthUnit = _BandwidthUnit.bits;
-  Timer? _timer;
+  Timer? _interfaceTimer;
+  Timer? _stateTimer;
   DateTime? _lastSampleAt;
   DateTime? _lastSuccessfulRefresh;
   int _requestGeneration = 0;
@@ -71,13 +100,13 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
       _live = preferences.getBool(_prefLive) ?? true;
       _refreshSeconds = allowedIntervals.contains(savedInterval)
           ? savedInterval
-          : math.max(_minimumRefreshSeconds, savedInterval);
+          : math.max(networkMonitorMinimumInterfaceSeconds, savedInterval);
       _quickFilter = preferences.getString(_prefQuickFilter) ?? 'all';
       _bandwidthUnit =
           savedUnit == 'bytes' ? _BandwidthUnit.bytes : _BandwidthUnit.bits;
       _preferencesLoaded = true;
     });
-    _startTimer();
+    _startTimers();
   }
 
   Future<void> _savePreferences() async {
@@ -105,20 +134,23 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     }
   }
 
-  void _startTimer() {
-    _timer?.cancel();
+  void _startTimers() {
+    _interfaceTimer?.cancel();
+    _stateTimer?.cancel();
     if (!_preferencesLoaded) return;
-    final interval = math.max(_minimumRefreshSeconds, _refreshSeconds);
-    _timer = Timer.periodic(Duration(seconds: interval), (_) {
-      final session = context.read<PfSenseSessionProvider>();
-      if (_live &&
-          _appActive &&
-          session.connected &&
-          session.service != null &&
-          !_loading) {
-        _load();
-      }
-    });
+
+    _interfaceTimer = Timer.periodic(
+      networkMonitorInterfacePollInterval(_refreshSeconds),
+      (_) {
+        if (mounted) _refreshInterfaces();
+      },
+    );
+    _stateTimer = Timer.periodic(
+      networkMonitorStatePollInterval(_refreshSeconds),
+      (_) {
+        if (mounted) _refreshStates();
+      },
+    );
   }
 
   @override
@@ -139,7 +171,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
           if (mounted) _load(showSpinner: true);
         });
       }
-    } else if (_states.isEmpty && session.connected && !_loading) {
+    } else if (_states.isEmpty && _interfaces.isEmpty && session.connected && !_loading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _load(showSpinner: true);
       });
@@ -162,7 +194,8 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   void dispose() {
     _requestGeneration++;
     WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
+    _interfaceTimer?.cancel();
+    _stateTimer?.cancel();
     _search
       ..removeListener(_onSearchChanged)
       ..dispose();
@@ -184,28 +217,54 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
     final request = ++_requestGeneration;
     final sessionGeneration = session.sessionGeneration;
     final profileId = session.selectedProfile?.id;
-    setState(() {
-      _loading = true;
-      if (showSpinner) _error = null;
-    });
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final results = await Future.wait([
-        session.service!.getFirewallStates(limit: 500),
         session.service!.getInterfaceStatuses(),
+        session.service!.getFirewallStates(limit: 500),
       ]);
-      if (!mounted ||
-          request != _requestGeneration ||
-          sessionGeneration != session.sessionGeneration ||
-          profileId != session.selectedProfile?.id) {
-        return;
-      }
+      if (!_isCurrentRequest(request, sessionGeneration, profileId)) return;
 
-      final states = results[0] as List<NetworkState>;
-      final interfaces = results[1] as List<InterfaceStatus>;
+      final interfaces = results[0] as List<InterfaceStatus>;
+      final states = results[1] as List<NetworkState>;
       _recordRates(interfaces);
       setState(() {
+        _interfaces = interfaces;
         _states = states;
+        _error = null;
+        _lastSuccessfulRefresh = DateTime.now();
+      });
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _error = error);
+      }
+    } finally {
+      if (mounted && request == _requestGeneration && showSpinner) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _refreshInterfaces() async {
+    if (_interfacesRefreshing || _loading) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!_canPoll(session)) return;
+
+    _interfacesRefreshing = true;
+    final request = _requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    try {
+      final interfaces = await session.service!.getInterfaceStatuses();
+      if (!_isCurrentRequest(request, sessionGeneration, profileId)) return;
+      _recordRates(interfaces);
+      setState(() {
         _interfaces = interfaces;
         _error = null;
         _lastSuccessfulRefresh = DateTime.now();
@@ -215,10 +274,52 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         setState(() => _error = error);
       }
     } finally {
-      if (mounted && request == _requestGeneration) {
-        setState(() => _loading = false);
-      }
+      _interfacesRefreshing = false;
     }
+  }
+
+  Future<void> _refreshStates() async {
+    if (_statesRefreshing || _loading) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!_canPoll(session)) return;
+
+    _statesRefreshing = true;
+    final request = _requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    try {
+      final states = await session.service!.getFirewallStates(limit: 500);
+      if (!_isCurrentRequest(request, sessionGeneration, profileId)) return;
+      setState(() {
+        _states = states;
+        _error = null;
+        _lastSuccessfulRefresh = DateTime.now();
+      });
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _error = error);
+      }
+    } finally {
+      _statesRefreshing = false;
+    }
+  }
+
+  bool _canPoll(PfSenseSessionProvider session) {
+    return _live &&
+        _appActive &&
+        session.connected &&
+        session.service != null;
+  }
+
+  bool _isCurrentRequest(
+    int request,
+    int sessionGeneration,
+    String? profileId,
+  ) {
+    if (!mounted || request != _requestGeneration) return false;
+    final session = context.read<PfSenseSessionProvider>();
+    return sessionGeneration == session.sessionGeneration &&
+        profileId == session.selectedProfile?.id;
   }
 
   void _recordRates(List<InterfaceStatus> interfaces) {
@@ -275,10 +376,11 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
   }
 
   void _trimHistory(List<_RateSample> history, DateTime now) {
-    final cutoff = now.subtract(const Duration(seconds: _historyWindowSeconds));
+    final cutoff = now.subtract(
+      const Duration(seconds: networkMonitorHistoryWindowSeconds),
+    );
     history.removeWhere((sample) => sample.capturedAt.isBefore(cutoff));
-    final maxSamples =
-        math.max(12, (_historyWindowSeconds / _refreshSeconds).ceil() + 2);
+    final maxSamples = networkMonitorHistorySampleLimit(_refreshSeconds);
     if (history.length > maxSamples) {
       history.removeRange(0, history.length - maxSamples);
     }
@@ -384,7 +486,10 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [colorScheme.primaryContainer, colorScheme.primary.withValues(alpha: 0.85)],
+          colors: [
+            colorScheme.primaryContainer,
+            colorScheme.primary.withValues(alpha: 0.85),
+          ],
         ),
         boxShadow: [
           BoxShadow(
@@ -419,6 +524,7 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
                 onChanged: (value) {
                   setState(() => _live = value);
                   _savePreferences();
+                  if (value) _load();
                 },
               ),
             ],
@@ -477,16 +583,19 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
             onSelectionChanged: (values) {
               final value = values.first;
               setState(() {
-                _refreshSeconds = math.max(_minimumRefreshSeconds, value);
+                _refreshSeconds = math.max(
+                  networkMonitorMinimumInterfaceSeconds,
+                  value,
+                );
                 _previousCounters.clear();
                 _rates.clear();
                 _interfaceHistory.clear();
                 _totalHistory.clear();
                 _lastSampleAt = null;
               });
-              _startTimer();
+              _startTimers();
               _savePreferences();
-              if (_live) _load();
+              if (_live) _refreshInterfaces();
             },
           ),
         ],
@@ -783,7 +892,10 @@ class _LegendItem extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Text(
+          label,
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
       ],
     );
   }
@@ -900,8 +1012,10 @@ class _BandwidthChartState extends State<_BandwidthChart> {
               reservedSize: widget.compact ? 22 : 28,
               interval: math.max(1, maxX / 2),
               getTitlesWidget: (value, meta) {
-                final index =
-                    value.round().clamp(0, widget.history.length - 1).toInt();
+                final index = value
+                    .round()
+                    .clamp(0, widget.history.length - 1)
+                    .toInt();
                 final isStart = index == 0;
                 final isMiddle =
                     (index - (widget.history.length - 1) / 2).abs() <= 1;
@@ -929,7 +1043,9 @@ class _BandwidthChartState extends State<_BandwidthChart> {
           show: true,
           border: Border(
             right: BorderSide(color: scheme.outlineVariant),
-            bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+            bottom: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
           ),
         ),
         lineTouchData: LineTouchData(
@@ -965,12 +1081,10 @@ class _BandwidthChartState extends State<_BandwidthChart> {
             getTooltipItems: (spots) {
               return List.generate(spots.length, (i) {
                 final spot = spots[i];
-                final idx =
-                    spot.spotIndex.clamp(0, widget.history.length - 1);
+                final idx = spot.spotIndex.clamp(0, widget.history.length - 1);
                 final time = _formatClock(widget.history[idx].capturedAt);
                 final label = spot.barIndex == 0 ? '↑ In' : '↓ Out';
-                final value =
-                    _formatDisplayValue(spot.y.abs(), widget.unit);
+                final value = _formatDisplayValue(spot.y.abs(), widget.unit);
                 return LineTooltipItem(
                   i == 0 ? '$time\n$label  $value' : '$label  $value',
                   TextStyle(
