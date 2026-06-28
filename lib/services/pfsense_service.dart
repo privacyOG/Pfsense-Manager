@@ -12,6 +12,7 @@ import '../models/system_log_entry.dart';
 import '../models/top_talker.dart';
 import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
+import '../utils/api_feature_support.dart';
 import 'api_client.dart';
 import 'top_talker_analyzer.dart';
 
@@ -23,6 +24,7 @@ class PfSenseService {
   final Map<int, Future<List<NetworkState>>> _firewallStateRequests = {};
   Future<List<InterfaceStatus>>? _interfaceStatusRequest;
   final TopTalkerAnalyzer _topTalkerAnalyzer = TopTalkerAnalyzer();
+  final ApiFeatureSupportCache _featureSupport = ApiFeatureSupportCache();
   bool _disposed = false;
 
   PfSenseService(this._client);
@@ -322,14 +324,14 @@ class PfSenseService {
 
   Future<List<SmartDrive>> getSmartStatus() async {
     _ensureActive();
-    try {
+    return requireApiFeature(_featureSupport, 'SMART status', () async {
       final response = await _client.get('/api/v2/diagnostics/smart_status');
       final data = response.data['data'] as List? ?? [];
-      return data.whereType<Map<String, dynamic>>().map(SmartDrive.fromJson).toList();
-    } on ApiException catch (e) {
-      if (e.isNetworkError || e.isTimeout || e.isAuthError) rethrow;
-      return [];
-    }
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(SmartDrive.fromJson)
+          .toList();
+    });
   }
 
   Future<void> restartWireGuard() async {
@@ -350,33 +352,38 @@ class PfSenseService {
 
   Future<List<int>> getConfigBackup() async {
     _ensureActive();
-    return _client.getRawBytes('/api/v2/system/config');
+    return requireApiFeature(
+      _featureSupport,
+      'Configuration backup',
+      () => _client.getRawBytes('/api/v2/system/config'),
+    );
   }
 
   Future<Map<String, dynamic>?> getPfBlockerStatus() async {
     _ensureActive();
-    try {
+    return requireApiFeature(_featureSupport, 'pfBlockerNG', () async {
       final response = await _client.get('/api/v2/status/pfblockerng');
       final data = response.data['data'];
       if (data is Map<String, dynamic>) return data;
-      return {};
-    } on ApiException catch (e) {
-      if (e.isNetworkError || e.isTimeout || e.isAuthError) rethrow;
-      return null;
-    }
+      return <String, dynamic>{};
+    });
   }
 
   Future<void> updatePfBlockerLists() async {
     _ensureActive();
-    await _client.post('/api/v2/status/pfblockerng/update');
+    await requireApiFeature<void>(_featureSupport, 'pfBlockerNG', () async {
+      await _client.post('/api/v2/status/pfblockerng/update');
+    });
   }
 
   Future<void> setPfBlockerEnabled(bool enabled) async {
     _ensureActive();
-    await _client.patch(
-      '/api/v2/status/pfblockerng',
-      data: {'enable': enabled},
-    );
+    await requireApiFeature<void>(_featureSupport, 'pfBlockerNG', () async {
+      await _client.patch(
+        '/api/v2/status/pfblockerng',
+        data: {'enable': enabled},
+      );
+    });
   }
 
   Future<bool> healthCheck() async {
@@ -418,13 +425,15 @@ class PfSenseService {
     int maxHops = 30,
   }) async {
     _ensureActive();
-    final response = await _client.post(
-      '/api/v2/diagnostics/traceroute',
-      data: {'host': host, 'max_hops': maxHops},
-    );
-    return response.data['data'] as Map<String, dynamic>? ??
-        response.data as Map<String, dynamic>? ??
-        {};
+    return requireApiFeature(_featureSupport, 'Traceroute', () async {
+      final response = await _client.post(
+        '/api/v2/diagnostics/traceroute',
+        data: {'host': host, 'max_hops': maxHops},
+      );
+      return response.data['data'] as Map<String, dynamic>? ??
+          response.data as Map<String, dynamic>? ??
+          {};
+    });
   }
 
   Future<Map<String, dynamic>> runDnsLookup(
@@ -432,28 +441,32 @@ class PfSenseService {
     String type = 'A',
   }) async {
     _ensureActive();
-    final response = await _client.post(
-      '/api/v2/diagnostics/dns_lookup',
-      data: {'host': host, 'type': type},
-    );
-    return response.data['data'] as Map<String, dynamic>? ??
-        response.data as Map<String, dynamic>? ??
-        {};
+    return requireApiFeature(_featureSupport, 'DNS lookup', () async {
+      final response = await _client.post(
+        '/api/v2/diagnostics/dns_lookup',
+        data: {'host': host, 'type': type},
+      );
+      return response.data['data'] as Map<String, dynamic>? ??
+          response.data as Map<String, dynamic>? ??
+          {};
+    });
   }
 
   Future<List<CaptivePortalSession>> getCaptivePortalSessions({String? zone}) async {
     _ensureActive();
-    final params = <String, dynamic>{};
-    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    final response = await _client.get(
-      '/api/v2/services/captiveportal/sessions',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final data = response.data['data'] as List? ?? [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(CaptivePortalSession.fromJson)
-        .toList();
+    return requireApiFeature(_featureSupport, 'Captive portal', () async {
+      final params = <String, dynamic>{};
+      if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+      final response = await _client.get(
+        '/api/v2/services/captiveportal/sessions',
+        queryParameters: params.isNotEmpty ? params : null,
+      );
+      final data = response.data['data'] as List? ?? [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(CaptivePortalSession.fromJson)
+          .toList();
+    });
   }
 
   Future<void> disconnectCaptivePortalSession({
@@ -462,13 +475,15 @@ class PfSenseService {
     String? zone,
   }) async {
     _ensureActive();
-    final params = <String, dynamic>{'ip': ipAddress};
-    if (macAddress != null && macAddress.isNotEmpty) params['mac'] = macAddress;
-    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    await _client.delete(
-      '/api/v2/services/captiveportal/session',
-      queryParameters: params,
-    );
+    await requireApiFeature<void>(_featureSupport, 'Captive portal', () async {
+      final params = <String, dynamic>{'ip': ipAddress};
+      if (macAddress != null && macAddress.isNotEmpty) params['mac'] = macAddress;
+      if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+      await _client.delete(
+        '/api/v2/services/captiveportal/session',
+        queryParameters: params,
+      );
+    });
   }
 
   Future<List<String>> generateCaptivePortalVouchers({
@@ -477,38 +492,42 @@ class PfSenseService {
     int minutes = 60,
   }) async {
     _ensureActive();
-    final response = await _client.post(
-      '/api/v2/services/captiveportal/vouchers',
-      data: {'zone': zone, 'count': count, 'minutes': minutes},
-    );
-    final data = response.data['data'];
-    if (data is List) {
-      return data
-          .map((v) {
-            if (v is Map<String, dynamic>) {
-              return (v['voucher'] ?? v['code'] ?? v['username'] ?? '').toString();
-            }
-            return v.toString();
-          })
-          .where((s) => s.isNotEmpty)
-          .toList();
-    }
-    return [];
+    return requireApiFeature(_featureSupport, 'Captive portal', () async {
+      final response = await _client.post(
+        '/api/v2/services/captiveportal/vouchers',
+        data: {'zone': zone, 'count': count, 'minutes': minutes},
+      );
+      final data = response.data['data'];
+      if (data is List) {
+        return data
+            .map((v) {
+              if (v is Map<String, dynamic>) {
+                return (v['voucher'] ?? v['code'] ?? v['username'] ?? '').toString();
+              }
+              return v.toString();
+            })
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+      return <String>[];
+    });
   }
 
   Future<List<CaptivePortalVoucher>> getCaptivePortalVouchers({String? zone}) async {
     _ensureActive();
-    final params = <String, dynamic>{};
-    if (zone != null && zone.isNotEmpty) params['zone'] = zone;
-    final response = await _client.get(
-      '/api/v2/services/captiveportal/vouchers',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final data = response.data['data'] as List? ?? [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(CaptivePortalVoucher.fromJson)
-        .toList();
+    return requireApiFeature(_featureSupport, 'Captive portal', () async {
+      final params = <String, dynamic>{};
+      if (zone != null && zone.isNotEmpty) params['zone'] = zone;
+      final response = await _client.get(
+        '/api/v2/services/captiveportal/vouchers',
+        queryParameters: params.isNotEmpty ? params : null,
+      );
+      final data = response.data['data'] as List? ?? [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(CaptivePortalVoucher.fromJson)
+          .toList();
+    });
   }
 
   void _ensureActive() {
@@ -522,6 +541,7 @@ class PfSenseService {
     _firewallStateRequests.clear();
     _interfaceStatusRequest = null;
     _topTalkerAnalyzer.reset();
+    _featureSupport.reset();
     _serviceIds.clear();
     _client.dispose();
   }
