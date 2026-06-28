@@ -24,9 +24,7 @@ class SystemService {
           _nullableString(json['display_name']) ??
           _nullableString(json['name']) ??
           '',
-      running: status == true ||
-          _string(status).toLowerCase() == 'running' ||
-          (json['enabled'] as bool?) == true,
+      running: _isRunningStatus(status),
       pid: _nullableString(json['pid']),
     );
   }
@@ -61,6 +59,15 @@ class SystemService {
     if (value == null) return null;
     if (value is int) return value;
     return int.tryParse(value.toString());
+  }
+
+  static bool _isRunningStatus(dynamic value) {
+    if (value is bool) return value;
+    final status = _string(value).toLowerCase().trim();
+    return status == 'running' ||
+        status == 'started' ||
+        status == 'active' ||
+        status == 'up';
   }
 
   static String _string(dynamic value) => value?.toString() ?? '';
