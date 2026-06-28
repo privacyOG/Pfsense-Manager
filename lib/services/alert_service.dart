@@ -28,6 +28,13 @@ void alertCallbackDispatcher() {
   });
 }
 
+class AlertTemperatureReading {
+  const AlertTemperatureReading({required this.name, required this.celsius});
+
+  final String name;
+  final double celsius;
+}
+
 class AlertService {
   static final _notifications = FlutterLocalNotificationsPlugin();
 
@@ -168,7 +175,7 @@ class AlertService {
             if (gw is! Map<String, dynamic>) continue;
             final name = gw['name']?.toString() ?? 'Gateway';
             final status = gw['status']?.toString().toLowerCase() ?? '';
-            final loss = _parseDouble(gw['packet_loss'] ?? gw['packetloss']);
+            final loss = gatewayPacketLossPercent(gw);
 
             if (status == 'down' || status == 'offline') {
               await _showNotification(
@@ -191,20 +198,13 @@ class AlertService {
       if (sysData is Map) {
         final data = sysData['data'];
         if (data is Map<String, dynamic>) {
-          final sensors = data['thermal_sensors'] as List? ??
-              data['thermals'] as List? ??
-              [];
-          for (final sensor in sensors) {
-            if (sensor is! Map<String, dynamic>) continue;
-            final temp = _parseDouble(
-                sensor['temperature_c'] ?? sensor['temp'] ?? sensor['temperature']);
-            final name = sensor['name']?.toString() ?? 'CPU';
-            if (temp >= cpuThreshold) {
+          for (final reading in systemTemperatureReadings(data)) {
+            if (reading.celsius >= cpuThreshold) {
               await _showNotification(
-                id: _stableId(name, 'temp'),
+                id: _stableId(reading.name, 'temp'),
                 title: 'High Temperature Alert',
                 body:
-                    '$name reached ${temp.toStringAsFixed(1)}°C (limit ${cpuThreshold.toStringAsFixed(0)}°C)',
+                    '${reading.name} reached ${reading.celsius.toStringAsFixed(1)}°C (limit ${cpuThreshold.toStringAsFixed(0)}°C)',
               );
               break;
             }
@@ -212,13 +212,6 @@ class AlertService {
         }
       }
     } catch (_) {}
-  }
-
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    final str = value.toString().replaceAll('%', '').trim();
-    return double.tryParse(str) ?? 0;
   }
 
   static int _stableId(String name, String kind) =>
@@ -247,4 +240,52 @@ class AlertService {
       );
     } catch (_) {}
   }
+}
+
+double gatewayPacketLossPercent(Map<String, dynamic> gateway) {
+  return _parseDouble(
+    gateway['loss'] ?? gateway['packet_loss'] ?? gateway['packetloss'],
+  );
+}
+
+List<AlertTemperatureReading> systemTemperatureReadings(
+  Map<String, dynamic> data,
+) {
+  final readings = <AlertTemperatureReading>[];
+  final directTemp = _parseNullableDouble(data['temp_c']);
+  if (directTemp != null) {
+    readings.add(AlertTemperatureReading(name: 'CPU', celsius: directTemp));
+  }
+
+  final sensors = _asList(data['thermal_sensors']) ?? _asList(data['thermals']);
+  if (sensors != null) {
+    for (final sensor in sensors) {
+      if (sensor is! Map<String, dynamic>) continue;
+      final temp = _parseNullableDouble(
+        sensor['temperature_c'] ?? sensor['temp_c'] ?? sensor['temp'] ?? sensor['temperature'],
+      );
+      if (temp == null) continue;
+      final name = sensor['name']?.toString().trim();
+      readings.add(
+        AlertTemperatureReading(
+          name: name == null || name.isEmpty ? 'CPU' : name,
+          celsius: temp,
+        ),
+      );
+    }
+  }
+
+  return readings;
+}
+
+List<dynamic>? _asList(dynamic value) => value is List ? value : null;
+
+double _parseDouble(dynamic value) => _parseNullableDouble(value) ?? 0;
+
+double? _parseNullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  final str = value.toString().replaceAll('%', '').trim();
+  if (str.isEmpty) return null;
+  return double.tryParse(str);
 }
