@@ -28,7 +28,9 @@ bool isUnsupportedEndpointError(ApiException error) {
   return !error.isNetworkError &&
       !error.isTimeout &&
       !error.isAuthError &&
-      (error.statusCode == 404 || error.statusCode == 405 || error.statusCode == 501);
+      (error.statusCode == 404 ||
+          error.statusCode == 405 ||
+          error.statusCode == 501);
 }
 
 Future<T> requireApiFeature<T>(
