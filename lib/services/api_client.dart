@@ -134,10 +134,11 @@ class PfSenseApiClient {
   }) async {
     _ensureActive();
     final requestPath = _normalisedPath(method, path);
+    final requestData = _normalisedData(method, requestPath, data);
     try {
       final response = await _dio.request(
         requestPath,
-        data: data,
+        data: requestData,
         queryParameters: queryParameters,
         options: Options(method: method),
       );
@@ -173,6 +174,13 @@ class PfSenseApiClient {
       return '/api/v2/vpn/wireguard/tunnels';
     }
     return path;
+  }
+
+  dynamic _normalisedData(String method, String path, dynamic data) {
+    if (method == 'POST' && path == '/api/v2/diagnostics/ping') {
+      return buildPingPayload(data);
+    }
+    return data;
   }
 
   bool _requiresFirewallApply(String method, String path) {
@@ -226,4 +234,15 @@ class PfSenseApiClient {
     _disposed = true;
     _dio.close(force: true);
   }
+}
+
+Map<String, dynamic> buildPingPayload(dynamic data) {
+  if (data is! Map) return {};
+  final payload = Map<String, dynamic>.from(data);
+  final legacySource = payload.remove('interface');
+  final source = payload['source_address'] ?? legacySource;
+  if (source != null && source.toString().trim().isNotEmpty) {
+    payload['source_address'] = source.toString().trim();
+  }
+  return payload;
 }
