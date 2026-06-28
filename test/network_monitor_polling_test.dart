@@ -4,9 +4,18 @@ import 'package:pfsense_manager/screens/network_monitor_screen.dart';
 void main() {
   group('network monitor polling', () {
     test('keeps interface polling on the selected live interval', () {
-      expect(networkMonitorInterfacePollInterval(1), const Duration(seconds: 1));
-      expect(networkMonitorInterfacePollInterval(3), const Duration(seconds: 3));
-      expect(networkMonitorInterfacePollInterval(10), const Duration(seconds: 10));
+      expect(
+        networkMonitorInterfacePollInterval(1),
+        const Duration(seconds: 1),
+      );
+      expect(
+        networkMonitorInterfacePollInterval(3),
+        const Duration(seconds: 3),
+      );
+      expect(
+        networkMonitorInterfacePollInterval(10),
+        const Duration(seconds: 10),
+      );
     });
 
     test('polls firewall states less often than interface counters', () {
