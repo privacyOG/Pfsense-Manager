@@ -17,8 +17,14 @@ void main() {
             },
           );
 
-      await expectLater(callFeature(), throwsA(isA<UnsupportedApiFeatureException>()));
-      await expectLater(callFeature(), throwsA(isA<UnsupportedApiFeatureException>()));
+      await expectLater(
+        callFeature(),
+        throwsA(isA<UnsupportedApiFeatureException>()),
+      );
+      await expectLater(
+        callFeature(),
+        throwsA(isA<UnsupportedApiFeatureException>()),
+      );
       expect(calls, 1);
     });
 
