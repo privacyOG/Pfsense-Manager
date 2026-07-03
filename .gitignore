@@ -28,5 +28,5 @@ Thumbs.db
 *.aab
 *.sha256
 
-# Claude Code agent state
+# Local tooling state
 .claude/
