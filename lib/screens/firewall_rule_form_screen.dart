@@ -20,7 +20,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   late String _interface = widget.rule?.interface.isNotEmpty == true
       ? widget.rule!.interface
       : 'wan';
-  late String _protocol = widget.rule?.protocol ?? 'tcp';
+  late String _protocol = widget.rule?.protocol ?? 'any';
   late final _src = TextEditingController(
     text: widget.rule?.sourceNetwork ?? '*',
   );
@@ -65,7 +65,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       section: widget.rule?.section ?? 'rules',
       type: _type,
       interface: _interface,
-      protocol: _protocol,
+      protocol: _protocol == 'any' ? null : _protocol,
       sourceType: 'network',
       sourceNetwork: _src.text.trim(),
       destinationType: 'network',

@@ -2,13 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pfsense_manager/models/firewall_rule.dart';
 
 void main() {
-  FirewallRule sampleRule({String ipProtocol = 'inet'}) => FirewallRule(
+  FirewallRule sampleRule({
+    String ipProtocol = 'inet',
+    String? protocol = 'tcp',
+  }) =>
+      FirewallRule(
         id: '12',
         section: 'rules',
         type: 'pass',
         interface: 'lan',
         ipProtocol: ipProtocol,
-        protocol: 'tcp',
+        protocol: protocol,
         sourceType: 'network',
         sourceNetwork: '*',
         destinationType: 'network',
@@ -19,6 +23,17 @@ void main() {
         enabled: true,
         createdTime: '2026-01-01T00:00:00Z',
       );
+
+  Map<String, dynamic> apiRule({Object? protocol = 'tcp'}) => {
+        'id': 4,
+        'type': 'pass',
+        'interface': ['wan'],
+        'ipprotocol': 'inet',
+        'protocol': protocol,
+        'source': 'any',
+        'destination': 'any',
+        'disabled': false,
+      };
 
   test('serialises a pfrest firewall rule payload', () {
     final payload = sampleRule().toJson();
@@ -34,6 +49,72 @@ void main() {
     expect(payload['disabled'], isFalse);
     expect(payload.containsKey('id'), isFalse);
     expect(payload.containsKey('section'), isFalse);
+  });
+
+  test('omits protocol when creating an unrestricted rule', () {
+    final rule = sampleRule(protocol: null);
+    final payload = rule.toJson();
+
+    expect(rule.apiProtocol, isNull);
+    expect(rule.protocol, 'any');
+    expect(rule.protocolLabel, 'ANY');
+    expect(payload.containsKey('protocol'), isFalse);
+  });
+
+  test('parses an unrestricted pfrest rule without inventing a protocol', () {
+    final rule = FirewallRule.fromJson(apiRule(protocol: null));
+
+    expect(rule.apiProtocol, isNull);
+    expect(rule.protocol, 'any');
+    expect(rule.toJson().containsKey('protocol'), isFalse);
+  });
+
+  test('editing an unrestricted rule keeps protocol omitted', () {
+    final rule = FirewallRule.fromJson(apiRule(protocol: null));
+    final edited = rule.copyWith(description: 'Updated description');
+
+    expect(edited.description, 'Updated description');
+    expect(edited.apiProtocol, isNull);
+    expect(edited.toJson().containsKey('protocol'), isFalse);
+  });
+
+  test('legacy Any values are treated as unrestricted', () {
+    final rule = FirewallRule.fromJson(apiRule(protocol: 'any'));
+
+    expect(rule.apiProtocol, isNull);
+    expect(rule.toJson().containsKey('protocol'), isFalse);
+  });
+
+  test('copyWith can clear a previously selected protocol', () {
+    final cleared = sampleRule().copyWith(protocol: null);
+
+    expect(cleared.apiProtocol, isNull);
+    expect(cleared.toJson().containsKey('protocol'), isFalse);
+  });
+
+  test('supported pfrest protocol values round-trip unchanged', () {
+    const protocols = [
+      'tcp',
+      'udp',
+      'tcp/udp',
+      'icmp',
+      'esp',
+      'ah',
+      'gre',
+      'ipv6',
+      'igmp',
+      'pim',
+      'ospf',
+      'carp',
+      'pfsync',
+    ];
+
+    for (final protocol in protocols) {
+      final rule = FirewallRule.fromJson(apiRule(protocol: protocol));
+
+      expect(rule.apiProtocol, protocol, reason: protocol);
+      expect(rule.toJson()['protocol'], protocol, reason: protocol);
+    }
   });
 
   test('preserves pfrest ip protocol values', () {
