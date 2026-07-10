@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/firewall_rule.dart';
 import '../providers/session_provider.dart';
+import '../utils/firewall_port_validation.dart';
 
 class FirewallRuleFormScreen extends StatefulWidget {
   const FirewallRuleFormScreen({super.key, this.rule});
@@ -42,6 +43,15 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   late bool _enabled = widget.rule?.enabled ?? true;
   bool _saving = false;
 
+  bool get _supportsPorts => firewallProtocolSupportsPorts(_protocol);
+
+  FirewallPortRangeValidation get _portValidation =>
+      validateFirewallDestinationPortRange(
+        protocol: _protocol,
+        from: _from.text,
+        to: _to.text,
+      );
+
   @override
   void dispose() {
     _src.dispose();
@@ -63,6 +73,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       return;
     }
     setState(() => _saving = true);
+    final supportsPorts = _supportsPorts;
     final r = FirewallRule(
       id: widget.rule?.id,
       section: widget.rule?.section ?? 'rules',
@@ -74,8 +85,10 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       sourceNetwork: _src.text.trim(),
       destinationType: 'network',
       destinationNetwork: _dst.text.trim(),
-      destinationPortFrom: int.tryParse(_from.text.trim()),
-      destinationPortTo: int.tryParse(_to.text.trim()),
+      destinationPortFrom:
+          supportsPorts ? int.tryParse(_from.text.trim()) : null,
+      destinationPortTo:
+          supportsPorts ? int.tryParse(_to.text.trim()) : null,
       description: _desc.text.trim(),
       enabled: _enabled,
       createdTime:
@@ -112,6 +125,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       ),
       body: Form(
         key: _key,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -154,32 +168,48 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
               l?.protocol ?? 'Protocol',
               _protocol,
               ['any', 'tcp', 'udp', 'icmp', 'tcp/udp'],
-              (v) => setState(() => _protocol = v),
+              _setProtocol,
+              key: const Key('firewall-protocol'),
             ),
             const SizedBox(height: 12),
             _field(_src, l?.source ?? 'Source', validator: _req),
             _field(_dst, l?.destination ?? 'Destination', validator: _req),
-            Row(
-              children: [
-                Expanded(
-                  child: _field(
-                    _from,
-                    l?.portFrom ?? 'Port from',
-                    number: true,
-                    validator: _port,
+            if (_supportsPorts) ...[
+              Text(
+                'Destination port',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Enter a starting port. Leave the ending port empty for a single port.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _field(
+                      _from,
+                      l?.portFrom ?? 'Port from',
+                      key: const Key('destination-port-from'),
+                      number: true,
+                      validator: (_) => _portValidation.fromError,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _field(
-                    _to,
-                    l?.portTo ?? 'Port to',
-                    number: true,
-                    validator: _port,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _field(
+                      _to,
+                      l?.portTo ?? 'Port to',
+                      key: const Key('destination-port-to'),
+                      number: true,
+                      validator: (_) => _portValidation.toError,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             _field(_desc, l?.description ?? 'Description', maxLines: 3),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -191,6 +221,16 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
         ),
       ),
     );
+  }
+
+  void _setProtocol(String value) {
+    setState(() {
+      _protocol = value;
+      if (!firewallProtocolSupportsPorts(value)) {
+        _from.clear();
+        _to.clear();
+      }
+    });
   }
 
   Widget _drop(
@@ -220,6 +260,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   Widget _field(
     TextEditingController c,
     String label, {
+    Key? key,
     bool number = false,
     int maxLines = 1,
     String? Function(String?)? validator,
@@ -227,6 +268,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextFormField(
+          key: key,
           controller: c,
           keyboardType: number ? TextInputType.number : TextInputType.text,
           maxLines: maxLines,
@@ -239,15 +281,6 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       v == null || v.trim().isEmpty
           ? (AppLocalizations.of(context)?.requiredField ?? 'Required')
           : null;
-
-  String? _port(String? v) {
-    final t = v?.trim() ?? '';
-    if (t.isEmpty) return null;
-    final p = int.tryParse(t);
-    return p == null || p < 1 || p > 65535
-        ? (AppLocalizations.of(context)?.invalidPort ?? 'Invalid port')
-        : null;
-  }
 
   static String _initialIpProtocol(String? value) {
     final normalized = value?.trim().toLowerCase();
