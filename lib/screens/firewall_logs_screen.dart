@@ -19,6 +19,7 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
   final _search = TextEditingController();
   List<FirewallLog> _logs = [];
   String _action = 'all';
+  String _timeRange = 'all';
   bool _autoRefresh = true;
   bool _loading = false;
   bool _appActive = true;
@@ -97,7 +98,8 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
       setState(() {
         _logs = [];
         _lastSuccessfulRefresh = null;
-        _error = AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
+        _error =
+            AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
       });
       return;
     }
@@ -111,9 +113,7 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
     });
 
     try {
-      final logs = await session.service!.getFirewallLogs(
-        action: _action == 'all' ? null : _action,
-      );
+      final logs = await session.service!.getFirewallLogs(limit: 250);
       if (!mounted ||
           request != _requestGeneration ||
           sessionGeneration != session.sessionGeneration ||
@@ -139,19 +139,12 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final session = context.watch<PfSenseSessionProvider>();
-    final query = _search.text.trim().toLowerCase();
-    final visible = _logs.where((log) {
-      if (query.isEmpty) return true;
-      return [
-        log.sourceIp,
-        log.destinationIp,
-        log.interface,
-        log.protocol,
-        log.reason,
-        log.portInfo,
-        log.action,
-      ].join(' ').toLowerCase().contains(query);
-    }).toList();
+    final visible = filterFirewallLogs(
+      _logs,
+      action: _action == 'all' ? null : _action,
+      query: _search.text,
+      since: _timeCutoff(DateTime.now()),
+    );
 
     return RefreshIndicator(
       onRefresh: () => _load(showSpinner: true),
@@ -166,22 +159,57 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
             ),
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _action,
-            decoration: InputDecoration(labelText: strings?.action ?? 'Action'),
-            items: [
-              DropdownMenuItem(value: 'all', child: Text(strings?.all ?? 'All')),
-              DropdownMenuItem(value: 'PASS', child: Text(strings?.pass ?? 'Pass')),
-              DropdownMenuItem(value: 'BLOCK', child: Text(strings?.block ?? 'Block')),
-              DropdownMenuItem(value: 'REJECT', child: Text(strings?.reject ?? 'Reject')),
-            ],
-            onChanged: _loading
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    setState(() => _action = value);
-                    _load(showSpinner: true);
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: const Key('firewall-log-action-filter'),
+                  initialValue: _action,
+                  decoration:
+                      InputDecoration(labelText: strings?.action ?? 'Action'),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text(strings?.all ?? 'All'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'PASS',
+                      child: Text(strings?.pass ?? 'Pass'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'BLOCK',
+                      child: Text(strings?.block ?? 'Block'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'REJECT',
+                      child: Text(strings?.reject ?? 'Reject'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _action = value);
                   },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: const Key('firewall-log-time-filter'),
+                  initialValue: _timeRange,
+                  decoration: const InputDecoration(labelText: 'Time range'),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All available')),
+                    DropdownMenuItem(value: '15m', child: Text('Last 15 minutes')),
+                    DropdownMenuItem(value: '1h', child: Text('Last hour')),
+                    DropdownMenuItem(value: '6h', child: Text('Last 6 hours')),
+                    DropdownMenuItem(value: '24h', child: Text('Last 24 hours')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _timeRange = value);
+                  },
+                ),
+              ),
+            ],
           ),
           SwitchListTile(
             value: _autoRefresh,
@@ -216,13 +244,28 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
   }
 
   Widget _tile(FirewallLog log) {
-    final color = switch (log.action.toUpperCase()) {
+    if (!log.isParsed) {
+      return Card(
+        child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.code_off_outlined)),
+          title: const Text('Unparsed firewall log'),
+          subtitle: Text(
+            log.rawText.isEmpty ? 'Empty log entry' : log.rawText,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    final action = canonicalFirewallAction(log.action);
+    final color = switch (action) {
       'PASS' => Colors.green,
-      'BLOCK' || 'BLOCK6' => Colors.red,
-      'REJECT' || 'REJECT6' => Colors.orange,
+      'BLOCK' => Colors.red,
+      'REJECT' => Colors.orange,
       _ => Colors.grey,
     };
-    final initial = log.action.isEmpty ? '?' : log.action.substring(0, 1);
+    final initial = action.isEmpty ? '?' : action.substring(0, 1);
     return Card(
       child: ListTile(
         leading: CircleAvatar(
@@ -234,7 +277,7 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
           '${log.formattedTime} | ${log.interface} | ${log.protocol} ${log.portInfo}',
         ),
         trailing: Chip(
-          label: Text(log.action),
+          label: Text(action),
           backgroundColor: color.withValues(alpha: .14),
         ),
         onTap: log.reason.isEmpty
@@ -245,6 +288,14 @@ class _FirewallLogsScreenState extends State<FirewallLogsScreen>
       ),
     );
   }
+
+  DateTime? _timeCutoff(DateTime now) => switch (_timeRange) {
+        '15m' => now.subtract(const Duration(minutes: 15)),
+        '1h' => now.subtract(const Duration(hours: 1)),
+        '6h' => now.subtract(const Duration(hours: 6)),
+        '24h' => now.subtract(const Duration(hours: 24)),
+        _ => null,
+      };
 
   String _formatTime(DateTime value) {
     final local = value.toLocal();
