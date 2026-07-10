@@ -6,9 +6,13 @@ class InterfaceTrafficTotals extends StatelessWidget {
   const InterfaceTrafficTotals({
     super.key,
     required this.interfaces,
+    this.compact = false,
+    this.darkSurface = false,
   });
 
   final List<InterfaceStatus> interfaces;
+  final bool compact;
+  final bool darkSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -20,21 +24,91 @@ class InterfaceTrafficTotals extends StatelessWidget {
     final errorsOut = interfaces.fold<int>(0, (sum, item) => sum + item.errorsOut);
     final collisions = interfaces.fold<int>(0, (sum, item) => sum + item.collisions);
 
-    final items = [
-      _Counter('Bytes in', _formatBytes(bytesIn), Icons.south_west, const Color(0xFF29B6F6)),
-      _Counter('Bytes out', _formatBytes(bytesOut), Icons.north_east, const Color(0xFFFF8A00)),
-      _Counter('Packets in', _formatCount(packetsIn), Icons.download_outlined, const Color(0xFF66BB6A)),
-      _Counter('Packets out', _formatCount(packetsOut), Icons.upload_outlined, const Color(0xFFAB47BC)),
-      _Counter('Input errors', _formatCount(errorsIn), Icons.error_outline, _healthColor(errorsIn)),
-      _Counter('Output errors', _formatCount(errorsOut), Icons.report_problem_outlined, _healthColor(errorsOut)),
-      _Counter('Collisions', _formatCount(collisions), Icons.call_merge, _healthColor(collisions)),
+    const inboundColor = Color(0xFF29B6F6);
+    const outboundColor = Color(0xFFFF9D2E);
+
+    final trafficItems = [
+      _Counter('Bytes in', _formatBytes(bytesIn), Icons.south_west, inboundColor),
+      _Counter(
+        'Bytes out',
+        _formatBytes(bytesOut),
+        Icons.north_east,
+        outboundColor,
+      ),
+      _Counter(
+        'Packets in',
+        _formatCount(packetsIn),
+        Icons.download_outlined,
+        inboundColor,
+      ),
+      _Counter(
+        'Packets out',
+        _formatCount(packetsOut),
+        Icons.upload_outlined,
+        outboundColor,
+      ),
     ];
 
+    final healthItems = [
+      _Counter(
+        'Input errors',
+        _formatCount(errorsIn),
+        Icons.error_outline,
+        _healthColor(errorsIn),
+      ),
+      _Counter(
+        'Output errors',
+        _formatCount(errorsOut),
+        Icons.report_problem_outlined,
+        _healthColor(errorsOut),
+      ),
+      _Counter(
+        'Collisions',
+        _formatCount(collisions),
+        Icons.call_merge,
+        _healthColor(collisions),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CounterGrid(
+          counters: compact ? trafficItems : [...trafficItems, ...healthItems],
+          compact: compact,
+          darkSurface: darkSurface,
+        ),
+        if (compact) ...[
+          const SizedBox(height: 8),
+          _HealthSummary(
+            errors: errorsIn + errorsOut,
+            collisions: collisions,
+            darkSurface: darkSurface,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CounterGrid extends StatelessWidget {
+  const _CounterGrid({
+    required this.counters,
+    required this.compact,
+    required this.darkSurface,
+  });
+
+  final List<_Counter> counters;
+  final bool compact;
+  final bool darkSurface;
+
+  @override
+  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 720
             ? 4
-            : constraints.maxWidth >= 420
+            : constraints.maxWidth >= 300
                 ? 2
                 : 1;
         final width = (constraints.maxWidth - ((columns - 1) * 8)) / columns;
@@ -42,8 +116,15 @@ class InterfaceTrafficTotals extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final item in items)
-              SizedBox(width: width, child: _CounterTile(counter: item)),
+            for (final counter in counters)
+              SizedBox(
+                width: width,
+                child: _CounterTile(
+                  counter: counter,
+                  compact: compact,
+                  darkSurface: darkSurface,
+                ),
+              ),
           ],
         );
       },
@@ -106,33 +187,57 @@ class _Counter {
 }
 
 class _CounterTile extends StatelessWidget {
-  const _CounterTile({required this.counter});
+  const _CounterTile({
+    required this.counter,
+    required this.compact,
+    required this.darkSurface,
+  });
 
   final _Counter counter;
+  final bool compact;
+  final bool darkSurface;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final background = darkSurface
+        ? const Color(0xFF1D3345)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.55);
+    final labelColor =
+        darkSurface ? const Color(0xFFA9B8C7) : scheme.onSurfaceVariant;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+      constraints: BoxConstraints(minHeight: compact ? 68 : 0),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 11,
+        vertical: compact ? 9 : 11,
+      ),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: counter.color.withValues(alpha: 0.24)),
+        color: background,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: counter.color.withValues(alpha: 0.22)),
       ),
       child: Row(
         children: [
-          Icon(counter.icon, color: counter.color, size: 19),
+          Icon(counter.icon, color: counter.color, size: compact ? 18 : 19),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
+              mainAxisAlignment:
+                  compact ? MainAxisAlignment.center : MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   counter.label,
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: compact ? 11 : 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   counter.value,
                   maxLines: 1,
@@ -140,9 +245,66 @@ class _CounterTile extends StatelessWidget {
                   style: TextStyle(
                     color: counter.color,
                     fontWeight: FontWeight.w800,
+                    fontSize: compact ? 14 : null,
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthSummary extends StatelessWidget {
+  const _HealthSummary({
+    required this.errors,
+    required this.collisions,
+    required this.darkSurface,
+  });
+
+  final int errors;
+  final int collisions;
+  final bool darkSurface;
+
+  @override
+  Widget build(BuildContext context) {
+    final healthy = errors == 0 && collisions == 0;
+    final scheme = Theme.of(context).colorScheme;
+    final color = healthy ? const Color(0xFF66BB6A) : Colors.orangeAccent;
+    final background = darkSurface
+        ? const Color(0xFF1D3345)
+        : scheme.surfaceContainerHighest.withValues(alpha: 0.42);
+    final text = healthy
+        ? 'No interface errors reported'
+        : '${_pluralise(errors, 'error')} • '
+            '${_pluralise(collisions, 'collision')}';
+
+    return Container(
+      key: const Key('interface-health-summary'),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            healthy ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: darkSurface ? const Color(0xFFA9B8C7) : scheme.onSurface,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -200,7 +362,11 @@ class _InlineCounter extends StatelessWidget {
 }
 
 Color _healthColor(int value) {
-  return value > 0 ? Colors.orangeAccent : const Color(0xFF00C2A8);
+  return value > 0 ? Colors.orangeAccent : const Color(0xFF66BB6A);
+}
+
+String _pluralise(int value, String singular) {
+  return '$value ${value == 1 ? singular : '${singular}s'}';
 }
 
 String _formatBytes(int bytes) {
@@ -214,7 +380,7 @@ String _formatBytes(int bytes) {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
   if (bytes >= 1024) {
-    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1024).toStringAsFixed(1)} kB';
   }
   return '$bytes B';
 }
