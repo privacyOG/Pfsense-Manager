@@ -10,6 +10,73 @@ enum AmoledAccent {
   infernoRed,
 }
 
+const appBottomNavigationHeight = 70.0;
+
+NavigationBarThemeData buildAppNavigationBarTheme({
+  required Color backgroundColor,
+  required Color indicatorColor,
+  required Color selectedColor,
+  required Color unselectedColor,
+  Color? surfaceTintColor,
+  Color? shadowColor,
+}) {
+  return NavigationBarThemeData(
+    height: appBottomNavigationHeight,
+    backgroundColor: backgroundColor,
+    surfaceTintColor: surfaceTintColor,
+    shadowColor: shadowColor,
+    indicatorColor: indicatorColor,
+    indicatorShape: const StadiumBorder(),
+    labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+    labelPadding: const EdgeInsets.only(top: 3),
+    iconTheme: WidgetStateProperty.resolveWith((states) {
+      final selected = states.contains(WidgetState.selected);
+      return IconThemeData(
+        color: selected ? selectedColor : unselectedColor,
+        size: selected ? 25 : 23,
+      );
+    }),
+    labelTextStyle: WidgetStateProperty.resolveWith((states) {
+      final selected = states.contains(WidgetState.selected);
+      return TextStyle(
+        color: selected ? selectedColor : unselectedColor,
+        fontSize: selected ? 12 : 11.5,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      );
+    }),
+  );
+}
+
+TabBarThemeData buildAppTabBarTheme({
+  required Color primary,
+  required Color onSurface,
+  required Color onSurfaceVariant,
+}) {
+  return TabBarThemeData(
+    indicator: BoxDecoration(
+      color: primary.withValues(alpha: 0.13),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: primary.withValues(alpha: 0.24)),
+    ),
+    indicatorSize: TabBarIndicatorSize.tab,
+    dividerColor: onSurface.withValues(alpha: 0.10),
+    dividerHeight: 1,
+    labelColor: primary,
+    unselectedLabelColor: onSurfaceVariant,
+    labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+    labelStyle: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+    ),
+    unselectedLabelStyle: const TextStyle(
+      fontSize: 12.5,
+      fontWeight: FontWeight.w500,
+    ),
+    overlayColor: WidgetStatePropertyAll(primary.withValues(alpha: 0.07)),
+    splashBorderRadius: BorderRadius.circular(14),
+  );
+}
+
 extension AmoledAccentProps on AmoledAccent {
   String get label {
     switch (this) {
@@ -106,9 +173,16 @@ class ThemeProvider extends ChangeNotifier {
         ),
         color: scheme.surfaceContainerLow,
       ),
-      navigationBarTheme: NavigationBarThemeData(
+      navigationBarTheme: buildAppNavigationBarTheme(
         backgroundColor: nav,
-        indicatorColor: scheme.primary.withValues(alpha: dark ? .32 : .18),
+        indicatorColor: scheme.primary.withValues(alpha: dark ? .26 : .15),
+        selectedColor: scheme.primary,
+        unselectedColor: scheme.onSurfaceVariant,
+      ),
+      tabBarTheme: buildAppTabBarTheme(
+        primary: scheme.primary,
+        onSurface: scheme.onSurface,
+        onSurfaceVariant: scheme.onSurfaceVariant,
       ),
       navigationDrawerTheme: NavigationDrawerThemeData(backgroundColor: nav),
       listTileTheme: const ListTileThemeData(
@@ -183,11 +257,18 @@ class ThemeProvider extends ChangeNotifier {
           borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
       ),
-      navigationBarTheme: NavigationBarThemeData(
+      navigationBarTheme: buildAppNavigationBarTheme(
         backgroundColor: black,
+        indicatorColor: primary.withValues(alpha: 0.18),
+        selectedColor: primary,
+        unselectedColor: const Color(0xFFAAAAAA),
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
-        indicatorColor: primary.withValues(alpha: 0.22),
+      ),
+      tabBarTheme: buildAppTabBarTheme(
+        primary: primary,
+        onSurface: Colors.white,
+        onSurfaceVariant: const Color(0xFFAAAAAA),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: black,
@@ -256,6 +337,9 @@ class ThemeProvider extends ChangeNotifier {
     final nav = dark
         ? (navy ? const Color(0xFF091B2E) : const Color(0xFF111920))
         : Colors.white;
+    final onSurface = dark ? Colors.white : const Color(0xFF1A1C1E);
+    final onSurfaceVariant =
+        dark ? const Color(0xFFB7C4D0) : const Color(0xFF5E6267);
 
     return ThemeData(
       useMaterial3: true,
@@ -274,9 +358,16 @@ class ThemeProvider extends ChangeNotifier {
         ),
         color: surface,
       ),
-      navigationBarTheme: NavigationBarThemeData(
+      navigationBarTheme: buildAppNavigationBarTheme(
         backgroundColor: nav,
-        indicatorColor: seed.withValues(alpha: dark ? .32 : .18),
+        indicatorColor: seed.withValues(alpha: dark ? .26 : .15),
+        selectedColor: seed,
+        unselectedColor: onSurfaceVariant,
+      ),
+      tabBarTheme: buildAppTabBarTheme(
+        primary: seed,
+        onSurface: onSurface,
+        onSurfaceVariant: onSurfaceVariant,
       ),
       navigationDrawerTheme: NavigationDrawerThemeData(backgroundColor: nav),
       listTileTheme: const ListTileThemeData(
