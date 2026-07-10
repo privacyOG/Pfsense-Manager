@@ -31,5 +31,10 @@ void main() {
       expect(networkMonitorHistorySampleLimit(10), 14);
       expect(networkMonitorHistorySampleLimit(30), 12);
     });
+
+    test('uses unambiguous bit and byte unit casing', () {
+      expect(networkMonitorFormatRate(125, bits: true), '1.00 kb/s');
+      expect(networkMonitorFormatRate(1024, bits: false), '1.00 kB/s');
+    });
   });
 }
