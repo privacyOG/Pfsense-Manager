@@ -12,4 +12,8 @@ import '../../providers/session_provider.dart';
 import '../../widgets/interface_traffic_totals.dart';
 
 part 'network_monitor_state.dart';
-part 'network_monitor_widgets.dart';
+part 'network_monitor_polling.dart';
+part 'network_monitor_view.dart';
+part 'network_monitor_cards.dart';
+part 'network_monitor_chart.dart';
+part 'network_monitor_support.dart';
