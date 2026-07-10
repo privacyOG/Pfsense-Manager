@@ -244,7 +244,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                           : rule.description,
                     ),
                     subtitle: Text(
-                      '${rule.interface} | ${rule.protocol.toUpperCase()} | '
+                      '${rule.interface} | ${rule.protocolLabel} | '
                       '${rule.sourceNetwork} → ${rule.destinationNetwork}'
                       '${rule.portRange.isEmpty ? '' : ':${rule.portRange}'}',
                     ),
