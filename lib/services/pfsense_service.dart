@@ -112,20 +112,31 @@ class PfSenseService {
   Future<List<FirewallLog>> getFirewallLogs({
     String? action,
     int limit = 100,
+    int offset = 0,
     DateTime? since,
   }) async {
     _ensureActive();
-    final params = <String, dynamic>{'limit': limit.toString()};
-    if (action != null) params['action'] = action;
-    if (since != null) params['since'] = since.toIso8601String();
     final response = await _client.get(
       '/api/v2/status/logs/firewall',
-      queryParameters: params,
+      queryParameters: {
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      },
     );
-    final logsData = response.data['data'] as List? ?? [];
-    return logsData
-        .map((json) => FirewallLog.fromJson(json as Map<String, dynamic>))
+    final logsData = response.data['data'] as List? ?? const [];
+    final logs = logsData
+        .whereType<Map<String, dynamic>>()
+        .map(FirewallLog.fromJson)
         .toList();
+    logs.sort((a, b) {
+      if (a.hasTimestamp && b.hasTimestamp) {
+        return b.timestamp.compareTo(a.timestamp);
+      }
+      if (a.hasTimestamp) return -1;
+      if (b.hasTimestamp) return 1;
+      return 0;
+    });
+    return filterFirewallLogs(logs, action: action, since: since);
   }
 
   /// Fetches a pfSense system log by type (e.g. `system`, `dhcpd`, `resolver`,
