@@ -7,7 +7,7 @@ class FirewallRule {
   final String type; // pass, block, reject
   final String interface;
   final String ipProtocol;
-  final String? protocol;
+  final String? _protocol;
   final String sourceType;
   final String sourceNetwork;
   final String destinationType;
@@ -24,7 +24,7 @@ class FirewallRule {
     required this.type,
     required this.interface,
     this.ipProtocol = 'inet',
-    required this.protocol,
+    required String? protocol,
     required this.sourceType,
     required this.sourceNetwork,
     required this.destinationType,
@@ -34,7 +34,7 @@ class FirewallRule {
     required this.description,
     required this.enabled,
     required this.createdTime,
-  });
+  }) : _protocol = _normalizeProtocol(protocol);
 
   factory FirewallRule.fromJson(Map<String, dynamic> json) {
     final interfaces = json['interface'];
@@ -49,7 +49,7 @@ class FirewallRule {
           ? interfaces.join(', ')
           : interfaces as String? ?? '',
       ipProtocol: (json['ipprotocol'] as String?)?.toLowerCase() ?? 'inet',
-      protocol: _normalizeProtocol(json['protocol']?.toString()),
+      protocol: json['protocol']?.toString(),
       sourceType: json['source_type'] as String? ?? 'network',
       sourceNetwork:
           json['source_network'] as String? ?? json['source'] as String? ?? '*',
@@ -84,13 +84,12 @@ class FirewallRule {
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
         .toList();
-    final apiProtocol = _normalizeProtocol(protocol);
 
     return {
       'type': type.toLowerCase(),
       'interface': interfaces,
       'ipprotocol': _resolveIpProtocol(),
-      if (apiProtocol != null) 'protocol': apiProtocol,
+      if (_protocol != null) 'protocol': _protocol,
       'source': _normalizeAddress(sourceNetwork),
       'destination': _normalizeAddress(destinationNetwork),
       if (destinationPort != null) 'destination_port': destinationPort,
@@ -99,7 +98,11 @@ class FirewallRule {
     };
   }
 
-  String get protocolLabel => protocol?.toUpperCase() ?? 'ANY';
+  String get protocol => _protocol ?? 'any';
+
+  String? get apiProtocol => _protocol;
+
+  String get protocolLabel => protocol.toUpperCase();
 
   String get portRange {
     if (destinationPortFrom == null && destinationPortTo == null) return '';
@@ -186,7 +189,7 @@ class FirewallRule {
       interface: interface ?? this.interface,
       ipProtocol: ipProtocol ?? this.ipProtocol,
       protocol:
-          identical(protocol, _copyUnset) ? this.protocol : protocol as String?,
+          identical(protocol, _copyUnset) ? _protocol : protocol as String?,
       sourceType: sourceType ?? this.sourceType,
       sourceNetwork: sourceNetwork ?? this.sourceNetwork,
       destinationType: destinationType ?? this.destinationType,
