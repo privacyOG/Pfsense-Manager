@@ -15,11 +15,14 @@ class FirewallRuleFormScreen extends StatefulWidget {
 }
 
 class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
+  static const _ipProtocols = ['inet', 'inet6', 'inet46'];
+
   final _key = GlobalKey<FormState>();
   late String _type = widget.rule?.type ?? 'pass';
   late String _interface = widget.rule?.interface.isNotEmpty == true
       ? widget.rule!.interface
       : 'wan';
+  late String _ipProtocol = _initialIpProtocol(widget.rule?.ipProtocol);
   late String _protocol = widget.rule?.protocol ?? 'any';
   late final _src = TextEditingController(
     text: widget.rule?.sourceNetwork ?? '*',
@@ -65,6 +68,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       section: widget.rule?.section ?? 'rules',
       type: _type,
       interface: _interface,
+      ipProtocol: _ipProtocol,
       protocol: _protocol == 'any' ? null : _protocol,
       sourceType: 'network',
       sourceNetwork: _src.text.trim(),
@@ -138,6 +142,15 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
             ),
             const SizedBox(height: 12),
             _drop(
+              'IP version',
+              _ipProtocol,
+              _ipProtocols,
+              (v) => setState(() => _ipProtocol = v),
+              key: const Key('firewall-ip-protocol'),
+              itemLabel: _ipProtocolLabel,
+            ),
+            const SizedBox(height: 12),
+            _drop(
               l?.protocol ?? 'Protocol',
               _protocol,
               ['any', 'tcp', 'udp', 'icmp', 'tcp/udp'],
@@ -184,14 +197,20 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     String label,
     String value,
     List<String> values,
-    ValueChanged<String> onChanged,
-  ) =>
+    ValueChanged<String> onChanged, {
+    Key? key,
+    String Function(String)? itemLabel,
+  }) =>
       DropdownButtonFormField<String>(
+        key: key,
         value: values.contains(value) ? value : values.first,
         decoration: InputDecoration(labelText: label),
         items: [
-          for (final i in values)
-            DropdownMenuItem(value: i, child: Text(i.toUpperCase())),
+          for (final item in values)
+            DropdownMenuItem(
+              value: item,
+              child: Text(itemLabel?.call(item) ?? item.toUpperCase()),
+            ),
         ],
         onChanged: (v) {
           if (v != null) onChanged(v);
@@ -229,4 +248,15 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
         ? (AppLocalizations.of(context)?.invalidPort ?? 'Invalid port')
         : null;
   }
+
+  static String _initialIpProtocol(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    return _ipProtocols.contains(normalized) ? normalized! : 'inet';
+  }
+
+  static String _ipProtocolLabel(String value) => switch (value) {
+        'inet6' => 'IPv6',
+        'inet46' => 'IPv4 + IPv6',
+        _ => 'IPv4',
+      };
 }
