@@ -1,3 +1,5 @@
+import '../utils/firewall_port_validation.dart';
+
 /// Firewall rule model from pfSense REST API.
 class FirewallRule {
   static const Object _copyUnset = Object();
@@ -74,11 +76,12 @@ class FirewallRule {
   }
 
   Map<String, dynamic> toJson() {
-    final destinationPort = destinationPortFrom == null
-        ? null
-        : destinationPortFrom == destinationPortTo || destinationPortTo == null
+    final destinationPort = firewallProtocolSupportsPorts(_protocol) &&
+            destinationPortFrom != null
+        ? destinationPortFrom == destinationPortTo || destinationPortTo == null
             ? destinationPortFrom.toString()
-            : '$destinationPortFrom:$destinationPortTo';
+            : '$destinationPortFrom:$destinationPortTo'
+        : null;
     final interfaces = interface
         .split(',')
         .map((value) => value.trim())
