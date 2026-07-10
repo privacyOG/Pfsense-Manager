@@ -70,7 +70,7 @@ class PfSenseService {
   Future<List<FirewallRule>> getFirewallRules({String? interface}) async {
     _ensureActive();
     final params = <String, dynamic>{};
-    if (interface != null) params['if'] = interface;
+    if (interface != null) params['interface'] = interface;
     final response = await _client.get(
       '/api/v2/firewall/rules',
       queryParameters: params,
