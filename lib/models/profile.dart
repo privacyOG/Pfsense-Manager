@@ -1,5 +1,21 @@
 import '../utils/pfsense_endpoint.dart';
 
+enum PfSenseAuthMode {
+  apiKey,
+  jwtPassword;
+
+  String get storageValue => switch (this) {
+        PfSenseAuthMode.apiKey => 'api_key',
+        PfSenseAuthMode.jwtPassword => 'jwt_password',
+      };
+
+  static PfSenseAuthMode fromStorage(dynamic value) {
+    return value?.toString() == 'jwt_password'
+        ? PfSenseAuthMode.jwtPassword
+        : PfSenseAuthMode.apiKey;
+  }
+}
+
 /// Represents a pfSense instance profile stored locally.
 class PfSenseProfile {
   final String id;
@@ -9,7 +25,9 @@ class PfSenseProfile {
   bool useHttps;
   bool allowSelfSignedCert;
   String username;
-  String apiKey; // Encrypted at rest via flutter_secure_storage
+  PfSenseAuthMode authMode;
+  String apiKey; // Encrypted at rest via flutter_secure_storage.
+  String password; // Encrypted separately from the API key.
 
   PfSenseProfile({
     required this.id,
@@ -19,7 +37,9 @@ class PfSenseProfile {
     this.useHttps = true,
     this.allowSelfSignedCert = false,
     required this.username,
-    required this.apiKey,
+    this.authMode = PfSenseAuthMode.apiKey,
+    this.apiKey = '',
+    this.password = '',
   }) {
     final endpoint = parsePfSenseEndpoint(
       host,
@@ -37,6 +57,11 @@ class PfSenseProfile {
         useHttps: useHttps,
       );
 
+  bool get hasConfiguredCredential => switch (authMode) {
+        PfSenseAuthMode.apiKey => apiKey.isNotEmpty,
+        PfSenseAuthMode.jwtPassword => password.isNotEmpty,
+      };
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -46,7 +71,8 @@ class PfSenseProfile {
       'useHttps': useHttps,
       'allowSelfSignedCert': allowSelfSignedCert,
       'username': username,
-      // apiKey is NOT serialized to JSON for security; it's stored separately
+      'authMode': authMode.storageValue,
+      // Secrets are stored separately in secure storage and are never exported.
     };
   }
 
@@ -59,7 +85,7 @@ class PfSenseProfile {
       useHttps: json['useHttps'] as bool? ?? true,
       allowSelfSignedCert: json['allowSelfSignedCert'] as bool? ?? false,
       username: json['username'] as String,
-      apiKey: '', // Will be set from secure storage separately
+      authMode: PfSenseAuthMode.fromStorage(json['authMode']),
     );
   }
 
@@ -71,7 +97,9 @@ class PfSenseProfile {
     bool? useHttps,
     bool? allowSelfSignedCert,
     String? username,
+    PfSenseAuthMode? authMode,
     String? apiKey,
+    String? password,
   }) {
     return PfSenseProfile(
       id: id ?? this.id,
@@ -81,7 +109,9 @@ class PfSenseProfile {
       useHttps: useHttps ?? this.useHttps,
       allowSelfSignedCert: allowSelfSignedCert ?? this.allowSelfSignedCert,
       username: username ?? this.username,
+      authMode: authMode ?? this.authMode,
       apiKey: apiKey ?? this.apiKey,
+      password: password ?? this.password,
     );
   }
 }
