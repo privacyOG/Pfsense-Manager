@@ -69,8 +69,9 @@ class _DashboardAlertStripState extends State<DashboardAlertStrip> {
 
   @override
   Widget build(BuildContext context) {
+    final sectionAlerts = _buildSectionAlerts(widget.data);
     final active = _buildWarnings(widget.data);
-    if (active.isEmpty) {
+    if (sectionAlerts.isEmpty && active.isEmpty) {
       return const Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -106,6 +107,11 @@ class _DashboardAlertStripState extends State<DashboardAlertStrip> {
     }
 
     final chips = <Widget>[
+      for (final alert in sectionAlerts)
+        _AlertChip(
+          alert: alert,
+          onTap: () => _showDetails(alert),
+        ),
       for (final alert in visible)
         _AlertChip(
           alert: alert,
@@ -188,7 +194,9 @@ class _DashboardAlertStripState extends State<DashboardAlertStrip> {
                 const SizedBox(height: 6),
                 Text(alert.recommendation),
                 const SizedBox(height: 22),
-                if (profileId != null && preferences != null) ...[
+                if (alert.kind != null &&
+                    profileId != null &&
+                    preferences != null) ...[
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.tonalIcon(
@@ -217,7 +225,7 @@ class _DashboardAlertStripState extends State<DashboardAlertStrip> {
                     'Remind me later hides this warning for 24 hours. Ignored warnings stay hidden for this profile until restored in Settings.',
                     style: Theme.of(sheetContext).textTheme.bodySmall,
                   ),
-                ] else
+                ] else if (alert.kind != null)
                   Text(
                     'Select a firewall profile before changing warning visibility.',
                     style: Theme.of(sheetContext).textTheme.bodySmall,
@@ -283,9 +291,51 @@ class _DashboardAlertStripState extends State<DashboardAlertStrip> {
   }
 }
 
+List<_DashboardAlert> _buildSectionAlerts(DashboardData data) {
+  return [
+    if (!data.systemStatus.isCurrent)
+      _sectionAlert(
+        label: 'System',
+        icon: Icons.monitor_heart_outlined,
+        status: data.systemStatus,
+      ),
+    if (!data.gatewayStatus.isCurrent)
+      _sectionAlert(
+        label: 'Gateways',
+        icon: Icons.public_off_outlined,
+        status: data.gatewayStatus,
+      ),
+    if (!data.interfaceStatus.isCurrent)
+      _sectionAlert(
+        label: 'Interfaces',
+        icon: Icons.settings_ethernet_outlined,
+        status: data.interfaceStatus,
+      ),
+  ];
+}
+
+_DashboardAlert _sectionAlert({
+  required String label,
+  required IconData icon,
+  required DashboardSectionStatus status,
+}) {
+  final stale = status.isStale;
+  return _DashboardAlert(
+    kind: null,
+    icon: icon,
+    label: stale ? '$label data retained' : '$label unavailable',
+    value: stale ? 'Showing last successful data' : 'No data returned',
+    color: stale ? Colors.orangeAccent : Colors.redAccent,
+    details: status.errorMessage ?? '$label could not be loaded.',
+    recommendation: stale
+        ? 'Review connectivity and permissions, then refresh. Values in this section remain unchanged until a request succeeds.'
+        : 'Check the profile permissions, endpoint support and firewall reachability, then refresh this dashboard.',
+  );
+}
+
 List<_DashboardAlert> _buildWarnings(DashboardData data) {
   final alerts = <_DashboardAlert>[];
-  if (data.cpuUsage >= 85) {
+  if (data.systemStatus.isCurrent && data.cpuUsage >= 85) {
     alerts.add(
       _DashboardAlert(
         kind: DashboardWarningKind.cpuHigh,
@@ -300,7 +350,7 @@ List<_DashboardAlert> _buildWarnings(DashboardData data) {
       ),
     );
   }
-  if (data.memoryUsage >= 85) {
+  if (data.systemStatus.isCurrent && data.memoryUsage >= 85) {
     alerts.add(
       _DashboardAlert(
         kind: DashboardWarningKind.memoryHigh,
@@ -315,7 +365,7 @@ List<_DashboardAlert> _buildWarnings(DashboardData data) {
       ),
     );
   }
-  if (data.diskUsage >= 90) {
+  if (data.systemStatus.isCurrent && data.diskUsage >= 90) {
     alerts.add(
       _DashboardAlert(
         kind: DashboardWarningKind.diskHigh,
@@ -332,7 +382,7 @@ List<_DashboardAlert> _buildWarnings(DashboardData data) {
   }
 
   final hottest = data.temperatureC;
-  if (hottest != null && hottest >= 75) {
+  if (data.systemStatus.isCurrent && hottest != null && hottest >= 75) {
     String? sensorName;
     for (final sensor in data.thermalSensors) {
       if (sensor.temperatureC == hottest) {
@@ -355,38 +405,44 @@ List<_DashboardAlert> _buildWarnings(DashboardData data) {
     );
   }
 
-  final downInterfaces = data.interfaces.where((item) => !item.up).toList();
-  if (downInterfaces.isNotEmpty) {
-    final names = downInterfaces.map((item) => item.description).join(', ');
-    alerts.add(
-      _DashboardAlert(
-        kind: DashboardWarningKind.interfaceDown,
-        icon: Icons.settings_ethernet,
-        label: 'Interface down',
-        value: '${downInterfaces.length} affected',
-        color: Colors.orangeAccent,
-        details: 'The following interfaces are not reporting an up state: $names.',
-        recommendation:
-            'Confirm whether each interface is expected to be disconnected. Check cabling, link state, VLAN assignment and interface configuration.',
-      ),
-    );
+  if (data.interfaceStatus.isCurrent) {
+    final downInterfaces = data.interfaces.where((item) => !item.up).toList();
+    if (downInterfaces.isNotEmpty) {
+      final names = downInterfaces.map((item) => item.description).join(', ');
+      alerts.add(
+        _DashboardAlert(
+          kind: DashboardWarningKind.interfaceDown,
+          icon: Icons.settings_ethernet,
+          label: 'Interface down',
+          value: '${downInterfaces.length} affected',
+          color: Colors.orangeAccent,
+          details:
+              'The following interfaces are not reporting an up state: $names.',
+          recommendation:
+              'Confirm whether each interface is expected to be disconnected. Check cabling, link state, VLAN assignment and interface configuration.',
+        ),
+      );
+    }
   }
 
-  final downGateways = data.gateways.where((item) => !item.online).toList();
-  if (downGateways.isNotEmpty) {
-    final names = downGateways.map((item) => item.name).join(', ');
-    alerts.add(
-      _DashboardAlert(
-        kind: DashboardWarningKind.gatewayLoss,
-        icon: Icons.public_off,
-        label: 'Gateway loss',
-        value: '${downGateways.length} affected',
-        color: Colors.redAccent,
-        details: 'The following gateways are not reporting online: $names.',
-        recommendation:
-            'Review gateway monitoring status, packet loss, monitor IP reachability, upstream connectivity and failover behaviour.',
-      ),
-    );
+  if (data.gatewayStatus.isCurrent) {
+    final downGateways = data.gateways.where((item) => !item.online).toList();
+    if (downGateways.isNotEmpty) {
+      final names = downGateways.map((item) => item.name).join(', ');
+      alerts.add(
+        _DashboardAlert(
+          kind: DashboardWarningKind.gatewayLoss,
+          icon: Icons.public_off,
+          label: 'Gateway loss',
+          value: '${downGateways.length} affected',
+          color: Colors.redAccent,
+          details:
+              'The following gateways are not reporting online: $names.',
+          recommendation:
+              'Review gateway monitoring status, packet loss, monitor IP reachability, upstream connectivity and failover behaviour.',
+        ),
+      );
+    }
   }
 
   return alerts;

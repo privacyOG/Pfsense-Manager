@@ -14,6 +14,7 @@ import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
 import '../utils/api_feature_support.dart';
 import 'api_client.dart';
+import 'dashboard_loader.dart';
 import 'system_service_registry.dart';
 import 'top_talker_analyzer.dart';
 
@@ -22,6 +23,7 @@ class PfSenseService {
   final PfSenseApiClient _client;
   final SystemServiceRegistry _serviceRegistry = SystemServiceRegistry();
   Future<DashboardData>? _dashboardRequest;
+  DashboardData? _lastDashboardData;
   final Map<int, Future<List<NetworkState>>> _firewallStateRequests = {};
   Future<List<InterfaceStatus>>? _interfaceStatusRequest;
   final TopTalkerAnalyzer _topTalkerAnalyzer = TopTalkerAnalyzer();
@@ -40,29 +42,13 @@ class PfSenseService {
   }
 
   Future<DashboardData> _loadDashboard() async {
-    final responses = await Future.wait([
-      _client.get('/api/v2/status/system'),
-      _client.get('/api/v2/status/interfaces'),
-      _client.get('/api/v2/status/gateways'),
-    ]);
-    _ensureActive();
-    final statusResp = responses[0];
-    final interfacesResp = responses[1];
-    final gatewaysResp = responses[2];
-    final data = statusResp.data['data'] as Map<String, dynamic>? ?? {};
-    final interfacesData = interfacesResp.data['data'] as List? ?? const [];
-    final gatewaysData = gatewaysResp.data['data'] as List? ?? const [];
-    final interfaces = interfacesData
-        .whereType<Map<String, dynamic>>()
-        .map(InterfaceStatus.fromJson)
-        .toList();
-    return DashboardData.fromJson(data).copyWith(
-      interfaces: _sortInterfaceStatuses(interfaces),
-      gateways: gatewaysData
-          .whereType<Map<String, dynamic>>()
-          .map(GatewayStatus.fromJson)
-          .toList(),
+    final data = await loadDashboardData(
+      _client,
+      previous: _lastDashboardData,
     );
+    _ensureActive();
+    _lastDashboardData = data;
+    return data;
   }
 
   Future<List<FirewallRule>> getFirewallRules({String? interface}) async {
@@ -579,6 +565,7 @@ class PfSenseService {
     if (_disposed) return;
     _disposed = true;
     _dashboardRequest = null;
+    _lastDashboardData = null;
     _firewallStateRequests.clear();
     _interfaceStatusRequest = null;
     _topTalkerAnalyzer.reset();
