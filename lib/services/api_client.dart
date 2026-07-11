@@ -74,12 +74,14 @@ class PfSenseApiClient {
           );
         }
         _dio.options.headers['X-API-Key'] = profile.apiKey;
+        return;
       case PfSenseAuthMode.jwtPassword:
         if (profile.username.trim().isEmpty || profile.password.isEmpty) {
           throw const ApiException(
             'This JWT profile requires an explicit username and password.',
           );
         }
+        return;
     }
   }
 
