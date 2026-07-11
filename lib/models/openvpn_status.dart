@@ -1,3 +1,5 @@
+import 'system_service.dart';
+
 class OpenVpnServerStatus {
   const OpenVpnServerStatus({
     required this.name,
@@ -66,6 +68,32 @@ class OpenVpnConnectionStatus {
 
 int openVpnConnectionCount(List<OpenVpnServerStatus> servers) {
   return servers.fold<int>(0, (count, server) => count + server.connections.length);
+}
+
+SystemService? matchOpenVpnService(
+  OpenVpnServerStatus server,
+  Iterable<SystemService> services,
+) {
+  final candidates = services.where((service) => service.isOpenVpn).toList();
+  if (candidates.isEmpty) return null;
+
+  final vpnId = server.vpnId.trim();
+  if (vpnId.isNotEmpty) {
+    final idMatches = candidates
+        .where((service) => service.vpnId?.trim() == vpnId)
+        .toList();
+    if (idMatches.length == 1) return idMatches.single;
+  }
+
+  final mode = server.mode.trim().toLowerCase();
+  if (mode.isNotEmpty) {
+    final modeMatches = candidates
+        .where((service) => service.mode?.trim().toLowerCase() == mode)
+        .toList();
+    if (modeMatches.length == 1) return modeMatches.single;
+  }
+
+  return candidates.length == 1 ? candidates.single : null;
 }
 
 String _text(dynamic value) => value?.toString().trim() ?? '';

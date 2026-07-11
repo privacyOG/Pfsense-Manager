@@ -14,12 +14,13 @@ import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
 import '../utils/api_feature_support.dart';
 import 'api_client.dart';
+import 'system_service_registry.dart';
 import 'top_talker_analyzer.dart';
 
 /// Service layer for all pfSense API operations.
 class PfSenseService {
   final PfSenseApiClient _client;
-  final Map<String, int> _serviceIds = {};
+  final SystemServiceRegistry _serviceRegistry = SystemServiceRegistry();
   Future<DashboardData>? _dashboardRequest;
   final Map<int, Future<List<NetworkState>>> _firewallStateRequests = {};
   Future<List<InterfaceStatus>>? _interfaceStatusRequest;
@@ -243,38 +244,32 @@ class PfSenseService {
     final services = servicesData
         .map((json) => SystemService.fromJson(json as Map<String, dynamic>))
         .toList();
-    _serviceIds
-      ..clear()
-      ..addEntries(
-        services
-            .where((service) => service.id != null)
-            .map((service) => MapEntry(service.name, service.id!)),
-      );
+    _serviceRegistry.replaceAll(services);
     return services;
   }
 
-  Future<void> startService(String serviceName) async {
-    _ensureActive();
-    await _client.post(
-      '/api/v2/status/service',
-      data: await _serviceActionData(serviceName, 'start'),
-    );
+  Future<void> startService(String serviceName) {
+    return _controlServiceByName(serviceName, 'start');
   }
 
-  Future<void> stopService(String serviceName) async {
-    _ensureActive();
-    await _client.post(
-      '/api/v2/status/service',
-      data: await _serviceActionData(serviceName, 'stop'),
-    );
+  Future<void> stopService(String serviceName) {
+    return _controlServiceByName(serviceName, 'stop');
   }
 
-  Future<void> restartService(String serviceName) async {
-    _ensureActive();
-    await _client.post(
-      '/api/v2/status/service',
-      data: await _serviceActionData(serviceName, 'restart'),
-    );
+  Future<void> restartService(String serviceName) {
+    return _controlServiceByName(serviceName, 'restart');
+  }
+
+  Future<void> startServiceInstance(SystemService service) {
+    return _controlServiceInstance(service, 'start');
+  }
+
+  Future<void> stopServiceInstance(SystemService service) {
+    return _controlServiceInstance(service, 'stop');
+  }
+
+  Future<void> restartServiceInstance(SystemService service) {
+    return _controlServiceInstance(service, 'restart');
   }
 
   Future<SystemInfo> getSystemInfo() async {
@@ -289,12 +284,8 @@ class PfSenseService {
     return List<Map<String, dynamic>>.from(response.data['data'] ?? []);
   }
 
-  Future<void> restartOpenVPN() async {
-    _ensureActive();
-    await _client.post(
-      '/api/v2/status/service',
-      data: await _serviceActionData('openvpn', 'restart'),
-    );
+  Future<void> restartOpenVPN() {
+    return restartService('openvpn');
   }
 
   Future<void> rebootSystem() async {
@@ -407,14 +398,32 @@ class PfSenseService {
     }
   }
 
+  Future<void> _controlServiceByName(String serviceName, String action) async {
+    _ensureActive();
+    await _client.post(
+      '/api/v2/status/service',
+      data: await _serviceActionData(serviceName, action),
+    );
+  }
+
+  Future<void> _controlServiceInstance(
+    SystemService service,
+    String action,
+  ) async {
+    _ensureActive();
+    await _client.post(
+      '/api/v2/status/service',
+      data: _serviceRegistry.actionDataForInstance(service, action),
+    );
+  }
+
   Future<Map<String, dynamic>> _serviceActionData(
     String serviceName,
     String action,
   ) async {
     _ensureActive();
-    if (!_serviceIds.containsKey(serviceName)) await getServices();
-    final id = _serviceIds[serviceName];
-    return {if (id != null) 'id': id, 'name': serviceName, 'action': action};
+    if (!_serviceRegistry.containsName(serviceName)) await getServices();
+    return _serviceRegistry.actionDataForName(serviceName, action);
   }
 
   Future<Map<String, dynamic>> runPing(
@@ -553,7 +562,7 @@ class PfSenseService {
     _interfaceStatusRequest = null;
     _topTalkerAnalyzer.reset();
     _featureSupport.reset();
-    _serviceIds.clear();
+    _serviceRegistry.clear();
     _client.dispose();
   }
 }

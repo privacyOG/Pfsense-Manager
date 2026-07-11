@@ -104,12 +104,17 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   Future<void> _act(SystemService service, String action) async {
     if (_busyService != null) return;
+    final instanceLabel = service.instanceLabel;
+    final body = service.instanceDetails.isEmpty
+        ? 'This changes a live service on the selected pfSense firewall.'
+        : 'Selected instance: ${service.instanceDetails}\n\n'
+            'This changes a live service on the selected pfSense firewall.';
     final bool? confirmed;
     if (action == 'stop' || action == 'restart') {
       confirmed = await showSlideToConfirmSheet(
         context: context,
-        title: '${action == 'stop' ? 'Stop' : 'Restart'} ${service.displayName}?',
-        body: 'This changes a live service on the selected pfSense firewall.',
+        title: '${action == 'stop' ? 'Stop' : 'Restart'} $instanceLabel?',
+        body: body,
         slideLabel: 'Slide to ${action == 'stop' ? 'stop' : 'restart'}',
         icon: action == 'stop' ? Icons.stop_circle_outlined : Icons.refresh,
       );
@@ -119,10 +124,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: Text(strings?.confirm ?? 'Confirm'),
-          content: Text(
-            'START ${service.displayName}?\n\n'
-            'This changes a live service on the selected pfSense firewall.',
-          ),
+          content: Text('START $instanceLabel?\n\n$body'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -143,15 +145,15 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final sessionGeneration = session.sessionGeneration;
     final profileId = session.selectedProfile?.id;
 
-    setState(() => _busyService = service.name);
+    setState(() => _busyService = service.instanceKey);
     try {
       switch (action) {
         case 'start':
-          await session.service!.startService(service.name);
+          await session.service!.startServiceInstance(service);
         case 'stop':
-          await session.service!.stopService(service.name);
+          await session.service!.stopServiceInstance(service);
         case 'restart':
-          await session.service!.restartService(service.name);
+          await session.service!.restartServiceInstance(service);
       }
 
       if (!mounted ||
@@ -163,7 +165,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       await _load(showSpinner: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${service.displayName} $action request completed.')),
+          SnackBar(content: Text('$instanceLabel $action request completed.')),
         );
       }
     } catch (error) {
@@ -238,11 +240,15 @@ class _ServicesScreenState extends State<ServicesScreen> {
                       ),
                       title: Text(service.displayName),
                       subtitle: Text(
-                        service.running
-                            ? (strings?.running ?? 'Running')
-                            : (strings?.stopped ?? 'Stopped'),
+                        [
+                          service.running
+                              ? (strings?.running ?? 'Running')
+                              : (strings?.stopped ?? 'Stopped'),
+                          if (service.instanceDetails.isNotEmpty)
+                            service.instanceDetails,
+                        ].join(' · '),
                       ),
-                      trailing: _busyService == service.name
+                      trailing: _busyService == service.instanceKey
                           ? const SizedBox(
                               width: 24,
                               height: 24,
