@@ -175,7 +175,7 @@ class _SystemScreenState extends State<SystemScreen> {
             _row('Build time', info.buildTime),
             _row('PHP', info.phpVersion),
             _row('Kernel', info.kernelVersion),
-            _row('Repository', info.repositoryType),
+            _row('Repository', info.repositoryType ?? 'Not reported'),
             if (info.lastUpdate != null) _row('Last update', info.lastUpdate!),
           ],
           const SizedBox(height: 12),
