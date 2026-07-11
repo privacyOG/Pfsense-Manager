@@ -23,7 +23,7 @@ class SystemInfo {
   final String version;
   final String architecture;
   final String gitCommit;
-  final String packageMirrorUrl;
+  final String? packageMirrorUrl;
   final List<SystemRepository> repositories;
   final String hostname;
   final String platform;
@@ -31,7 +31,7 @@ class SystemInfo {
   final String buildTime;
   final String phpVersion;
   final String kernelVersion;
-  final String repositoryType;
+  final String? repositoryType;
   final DateTime fetchedAt;
   final String? lastUpdate;
 
@@ -40,6 +40,11 @@ class SystemInfo {
     final flat = <String, dynamic>{};
     _flatten(root, flat);
     final repositories = _parseRepositories(root, flat);
+    final repositoryType = _readNullable(
+          flat,
+          const ['repository_type', 'repo_type'],
+        ) ??
+        (repositories.isEmpty ? null : repositories.first.name);
 
     return SystemInfo(
       systemType: _read(flat, const [
@@ -55,9 +60,9 @@ class SystemInfo {
       gitCommit: _read(flat, const [
         'git_commit', 'commit', 'commit_hash', 'revision', 'build_commit'
       ], 'Unknown'),
-      packageMirrorUrl: _read(flat, const [
+      packageMirrorUrl: _readNullable(flat, const [
         'package_mirror_url', 'package_mirror', 'pkg_mirror', 'mirror_url'
-      ], 'https://cloud.privacyx.co/'),
+      ]),
       repositories: repositories,
       hostname: _read(flat, const [
         'hostname', 'host', 'system_hostname', 'config_system_hostname'
@@ -71,7 +76,7 @@ class SystemInfo {
       kernelVersion: _read(flat, const [
         'kernel_version', 'kernel', 'kernel_release', 'uname_r'
       ], 'Unknown'),
-      repositoryType: repositories.first.name,
+      repositoryType: repositoryType,
       lastUpdate: _readNullable(flat, const [
         'last_update', 'last_updated', 'update_timestamp', 'updated_at'
       ]),
@@ -103,44 +108,74 @@ List<SystemRepository> _parseRepositories(
   final result = <SystemRepository>[];
 
   if (raw is List) {
-    for (var index = 0; index < raw.length; index++) {
-      final item = _asMap(raw[index]);
-      if (item != null) result.add(_repositoryFromMap(item, index));
+    for (final value in raw) {
+      final item = _repositoryFromValue(value);
+      if (item != null && item.hasReportedData) result.add(item);
     }
   } else if (raw is Map) {
-    var index = 0;
     for (final entry in raw.entries) {
-      final item = _asMap(entry.value) ?? <String, dynamic>{};
-      result.add(_repositoryFromMap(
-        <String, dynamic>{'name': entry.key.toString(), ...item},
-        index++,
-      ));
+      final value = entry.value;
+      final item = value is Map
+          ? _repositoryFromMap(<String, dynamic>{
+              'name': entry.key.toString(),
+              ...Map<String, dynamic>.from(value),
+            })
+          : _repositoryFromMap(<String, dynamic>{
+              'name': entry.key.toString(),
+              if (_reportedText(value) != null) 'url': _reportedText(value),
+            });
+      if (item.hasReportedData) result.add(item);
     }
   }
 
   if (result.isEmpty) {
-    result.add(SystemRepository(
-      name: 'pfSense Manager',
-      url: _read(flat, const [
-        'repository_url', 'repo_url', 'package_mirror_url', 'package_mirror', 'pkg_mirror'
-      ], 'https://cloud.privacyx.co/'),
-      priority: 1,
-    ));
+    final explicit = _repositoryFromMap(<String, dynamic>{
+      'name': _readNullable(flat, const [
+        'repository_name',
+        'repo_name',
+      ]),
+      'url': _readNullable(flat, const [
+        'repository_url',
+        'repo_url',
+      ]),
+      'priority': _readIntNullable(flat, const [
+        'repository_priority',
+        'repo_priority',
+      ]),
+      'enabled': _readBoolNullable(flat, const [
+        'repository_enabled',
+        'repo_enabled',
+      ]),
+    });
+    if (explicit.hasReportedData) result.add(explicit);
   }
 
-  result.sort((a, b) => a.priority.compareTo(b.priority));
+  result.sort((a, b) {
+    final aPriority = a.priority;
+    final bPriority = b.priority;
+    if (aPriority == null && bPriority == null) return 0;
+    if (aPriority == null) return 1;
+    if (bPriority == null) return -1;
+    return aPriority.compareTo(bPriority);
+  });
   return List.unmodifiable(result);
 }
 
-SystemRepository _repositoryFromMap(Map<String, dynamic> data, int index) {
+SystemRepository? _repositoryFromValue(dynamic value) {
+  final item = _asMap(value);
+  if (item != null) return _repositoryFromMap(item);
+  final text = _reportedText(value);
+  return text == null ? null : SystemRepository(url: text);
+}
+
+SystemRepository _repositoryFromMap(Map<String, dynamic> data) {
   final flat = <String, dynamic>{};
   _flatten(data, flat);
   return SystemRepository(
-    name: _read(flat, const ['name', 'id', 'type'], 'Repository ${index + 1}'),
-    url: _read(flat, const ['url', 'mirror', 'repository_url'],
-        'https://cloud.privacyx.co/'),
-    priority: _readInt(flat, const ['priority', 'order', 'weight'], index + 1),
-    enabled: _readBool(flat, const ['enabled', 'active'], true),
+    name: _readNullable(flat, const ['name', 'id', 'type']),
+    url: _readNullable(flat, const ['url', 'mirror', 'repository_url']),
+    priority: _readIntNullable(flat, const ['priority', 'order', 'weight']),
+    enabled: _readBoolNullable(flat, const ['enabled', 'active']),
   );
 }
 
@@ -173,25 +208,33 @@ String _read(Map<String, dynamic> data, List<String> keys, String fallback) =>
 
 String? _readNullable(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
-    final value = data[key.toLowerCase()];
-    if (value == null) continue;
-    final text = value.toString().trim();
-    if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    final text = _reportedText(data[key.toLowerCase()]);
+    if (text != null) return text;
   }
   return null;
 }
 
-int _readInt(Map<String, dynamic> data, List<String> keys, int fallback) {
+String? _reportedText(dynamic value) {
+  if (value == null) return null;
+  final text = value.toString().trim();
+  if (text.isEmpty || text.toLowerCase() == 'null') return null;
+  return text;
+}
+
+int _readInt(Map<String, dynamic> data, List<String> keys, int fallback) =>
+    _readIntNullable(data, keys) ?? fallback;
+
+int? _readIntNullable(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
     final value = data[key.toLowerCase()];
     if (value is int) return value;
     final parsed = int.tryParse(value?.toString() ?? '');
     if (parsed != null) return parsed;
   }
-  return fallback;
+  return null;
 }
 
-bool _readBool(Map<String, dynamic> data, List<String> keys, bool fallback) {
+bool? _readBoolNullable(Map<String, dynamic> data, List<String> keys) {
   for (final key in keys) {
     final value = data[key.toLowerCase()];
     if (value is bool) return value;
@@ -199,5 +242,5 @@ bool _readBool(Map<String, dynamic> data, List<String> keys, bool fallback) {
     if (text == 'true' || text == '1' || text == 'yes') return true;
     if (text == 'false' || text == '0' || text == 'no') return false;
   }
-  return fallback;
+  return null;
 }
