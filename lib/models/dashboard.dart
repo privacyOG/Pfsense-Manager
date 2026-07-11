@@ -7,6 +7,42 @@ export 'gateway_status.dart';
 export 'interface_status.dart';
 export 'thermal_sensor.dart';
 
+enum DashboardSectionFreshness {
+  current,
+  stale,
+  unavailable,
+}
+
+class DashboardSectionStatus {
+  const DashboardSectionStatus._({
+    required this.freshness,
+    this.errorMessage,
+  });
+
+  const DashboardSectionStatus.current()
+      : this._(freshness: DashboardSectionFreshness.current);
+
+  const DashboardSectionStatus.stale(String errorMessage)
+      : this._(
+          freshness: DashboardSectionFreshness.stale,
+          errorMessage: errorMessage,
+        );
+
+  const DashboardSectionStatus.unavailable(String errorMessage)
+      : this._(
+          freshness: DashboardSectionFreshness.unavailable,
+          errorMessage: errorMessage,
+        );
+
+  final DashboardSectionFreshness freshness;
+  final String? errorMessage;
+
+  bool get hasData => freshness != DashboardSectionFreshness.unavailable;
+  bool get isCurrent => freshness == DashboardSectionFreshness.current;
+  bool get isStale => freshness == DashboardSectionFreshness.stale;
+  bool get isUnavailable => freshness == DashboardSectionFreshness.unavailable;
+}
+
 class DashboardData {
   DashboardData({
     required this.cpuUsage,
@@ -25,6 +61,9 @@ class DashboardData {
     this.loadAverage15 = 0,
     this.gateways = const [],
     this.interfaces = const [],
+    this.systemStatus = const DashboardSectionStatus.current(),
+    this.gatewayStatus = const DashboardSectionStatus.current(),
+    this.interfaceStatus = const DashboardSectionStatus.current(),
   });
 
   final double cpuUsage;
@@ -43,6 +82,12 @@ class DashboardData {
   final double loadAverage15;
   final List<GatewayStatus> gateways;
   final List<InterfaceStatus> interfaces;
+  final DashboardSectionStatus systemStatus;
+  final DashboardSectionStatus gatewayStatus;
+  final DashboardSectionStatus interfaceStatus;
+
+  bool get hasAnySectionData =>
+      systemStatus.hasData || gatewayStatus.hasData || interfaceStatus.hasData;
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     final load = json['cpu_load_avg'] as List? ?? const [];
@@ -71,9 +116,32 @@ class DashboardData {
     );
   }
 
+  factory DashboardData.empty({
+    DashboardSectionStatus systemStatus =
+        const DashboardSectionStatus.unavailable('System status unavailable.'),
+    DashboardSectionStatus gatewayStatus =
+        const DashboardSectionStatus.unavailable('Gateway status unavailable.'),
+    DashboardSectionStatus interfaceStatus =
+        const DashboardSectionStatus.unavailable('Interface status unavailable.'),
+  }) {
+    return DashboardData(
+      cpuUsage: 0,
+      memoryUsage: 0,
+      uptime: 'Unavailable',
+      cpuModel: 'System status unavailable',
+      platform: 'pfSense dashboard',
+      systemStatus: systemStatus,
+      gatewayStatus: gatewayStatus,
+      interfaceStatus: interfaceStatus,
+    );
+  }
+
   DashboardData copyWith({
     List<GatewayStatus>? gateways,
     List<InterfaceStatus>? interfaces,
+    DashboardSectionStatus? systemStatus,
+    DashboardSectionStatus? gatewayStatus,
+    DashboardSectionStatus? interfaceStatus,
   }) {
     return DashboardData(
       cpuUsage: cpuUsage,
@@ -92,6 +160,9 @@ class DashboardData {
       loadAverage15: loadAverage15,
       gateways: gateways ?? this.gateways,
       interfaces: interfaces ?? this.interfaces,
+      systemStatus: systemStatus ?? this.systemStatus,
+      gatewayStatus: gatewayStatus ?? this.gatewayStatus,
+      interfaceStatus: interfaceStatus ?? this.interfaceStatus,
     );
   }
 }
