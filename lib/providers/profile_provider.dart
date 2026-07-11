@@ -9,7 +9,8 @@ import '../models/profile.dart';
 class ProfileProvider extends ChangeNotifier {
   static const _profilesKey = 'profiles';
   static const _selectedProfileKey = 'selectedProfileId';
-  static const _securePrefix = 'profile_api_key_';
+  static const _apiKeySecurePrefix = 'profile_api_key_';
+  static const _passwordSecurePrefix = 'profile_password_';
   static const _defaultSecureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     iOptions: IOSOptions(
@@ -43,18 +44,31 @@ class ProfileProvider extends ChangeNotifier {
   static Future<PfSenseProfile> resolveForConnection(
     PfSenseProfile profile,
   ) async {
-    if (profile.apiKey.isNotEmpty) return profile;
-    final apiKey = await _defaultSecureStorage.read(
-      key: '$_securePrefix${profile.id}',
-    );
-    return profile.copyWith(apiKey: apiKey ?? '');
+    switch (profile.authMode) {
+      case PfSenseAuthMode.apiKey:
+        final apiKey = profile.apiKey.isNotEmpty
+            ? profile.apiKey
+            : await _defaultSecureStorage.read(
+                key: '$_apiKeySecurePrefix${profile.id}',
+              ) ??
+                '';
+        return profile.copyWith(apiKey: apiKey, password: '');
+      case PfSenseAuthMode.jwtPassword:
+        final password = profile.password.isNotEmpty
+            ? profile.password
+            : await _defaultSecureStorage.read(
+                key: '$_passwordSecurePrefix${profile.id}',
+              ) ??
+                '';
+        return profile.copyWith(apiKey: '', password: password);
+    }
   }
 
   Future<void> addProfile(PfSenseProfile profile) async {
-    _profiles.add(profile.copyWith(apiKey: ''));
+    _profiles.add(profile.copyWith(apiKey: '', password: ''));
     _selectedProfileId ??= profile.id;
     notifyListeners();
-    await _persistProfile(profile);
+    await _persistProfileSecrets(profile);
     await _saveProfiles();
     await _saveSelection();
   }
@@ -63,18 +77,19 @@ class ProfileProvider extends ChangeNotifier {
     final index = _profiles.indexWhere((p) => p.id == updated.id);
     if (index == -1) return;
 
-    _profiles[index] = updated.copyWith(apiKey: '');
+    _profiles[index] = updated.copyWith(apiKey: '', password: '');
     notifyListeners();
 
-    if (updated.apiKey.isNotEmpty) {
-      await _persistProfile(updated);
-    }
+    await _persistProfileSecrets(updated);
     await _saveProfiles();
   }
 
   Future<void> removeProfile(String id) async {
     _profiles.removeWhere((p) => p.id == id);
-    await _secureStorage.delete(key: '$_securePrefix$id');
+    await Future.wait([
+      _secureStorage.delete(key: '$_apiKeySecurePrefix$id'),
+      _secureStorage.delete(key: '$_passwordSecurePrefix$id'),
+    ]);
     if (_selectedProfileId == id) {
       _selectedProfileId = _profiles.isNotEmpty ? _profiles.first.id : null;
     }
@@ -104,7 +119,10 @@ class ProfileProvider extends ChangeNotifier {
     var count = 0;
     for (final item in decoded) {
       if (item is Map<String, dynamic>) {
-        final profile = PfSenseProfile.fromJson(item).copyWith(apiKey: '');
+        final profile = PfSenseProfile.fromJson(item).copyWith(
+          apiKey: '',
+          password: '',
+        );
         if (!_profiles.any((p) => p.id == profile.id)) {
           _profiles.add(profile);
           count++;
@@ -133,7 +151,10 @@ class ProfileProvider extends ChangeNotifier {
         _profiles = [
           for (final item in decoded)
             if (item is Map<String, dynamic>)
-              PfSenseProfile.fromJson(item).copyWith(apiKey: ''),
+              PfSenseProfile.fromJson(item).copyWith(
+                apiKey: '',
+                password: '',
+              ),
         ];
       }
     }
@@ -148,11 +169,19 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persistProfile(PfSenseProfile profile) async {
-    await _secureStorage.write(
-      key: '$_securePrefix${profile.id}',
-      value: profile.apiKey,
-    );
+  Future<void> _persistProfileSecrets(PfSenseProfile profile) async {
+    if (profile.apiKey.isNotEmpty) {
+      await _secureStorage.write(
+        key: '$_apiKeySecurePrefix${profile.id}',
+        value: profile.apiKey,
+      );
+    }
+    if (profile.password.isNotEmpty) {
+      await _secureStorage.write(
+        key: '$_passwordSecurePrefix${profile.id}',
+        value: profile.password,
+      );
+    }
   }
 
   Future<void> _saveProfiles() async {
