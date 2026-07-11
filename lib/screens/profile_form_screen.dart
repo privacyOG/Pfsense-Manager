@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/app_localizations.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
+import '../utils/pfsense_endpoint.dart';
 
 class ProfileFormScreen extends StatefulWidget {
   const ProfileFormScreen({super.key, this.profile});
@@ -13,18 +14,6 @@ class ProfileFormScreen extends StatefulWidget {
 
   @override
   State<ProfileFormScreen> createState() => _ProfileFormScreenState();
-}
-
-class _EndpointParts {
-  const _EndpointParts({
-    required this.host,
-    required this.port,
-    required this.useHttps,
-  });
-
-  final String host;
-  final int port;
-  final bool useHttps;
 }
 
 class _ProfileFormScreenState extends State<ProfileFormScreen> {
@@ -82,32 +71,24 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     Navigator.pop(context, true);
   }
 
-  _EndpointParts? _readEndpoint() {
-    final hostText = _host.text.trim();
-    final portText = _port.text.trim();
-    var useHttps = _https;
-    var host = hostText;
-    var port = int.tryParse(portText) ?? 443;
+  PfSenseEndpoint? _readEndpoint() {
+    final fallbackPort = int.tryParse(_port.text.trim());
+    if (fallbackPort == null) return null;
 
-    if (hostText.contains('://')) {
-      final uri = Uri.tryParse(hostText);
-      if (uri == null || uri.host.isEmpty) return null;
-      host = uri.host;
-      useHttps = uri.scheme.toLowerCase() == 'https';
-      if (uri.hasPort) port = uri.port;
-    } else if (hostText.contains(':') && !hostText.startsWith('[')) {
-      final lastColon = hostText.lastIndexOf(':');
-      final maybePort = int.tryParse(hostText.substring(lastColon + 1));
-      if (maybePort != null) {
-        host = hostText.substring(0, lastColon);
-        port = maybePort;
-      }
+    try {
+      final endpoint = parsePfSenseEndpoint(
+        _host.text,
+        fallbackPort: fallbackPort,
+        fallbackUseHttps: _https,
+        requireHttps: true,
+      );
+      _host.text = endpoint.host;
+      _port.text = endpoint.port.toString();
+      _https = endpoint.useHttps;
+      return endpoint;
+    } on FormatException {
+      return null;
     }
-
-    _host.text = host;
-    _port.text = port.toString();
-    _https = useHttps;
-    return _EndpointParts(host: host, port: port, useHttps: useHttps);
   }
 
   @override
@@ -139,6 +120,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               _host,
               l?.host ?? 'Host, IP, or URL',
               Icons.router_outlined,
+              helperText:
+                  'Examples: firewall.local, 192.168.1.1, [2001:db8::1]:8443',
               validator: _hostVal,
             ),
             _field(
@@ -214,6 +197,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     String label,
     IconData icon, {
     bool number = false,
+    String? helperText,
     String? Function(String?)? validator,
   }) {
     return Padding(
@@ -221,7 +205,11 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: number ? TextInputType.number : TextInputType.text,
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helperText,
+          prefixIcon: Icon(icon),
+        ),
         validator: validator,
       ),
     );
@@ -236,19 +224,22 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     if (text.isEmpty) {
       return AppLocalizations.of(context)?.requiredField ?? 'Required';
     }
-    if (text.contains('://')) {
-      final uri = Uri.tryParse(text);
-      if (uri == null || uri.host.isEmpty) {
-        return AppLocalizations.of(context)?.host ?? 'Host, IP, or URL';
-      }
-      if (uri.scheme.toLowerCase() != 'https') {
-        return 'HTTPS is required for API security';
-      }
+
+    final port = int.tryParse(_port.text.trim());
+    final fallbackPort = port != null && port >= 1 && port <= 65535
+        ? port
+        : 443;
+    try {
+      parsePfSenseEndpoint(
+        text,
+        fallbackPort: fallbackPort,
+        fallbackUseHttps: _https,
+        requireHttps: true,
+      );
       return null;
+    } on FormatException catch (error) {
+      return error.message;
     }
-    return text.contains('/')
-        ? (AppLocalizations.of(context)?.host ?? 'Host, IP, or URL')
-        : null;
   }
 
   String? _portVal(String? value) {
