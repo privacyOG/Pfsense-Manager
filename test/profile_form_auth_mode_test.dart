@@ -61,8 +61,10 @@ void main() {
 
     final secret = find.byKey(const Key('profile-auth-secret'));
     await tester.enterText(secret, 'unsaved-api-key');
-    expect(tester.widget<TextFormField>(secret).controller?.text,
-        'unsaved-api-key');
+    expect(
+      tester.widget<TextFormField>(secret).controller?.text,
+      'unsaved-api-key',
+    );
 
     await _selectAuthMode(tester, 'Username and password (JWT)');
 
@@ -75,16 +77,56 @@ void main() {
     expect(tester.widget<TextFormField>(secret).controller?.text, isEmpty);
     expect(find.text('API key'), findsWidgets);
   });
+
+  testWidgets('changing authentication mode requires the new credential',
+      (tester) async {
+    final provider = ProfileProvider();
+    addTearDown(provider.dispose);
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await provider.addProfile(
+      PfSenseProfile(
+        id: 'edit-auth-mode',
+        name: 'Existing firewall',
+        host: 'firewall.example.test',
+        username: 'api-user',
+        apiKey: 'saved-api-key',
+      ),
+    );
+    final existing = provider.profiles.single;
+
+    await _pumpForm(tester, provider, profile: existing);
+    await _selectAuthMode(tester, 'Username and password (JWT)');
+    await _save(tester);
+
+    expect(find.text('Required'), findsOneWidget);
+    expect(provider.profiles.single.authMode, PfSenseAuthMode.apiKey);
+
+    await tester.enterText(
+      find.byKey(const Key('profile-auth-secret')),
+      'new-password',
+    );
+    await _save(tester);
+
+    expect(provider.profiles.single.authMode, PfSenseAuthMode.jwtPassword);
+    final resolved = await ProfileProvider.resolveForConnection(
+      provider.profiles.single,
+    );
+    expect(resolved.password, 'new-password');
+    expect(resolved.apiKey, isEmpty);
+  });
 }
 
 Future<void> _pumpForm(
   WidgetTester tester,
-  ProfileProvider provider,
-) async {
+  ProfileProvider provider, {
+  PfSenseProfile? profile,
+}) async {
   await tester.pumpWidget(
     ChangeNotifierProvider<ProfileProvider>.value(
       value: provider,
-      child: const MaterialApp(home: ProfileFormScreen()),
+      child: MaterialApp(home: ProfileFormScreen(profile: profile)),
     ),
   );
   await tester.pumpAndSettle();
