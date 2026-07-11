@@ -1,63 +1,99 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
+import 'background_alert_diagnostics.dart';
+import 'background_alert_runner.dart';
+
+export 'background_alert_runner.dart'
+    show
+        AlertTemperatureReading,
+        gatewayPacketLossPercent,
+        systemTemperatureReadings;
+
 const _taskUniqueName = 'pfsense_alert_check';
 const _notificationChannelId = 'pfsense_alerts';
 const _notificationChannelName = 'pfSense Alerts';
-const _enabledKey = 'alert.enabled';
-const _cpuTempKey = 'alert.cpuTempThreshold';
-const _packetLossKey = 'alert.packetLossThreshold';
-const _gatewayAlertsKey = 'alert.gatewayOffline';
 
 @pragma('vm:entry-point')
 void alertCallbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    WidgetsFlutterBinding.ensureInitialized();
     try {
-      WidgetsFlutterBinding.ensureInitialized();
-      await AlertService._performBackgroundCheck();
-    } catch (_) {}
+      await AlertService.performBackgroundCheck();
+    } catch (error) {
+      await AlertService.recordOperationalFailure(error);
+    }
     return true;
   });
-}
-
-class AlertTemperatureReading {
-  const AlertTemperatureReading({required this.name, required this.celsius});
-
-  final String name;
-  final double celsius;
 }
 
 class AlertService {
   static final _notifications = FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
-    await _notifications.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@drawable/ic_launcher'),
-      ),
-    );
-    await _notifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    await Workmanager().initialize(
-      alertCallbackDispatcher,
-      isInDebugMode: false,
-    );
+    final notifier = _LocalAlertNotifier(_notifications);
+    try {
+      final permissionGranted = await notifier.requestPermission();
+      if (!permissionGranted) {
+        await recordOperationalFailure(
+          const BackgroundAlertNotificationPermissionException(),
+        );
+      }
+    } catch (_) {
+      await recordOperationalFailure(
+        const BackgroundAlertNotificationException(),
+      );
+    }
+
+    try {
+      await Workmanager().initialize(
+        alertCallbackDispatcher,
+        isInDebugMode: false,
+      );
+    } catch (_) {
+      await recordOperationalFailure(
+        const BackgroundAlertSchedulingException(),
+      );
+    }
   }
 
   static Future<void> setAlertsEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_enabledKey, enabled);
-    if (enabled) {
+    if (!enabled) {
+      await prefs.setBool(backgroundAlertsEnabledKey, false);
+      try {
+        await Workmanager().cancelByUniqueName(_taskUniqueName);
+      } catch (_) {
+        await recordOperationalFailure(
+          const BackgroundAlertSchedulingException(),
+          preferences: prefs,
+        );
+        throw StateError(
+          'Background alerts were disabled locally, but Android could not cancel the scheduled task.',
+        );
+      }
+      return;
+    }
+
+    final notifier = _LocalAlertNotifier(_notifications);
+    try {
+      if (!await notifier.requestPermission()) {
+        await recordOperationalFailure(
+          const BackgroundAlertNotificationPermissionException(),
+          preferences: prefs,
+        );
+      }
+    } catch (_) {
+      await recordOperationalFailure(
+        const BackgroundAlertNotificationException(),
+        preferences: prefs,
+      );
+    }
+
+    try {
       await Workmanager().registerPeriodicTask(
         _taskUniqueName,
         _taskUniqueName,
@@ -65,227 +101,156 @@ class AlertService {
         constraints: Constraints(networkType: NetworkType.connected),
         existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       );
-    } else {
-      await Workmanager().cancelByUniqueName(_taskUniqueName);
+      await prefs.setBool(backgroundAlertsEnabledKey, true);
+    } catch (_) {
+      await prefs.setBool(backgroundAlertsEnabledKey, false);
+      await recordOperationalFailure(
+        const BackgroundAlertSchedulingException(),
+        preferences: prefs,
+      );
+      throw StateError(
+        'Android could not schedule background alerts. Review battery optimization and background activity settings.',
+      );
     }
   }
 
   static Future<bool> isEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_enabledKey) ?? false;
+    return prefs.getBool(backgroundAlertsEnabledKey) ?? false;
   }
 
   static Future<void> setCpuTempThreshold(double celsius) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_cpuTempKey, celsius);
+    await prefs.setDouble(backgroundAlertCpuTempKey, celsius);
   }
 
   static Future<double> getCpuTempThreshold() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(_cpuTempKey) ?? 80.0;
+    return prefs.getDouble(backgroundAlertCpuTempKey) ?? 80.0;
   }
 
   static Future<void> setPacketLossThreshold(double percent) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_packetLossKey, percent);
+    await prefs.setDouble(backgroundAlertPacketLossKey, percent);
   }
 
   static Future<double> getPacketLossThreshold() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble(_packetLossKey) ?? 15.0;
+    return prefs.getDouble(backgroundAlertPacketLossKey) ?? 15.0;
   }
 
   static Future<void> setGatewayAlertsEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_gatewayAlertsKey, enabled);
+    await prefs.setBool(backgroundAlertGatewayKey, enabled);
   }
 
   static Future<bool> getGatewayAlertsEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_gatewayAlertsKey) ?? true;
+    return prefs.getBool(backgroundAlertGatewayKey) ?? true;
   }
 
-  static Future<void> _performBackgroundCheck() async {
+  static Future<BackgroundAlertDiagnostics> getDiagnostics() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!(prefs.getBool(_enabledKey) ?? false)) return;
+    await prefs.reload();
+    return BackgroundAlertDiagnosticsStore(prefs).read();
+  }
 
+  static Future<BackgroundAlertCheckResult> performBackgroundCheck() async {
+    final prefs = await SharedPreferences.getInstance();
     const storage = FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
     );
+    final runner = BackgroundAlertRunner(
+      preferences: prefs,
+      secureStorage: storage,
+      notifier: _LocalAlertNotifier(_notifications),
+      clientFactory: PfSenseBackgroundAlertApiClient.new,
+      notificationId: _stableId,
+    );
+    return runner.run();
+  }
 
-    final profilesJson = prefs.getString('profiles');
-    final selectedId = prefs.getString('selectedProfileId');
-    if (profilesJson == null || selectedId == null || selectedId.isEmpty) return;
-
-    Map<String, dynamic>? profileData;
+  static Future<void> recordOperationalFailure(
+    Object error, {
+    SharedPreferences? preferences,
+  }) async {
     try {
-      final decoded = jsonDecode(profilesJson) as List;
-      for (final p in decoded) {
-        if ((p as Map<String, dynamic>)['id'] == selectedId) {
-          profileData = p;
-          break;
-        }
-      }
-    } catch (_) {
-      return;
-    }
-    if (profileData == null) return;
-
-    final apiKey = await storage.read(key: 'profile_api_key_$selectedId');
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    final host = profileData['host']?.toString() ?? '';
-    final port = profileData['port'] as int? ?? 443;
-    final allowSelfSigned = profileData['allowSelfSignedCert'] as bool? ?? false;
-    if (host.isEmpty) return;
-
-    final cpuThreshold = prefs.getDouble(_cpuTempKey) ?? 80.0;
-    final lossThreshold = prefs.getDouble(_packetLossKey) ?? 15.0;
-    final gatewayAlerts = prefs.getBool(_gatewayAlertsKey) ?? true;
-
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://$host:$port',
-      headers: {'X-API-Key': apiKey},
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-      followRedirects: false,
-      maxRedirects: 0,
-    ));
-
-    if (allowSelfSigned) {
-      dio.httpClientAdapter = IOHttpClientAdapter(
-        createHttpClient: () {
-          final client = HttpClient();
-          client.badCertificateCallback = (_, __, ___) => true;
-          return client;
-        },
+      final prefs = preferences ?? await SharedPreferences.getInstance();
+      final failure = classifyBackgroundAlertFailure(error);
+      await BackgroundAlertDiagnosticsStore(prefs).recordFailure(
+        failure,
+        DateTime.now(),
       );
+    } catch (_) {
+      // Background execution must still return safely when diagnostics storage
+      // itself is unavailable.
     }
-
-    try {
-      final responses = await Future.wait([
-        dio.get('/api/v2/status/gateways'),
-        dio.get('/api/v2/status/system'),
-      ]);
-
-      if (gatewayAlerts) {
-        final gwData = responses[0].data;
-        if (gwData is Map && gwData['data'] is List) {
-          for (final gw in gwData['data'] as List) {
-            if (gw is! Map<String, dynamic>) continue;
-            final name = gw['name']?.toString() ?? 'Gateway';
-            final status = gw['status']?.toString().toLowerCase() ?? '';
-            final loss = gatewayPacketLossPercent(gw);
-
-            if (status == 'down' || status == 'offline') {
-              await _showNotification(
-                id: _stableId(name, 'down'),
-                title: 'Gateway Offline',
-                body: '$name is not reachable',
-              );
-            } else if (loss >= lossThreshold) {
-              await _showNotification(
-                id: _stableId(name, 'loss'),
-                title: 'High Packet Loss',
-                body: '$name: ${loss.toStringAsFixed(1)}% packet loss',
-              );
-            }
-          }
-        }
-      }
-
-      final sysData = responses[1].data;
-      if (sysData is Map) {
-        final data = sysData['data'];
-        if (data is Map<String, dynamic>) {
-          for (final reading in systemTemperatureReadings(data)) {
-            if (reading.celsius >= cpuThreshold) {
-              await _showNotification(
-                id: _stableId(reading.name, 'temp'),
-                title: 'High Temperature Alert',
-                body:
-                    '${reading.name} reached ${reading.celsius.toStringAsFixed(1)}°C (limit ${cpuThreshold.toStringAsFixed(0)}°C)',
-              );
-              break;
-            }
-          }
-        }
-      }
-    } catch (_) {}
   }
 
   static int _stableId(String name, String kind) =>
       '${name}_$kind'.hashCode.abs() % 100000;
+}
 
-  static Future<void> _showNotification({
+class _LocalAlertNotifier implements BackgroundAlertNotifier {
+  _LocalAlertNotifier(this.notifications);
+
+  final FlutterLocalNotificationsPlugin notifications;
+  bool _initialized = false;
+
+  Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    final initialized = await notifications.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@drawable/ic_launcher'),
+      ),
+    );
+    if (initialized == false) {
+      throw const BackgroundAlertNotificationException();
+    }
+    _initialized = true;
+  }
+
+  Future<bool> requestPermission() async {
+    await _ensureInitialized();
+    final android = notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return await android?.requestNotificationsPermission() ?? true;
+  }
+
+  @override
+  Future<bool> hasPermission() async {
+    try {
+      await _ensureInitialized();
+      final android = notifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.areNotificationsEnabled() ?? true;
+    } catch (error) {
+      if (error is BackgroundAlertNotificationException) rethrow;
+      throw const BackgroundAlertNotificationException();
+    }
+  }
+
+  @override
+  Future<void> show({
     required int id,
     required String title,
     required String body,
   }) async {
-    try {
-      await _notifications.show(
-        id,
-        title,
-        body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _notificationChannelId,
-            _notificationChannelName,
-            channelDescription:
-                'Critical status alerts from your pfSense firewall',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
+    await _ensureInitialized();
+    await notifications.show(
+      id,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _notificationChannelId,
+          _notificationChannelName,
+          channelDescription:
+              'Critical status alerts from your pfSense firewall',
+          importance: Importance.high,
+          priority: Priority.high,
         ),
-      );
-    } catch (_) {}
+      ),
+    );
   }
-}
-
-double gatewayPacketLossPercent(Map<String, dynamic> gateway) {
-  return _parseDouble(
-    gateway['loss'] ?? gateway['packet_loss'] ?? gateway['packetloss'],
-  );
-}
-
-List<AlertTemperatureReading> systemTemperatureReadings(
-  Map<String, dynamic> data,
-) {
-  final readings = <AlertTemperatureReading>[];
-  final directTemp = _parseNullableDouble(data['temp_c']);
-  if (directTemp != null) {
-    readings.add(AlertTemperatureReading(name: 'CPU', celsius: directTemp));
-  }
-
-  final sensors = _asList(data['thermal_sensors']) ?? _asList(data['thermals']);
-  if (sensors != null) {
-    for (final sensor in sensors) {
-      if (sensor is! Map<String, dynamic>) continue;
-      final temp = _parseNullableDouble(
-        sensor['temperature_c'] ?? sensor['temp_c'] ?? sensor['temp'] ?? sensor['temperature'],
-      );
-      if (temp == null) continue;
-      final name = sensor['name']?.toString().trim();
-      readings.add(
-        AlertTemperatureReading(
-          name: name == null || name.isEmpty ? 'CPU' : name,
-          celsius: temp,
-        ),
-      );
-    }
-  }
-
-  return readings;
-}
-
-List<dynamic>? _asList(dynamic value) => value is List ? value : null;
-
-double _parseDouble(dynamic value) => _parseNullableDouble(value) ?? 0;
-
-double? _parseNullableDouble(dynamic value) {
-  if (value == null) return null;
-  if (value is num) return value.toDouble();
-  final str = value.toString().replaceAll('%', '').trim();
-  if (str.isEmpty) return null;
-  return double.tryParse(str);
 }
