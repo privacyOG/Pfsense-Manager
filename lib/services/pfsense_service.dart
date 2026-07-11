@@ -9,6 +9,7 @@ import '../models/smart_drive.dart';
 import '../models/system_service.dart';
 import '../models/system_info.dart';
 import '../models/system_log_entry.dart';
+import '../models/system_log_source.dart';
 import '../models/top_talker.dart';
 import '../models/wireguard_tunnel.dart';
 import '../utils/api_exception.dart';
@@ -123,15 +124,20 @@ class PfSenseService {
     return filterFirewallLogs(logs, action: action, since: since);
   }
 
-  /// Fetches a pfSense system log by type (e.g. `system`, `dhcpd`, `resolver`,
-  /// `gateways`). Returns the most recent [limit] lines.
+  Future<List<SystemLogSource>> getSystemLogSources() async {
+    _ensureActive();
+    final response = await _client.get(systemLogSchemaPath);
+    return systemLogSourcesFromOpenApi(response.data);
+  }
+
+  /// Fetches the most recent [limit] lines from a schema-discovered log source.
   Future<List<SystemLogEntry>> getSystemLog(
-    String logType, {
+    SystemLogSource source, {
     int limit = 200,
   }) async {
     _ensureActive();
     final response = await _client.get(
-      '/api/v2/status/logs/$logType',
+      source.path,
       queryParameters: {'limit': limit.toString()},
     );
     final data = response.data['data'] as List? ?? const [];
