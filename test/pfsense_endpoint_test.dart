@@ -199,7 +199,10 @@ void main() {
       expect(profile.port, 8443);
       expect(profile.useHttps, isTrue);
       expect(profile.baseUrl, 'https://[2001:db8::1]:8443');
-      expect('[2001:db8::1]'.allMatches(profile.baseUrl), hasLength(1));
+      expect(
+        RegExp(r'\[2001:db8::1\]').allMatches(profile.baseUrl),
+        hasLength(1),
+      );
     });
 
     test('normalises legacy bracketed IPv6 metadata during loading', () {
