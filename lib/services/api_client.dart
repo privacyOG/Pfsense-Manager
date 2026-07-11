@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/profile.dart';
 import '../utils/api_exception.dart';
+import '../utils/ping_request_validation.dart';
 
 /// Core HTTP client for pfSense REST API.
 class PfSenseApiClient {
@@ -239,6 +240,20 @@ class PfSenseApiClient {
 Map<String, dynamic> buildPingPayload(dynamic data) {
   if (data is! Map) return {};
   final payload = Map<String, dynamic>.from(data);
+  final countValue = payload['count'];
+  if (countValue != null) {
+    final count = countValue is int
+        ? countValue
+        : int.tryParse(countValue.toString().trim());
+    if (count == null) {
+      throw ArgumentError.value(
+        countValue,
+        'count',
+        'Ping packet count must be an integer between $pingPacketCountMinimum and $pingPacketCountMaximum.',
+      );
+    }
+    payload['count'] = validatePingPacketCount(count);
+  }
   final legacySource = payload.remove('interface');
   final source = payload['source_address'] ?? legacySource;
   if (source != null && source.toString().trim().isNotEmpty) {
