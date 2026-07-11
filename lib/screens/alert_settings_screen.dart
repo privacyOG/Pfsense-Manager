@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../services/alert_service.dart';
+import '../services/background_alert_diagnostics.dart';
+import '../widgets/background_alert_health_card.dart';
 
 class AlertSettingsScreen extends StatefulWidget {
   const AlertSettingsScreen({super.key});
@@ -14,8 +16,11 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
   bool _gatewayAlerts = true;
   double _cpuTempThreshold = 80;
   double _packetLossThreshold = 15;
+  BackgroundAlertDiagnostics _diagnostics =
+      const BackgroundAlertDiagnostics();
   bool _loading = true;
   bool _saving = false;
+  bool _refreshingDiagnostics = false;
 
   @override
   void initState() {
@@ -29,6 +34,7 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
       AlertService.getCpuTempThreshold(),
       AlertService.getPacketLossThreshold(),
       AlertService.getGatewayAlertsEnabled(),
+      AlertService.getDiagnostics(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -36,17 +42,37 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
       _cpuTempThreshold = results[1] as double;
       _packetLossThreshold = results[2] as double;
       _gatewayAlerts = results[3] as bool;
+      _diagnostics = results[4] as BackgroundAlertDiagnostics;
       _loading = false;
     });
+  }
+
+  Future<void> _refreshDiagnostics() async {
+    if (_refreshingDiagnostics) return;
+    setState(() => _refreshingDiagnostics = true);
+    try {
+      final diagnostics = await AlertService.getDiagnostics();
+      if (mounted) setState(() => _diagnostics = diagnostics);
+    } finally {
+      if (mounted) setState(() => _refreshingDiagnostics = false);
+    }
   }
 
   Future<void> _setEnabled(bool value) async {
     setState(() => _saving = true);
     try {
       await AlertService.setAlertsEnabled(value);
-      if (mounted) setState(() => _enabled = value);
-    } catch (e) {
+      final diagnostics = await AlertService.getDiagnostics();
       if (mounted) {
+        setState(() {
+          _enabled = value;
+          _diagnostics = diagnostics;
+        });
+      }
+    } catch (e) {
+      final diagnostics = await AlertService.getDiagnostics();
+      if (mounted) {
+        setState(() => _diagnostics = diagnostics);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.toString())));
       }
@@ -93,8 +119,10 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.notifications_active_outlined,
-                              color: scheme.primary),
+                          Icon(
+                            Icons.notifications_active_outlined,
+                            color: scheme.primary,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
@@ -127,6 +155,13 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                BackgroundAlertHealthCard(
+                  enabled: _enabled,
+                  diagnostics: _diagnostics,
+                  refreshing: _refreshingDiagnostics,
+                  onRefresh: _refreshDiagnostics,
+                ),
                 const SizedBox(height: 24),
                 Text(
                   'Alert conditions',
@@ -141,7 +176,8 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                     secondary: const Icon(Icons.hub_outlined),
                     title: const Text('Gateway offline'),
                     subtitle: const Text(
-                        'Alert when a monitored gateway goes down'),
+                      'Alert when a monitored gateway goes down',
+                    ),
                     value: _gatewayAlerts,
                     onChanged: _enabled ? _setGatewayAlerts : null,
                   ),
@@ -157,7 +193,8 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                             const Icon(Icons.thermostat_outlined),
                             const SizedBox(width: 12),
                             const Expanded(
-                                child: Text('CPU temperature threshold')),
+                              child: Text('CPU temperature threshold'),
+                            ),
                             Text(
                               '${_cpuTempThreshold.toStringAsFixed(0)}°C',
                               style: Theme.of(context)
@@ -176,10 +213,10 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                         ),
                         Text(
                           'Notify when any sensor exceeds this temperature',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 6),
                       ],
@@ -196,7 +233,9 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                           children: [
                             const Icon(Icons.signal_wifi_bad_outlined),
                             const SizedBox(width: 12),
-                            const Expanded(child: Text('Packet loss threshold')),
+                            const Expanded(
+                              child: Text('Packet loss threshold'),
+                            ),
                             Text(
                               '${_packetLossThreshold.toStringAsFixed(0)}%',
                               style: Theme.of(context)
@@ -215,10 +254,10 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                         ),
                         Text(
                           'Notify when gateway packet loss exceeds this value',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 6),
                       ],
@@ -229,22 +268,27 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    color:
+                        scheme.surfaceContainerHighest.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: scheme.outlineVariant),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline,
-                          size: 16, color: scheme.onSurfaceVariant),
+                      Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: scheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Background checks run approximately every 15 minutes when connected to the network. Android may delay or batch tasks based on battery optimization settings.',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                         ),
                       ),
                     ],
