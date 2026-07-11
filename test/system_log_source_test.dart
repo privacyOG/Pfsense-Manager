@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pfsense_manager/models/system_log_source.dart';
 import 'package:pfsense_manager/screens/system_logs_screen.dart';
