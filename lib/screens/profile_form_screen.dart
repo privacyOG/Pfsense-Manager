@@ -27,6 +27,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     text: widget.profile?.username ?? '',
   );
   final _secret = TextEditingController();
+  late PfSenseAuthMode _authMode =
+      widget.profile?.authMode ?? PfSenseAuthMode.apiKey;
   late bool _https = true;
   late bool _self = widget.profile?.allowSelfSignedCert ?? false;
   bool _obscure = true;
@@ -49,6 +51,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     if (endpoint == null) return;
 
     setState(() => _saving = true);
+    final secret = _secret.text;
     final profile = PfSenseProfile(
       id: widget.profile?.id ?? const Uuid().v4(),
       name: _name.text.trim(),
@@ -57,7 +60,9 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
       useHttps: endpoint.useHttps,
       allowSelfSignedCert: _self,
       username: _user.text.trim(),
-      apiKey: _secret.text,
+      authMode: _authMode,
+      apiKey: _authMode == PfSenseAuthMode.apiKey ? secret : '',
+      password: _authMode == PfSenseAuthMode.jwtPassword ? secret : '',
     );
 
     final provider = context.read<ProfileProvider>();
@@ -96,6 +101,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     final l = AppLocalizations.of(context);
     context.watch<ProfileProvider>();
     final editing = widget.profile != null;
+    final usesApiKey = _authMode == PfSenseAuthMode.apiKey;
 
     return Scaffold(
       appBar: AppBar(
@@ -146,6 +152,33 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               ),
               secondary: const Icon(Icons.verified_user_outlined),
             ),
+            DropdownButtonFormField<PfSenseAuthMode>(
+              key: const Key('profile-auth-mode'),
+              initialValue: _authMode,
+              decoration: const InputDecoration(
+                labelText: 'Authentication',
+                prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: PfSenseAuthMode.apiKey,
+                  child: Text('API key'),
+                ),
+                DropdownMenuItem(
+                  value: PfSenseAuthMode.jwtPassword,
+                  child: Text('Username and password (JWT)'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null || value == _authMode) return;
+                setState(() {
+                  _authMode = value;
+                  _secret.clear();
+                  _obscure = true;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
             _field(
               _user,
               l?.username ?? 'Username',
@@ -155,15 +188,21 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextFormField(
+                key: const Key('profile-auth-secret'),
                 controller: _secret,
                 obscureText: _obscure,
                 decoration: InputDecoration(
                   labelText: editing
-                      ? 'Replace API key (optional)'
-                      : (l?.apiKeyOrPassword ?? 'API key'),
-                  helperText:
-                      editing ? 'Leave blank to keep the saved API key.' : null,
-                  prefixIcon: const Icon(Icons.key_outlined),
+                      ? 'Replace ${usesApiKey ? 'API key' : 'password'} (optional)'
+                      : (usesApiKey ? 'API key' : 'Password'),
+                  helperText: editing
+                      ? 'Leave blank to keep the saved ${usesApiKey ? 'API key' : 'password'}.'
+                      : usesApiKey
+                          ? 'Sent only in the X-API-Key header.'
+                          : 'Used only to obtain a JWT token.',
+                  prefixIcon: Icon(
+                    usesApiKey ? Icons.key_outlined : Icons.password_outlined,
+                  ),
                   suffixIcon: IconButton(
                     onPressed: () => setState(() => _obscure = !_obscure),
                     icon: Icon(
