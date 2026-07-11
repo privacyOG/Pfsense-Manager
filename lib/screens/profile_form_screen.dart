@@ -102,6 +102,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     context.watch<ProfileProvider>();
     final editing = widget.profile != null;
     final usesApiKey = _authMode == PfSenseAuthMode.apiKey;
+    final modeChanged = editing && widget.profile!.authMode != _authMode;
+    final secretOptional = editing && !modeChanged;
 
     return Scaffold(
       appBar: AppBar(
@@ -192,10 +194,10 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                 controller: _secret,
                 obscureText: _obscure,
                 decoration: InputDecoration(
-                  labelText: editing
+                  labelText: secretOptional
                       ? 'Replace ${usesApiKey ? 'API key' : 'password'} (optional)'
                       : (usesApiKey ? 'API key' : 'Password'),
-                  helperText: editing
+                  helperText: secretOptional
                       ? 'Leave blank to keep the saved ${usesApiKey ? 'API key' : 'password'}.'
                       : usesApiKey
                           ? 'Sent only in the X-API-Key header.'
@@ -212,7 +214,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                     ),
                   ),
                 ),
-                validator: editing ? null : _req,
+                validator: secretOptional ? null : _req,
               ),
             ),
             FilledButton.icon(
