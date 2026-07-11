@@ -16,40 +16,188 @@ class SystemLogsScreen extends StatefulWidget {
   State<SystemLogsScreen> createState() => _SystemLogsScreenState();
 }
 
-class _SystemLogsScreenState extends State<SystemLogsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+class _SystemLogsScreenState extends State<SystemLogsScreen> {
+  List<SystemLogSource> _sources = const [];
+  Object? _sourceError;
+  bool _loadingSources = false;
+  int _requestGeneration = 0;
+  int? _loadedSessionGeneration;
+  String? _loadedProfileId;
 
   @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: systemLogSources.length, vsync: this);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = context.watch<PfSenseSessionProvider>();
+    final profileId = session.selectedProfile?.id;
+    final changed = _loadedSessionGeneration != session.sessionGeneration ||
+        _loadedProfileId != profileId;
+    if (!changed) return;
+
+    _requestGeneration++;
+    _loadedSessionGeneration = session.sessionGeneration;
+    _loadedProfileId = profileId;
+    _sources = const [];
+    _sourceError = null;
+    _loadingSources = session.connected;
+
+    if (session.connected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _discoverSources();
+      });
+    }
   }
 
   @override
   void dispose() {
-    _tabs.dispose();
+    _requestGeneration++;
     super.dispose();
+  }
+
+  Future<void> _discoverSources() async {
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) {
+      if (!mounted) return;
+      setState(() {
+        _sources = const [];
+        _sourceError = 'Disconnected';
+        _loadingSources = false;
+      });
+      return;
+    }
+
+    final request = ++_requestGeneration;
+    final sessionGeneration = session.sessionGeneration;
+    final profileId = session.selectedProfile?.id;
+    setState(() {
+      _loadingSources = true;
+      _sourceError = null;
+    });
+
+    try {
+      final sources = await session.service!.getSystemLogSources();
+      if (!mounted ||
+          request != _requestGeneration ||
+          sessionGeneration != session.sessionGeneration ||
+          profileId != session.selectedProfile?.id) {
+        return;
+      }
+      setState(() {
+        _sources = sources;
+        _sourceError = null;
+      });
+    } catch (error) {
+      if (!mounted || request != _requestGeneration) return;
+      setState(() {
+        _sources = const [];
+        _sourceError = systemLogDiscoveryErrorMessage(error);
+      });
+    } finally {
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loadingSources = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('System logs'),
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabs: [
-            for (final source in systemLogSources)
-              Tab(icon: Icon(source.icon), text: source.label),
+    final session = context.watch<PfSenseSessionProvider>();
+    if (!session.connected) {
+      return _statusScaffold(
+        icon: Icons.cloud_off_outlined,
+        message: 'Disconnected',
+      );
+    }
+    if (_loadingSources) {
+      return _statusScaffold(
+        icon: Icons.manage_search_outlined,
+        message: 'Reading available log sources from pfREST…',
+        loading: true,
+      );
+    }
+    if (_sourceError != null) {
+      return _statusScaffold(
+        icon: Icons.error_outline,
+        message: _sourceError.toString(),
+        showRefresh: true,
+      );
+    }
+    if (_sources.isEmpty) {
+      return _statusScaffold(
+        icon: Icons.article_outlined,
+        message:
+            'The installed pfREST schema did not report any supported system log endpoints.',
+        showRefresh: true,
+      );
+    }
+
+    final sourceKey = _sources.map((source) => source.path).join('|');
+    return DefaultTabController(
+      key: ValueKey('${session.selectedProfile?.id}:$sourceKey'),
+      length: _sources.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('System logs'),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh available log sources',
+              onPressed: _discoverSources,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+          bottom: TabBar(
+            isScrollable: true,
+            tabs: [
+              for (final source in _sources)
+                Tab(icon: Icon(source.icon), text: source.label),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            for (final source in _sources)
+              _LogTab(
+                key: ValueKey(source.path),
+                source: source,
+              ),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabs,
+    );
+  }
+
+  Widget _statusScaffold({
+    required IconData icon,
+    required String message,
+    bool loading = false,
+    bool showRefresh = false,
+  }) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('System logs'),
+        actions: [
+          if (showRefresh)
+            IconButton(
+              tooltip: 'Refresh available log sources',
+              onPressed: _discoverSources,
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          for (final source in systemLogSources) _LogTab(source: source),
+          if (loading) const LinearProgressIndicator(minHeight: 3),
+          Card(
+            child: ListTile(
+              leading: Icon(icon),
+              title: Text(message),
+              subtitle: showRefresh
+                  ? const Text(
+                      'Only GET log endpoints reported by the connected OpenAPI schema are displayed.',
+                    )
+                  : null,
+            ),
+          ),
         ],
       ),
     );
@@ -57,7 +205,7 @@ class _SystemLogsScreenState extends State<SystemLogsScreen>
 }
 
 class _LogTab extends StatefulWidget {
-  const _LogTab({required this.source});
+  const _LogTab({super.key, required this.source});
 
   final SystemLogSource source;
 
@@ -164,7 +312,7 @@ class _LogTabState extends State<_LogTab>
     });
 
     try {
-      final entries = await session.service!.getSystemLog(widget.source.logType);
+      final entries = await session.service!.getSystemLog(widget.source);
       if (!mounted ||
           request != _requestGeneration ||
           sessionGeneration != session.sessionGeneration ||
@@ -192,7 +340,7 @@ class _LogTabState extends State<_LogTab>
   Future<void> _copyAll(List<SystemLogEntry> visible) async {
     if (visible.isEmpty) return;
     await Clipboard.setData(
-      ClipboardData(text: visible.map((e) => e.raw).join('\n')),
+      ClipboardData(text: visible.map((entry) => entry.raw).join('\n')),
     );
     HapticFeedback.lightImpact();
     if (!mounted) return;
@@ -219,6 +367,19 @@ class _LogTabState extends State<_LogTab>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.source.isCustomExtension)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Card(
+                child: ListTile(
+                  leading: const Icon(Icons.extension_outlined),
+                  title: const Text('Custom pfREST extension'),
+                  subtitle: Text(
+                    '${widget.source.label} is displayed because this installation reported ${widget.source.path}.',
+                  ),
+                ),
+              ),
+            ),
           TextField(
             controller: _search,
             decoration: InputDecoration(
@@ -287,16 +448,38 @@ class _LogTabState extends State<_LogTab>
       Card(child: ListTile(leading: Icon(icon), title: Text(text)));
 }
 
+String systemLogDiscoveryErrorMessage(Object error) {
+  if (error is ApiException) {
+    if (error.isAuthenticationError) {
+      return 'Authentication failed while reading available log sources (401). ${error.message}';
+    }
+    if (error.isPermissionError) {
+      return 'Permission denied while reading the pfREST OpenAPI schema (403). Grant read access to $systemLogSchemaPath. ${error.message}';
+    }
+    if (error.isEndpointUnavailable) {
+      return 'This pfREST installation does not expose the OpenAPI schema at $systemLogSchemaPath.';
+    }
+  }
+  return error.toString();
+}
+
 String systemLogErrorMessage(SystemLogSource source, Object error) {
-  if (isUnsupportedSystemLogError(error)) {
-    return '${source.label} logs are not available from this pfSense REST API installation.';
+  if (error is ApiException) {
+    if (error.isAuthenticationError) {
+      return 'Authentication failed while reading ${source.label} logs (401). ${error.message}';
+    }
+    if (error.isPermissionError) {
+      return 'Permission denied for ${source.label} logs (403). The endpoint is supported, but the saved credential cannot read it. ${error.message}';
+    }
+    if (error.isEndpointUnavailable) {
+      return '${source.label} was reported by the OpenAPI schema but is no longer available. Refresh the log sources.';
+    }
   }
   return error.toString();
 }
 
 bool isUnsupportedSystemLogError(Object error) {
-  return error is ApiException &&
-      (error.statusCode == 404 || error.statusCode == 405);
+  return error is ApiException && error.isEndpointUnavailable;
 }
 
 class _LogTile extends StatelessWidget {
@@ -320,7 +503,11 @@ class _LogTile extends StatelessWidget {
                 child: Row(
                   children: [
                     if (entry.timeLabel.isNotEmpty) ...[
-                      Icon(Icons.schedule, size: 13, color: scheme.onSurfaceVariant),
+                      Icon(
+                        Icons.schedule,
+                        size: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         entry.timeLabel,
