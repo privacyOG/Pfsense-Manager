@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/session_provider.dart';
+import '../utils/ping_request_validation.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
@@ -111,7 +112,7 @@ class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
         Row(
           children: [
             const Text('Packets: '),
-            for (final n in [1, 4, 8, 16])
+            for (final n in pingPacketCountChoices)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: ChoiceChip(
