@@ -38,7 +38,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     _service?.dispose();
     _service = null;
-    _selectedProfile = profile.copyWith(apiKey: '');
+    _selectedProfile = profile.copyWith(apiKey: '', password: '');
     _connected = false;
     _connecting = true;
     _connectionError = null;
