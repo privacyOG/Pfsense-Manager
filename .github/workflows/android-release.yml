@@ -29,6 +29,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate release metadata
+        run: python3 tools/validate_release_metadata.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -54,7 +57,7 @@ jobs:
           BUILD_NUMBER="${APP_VERSION##*+}"
           RELEASE_TAG="v${VERSION}"
           RELEASE_NOTES="$RUNNER_TEMP/version-${VERSION}.md"
-        
+
           case "$GITHUB_REF" in
             refs/tags/*)
               test "$GITHUB_REF_NAME" = "$RELEASE_TAG"
@@ -75,8 +78,10 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "RELEASE_NOTES=$RELEASE_NOTES" >> "$GITHUB_ENV"
+
       - name: Build version notes
         run: python3 tools/changelog_section.py "$VERSION" "$RELEASE_NOTES"
+
       - name: Verify signing secrets
         shell: bash
         env:

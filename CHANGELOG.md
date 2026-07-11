@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Release metadata validation now keeps `pubspec.yaml`, `CHANGELOG.md`, README release guidance, and Android signing instructions consistent in pull-request and signed-release workflows.
+
 ## [1.8.2] - 2026-06-29
 
 Maintained by PrivacyOG.

@@ -100,7 +100,7 @@ For a locally signed build, create `android/key.properties`:
 storePassword=your-store-password
 keyPassword=your-key-password
 keyAlias=your-key-alias
-storeFile=app/pfsense-release.jks
+storeFile=pfsense-release.jks
 ```
 
 Place the keystore at:
@@ -118,7 +118,7 @@ ANDROID_KEY_PASSWORD
 ANDROID_KEY_ALIAS
 ```
 
-Pushing a version tag such as `v1.7.4` builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
+Pushing the tag matching the application version, in the form `v<major>.<minor>.<patch>`, builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
 
 ## Security notes
 
@@ -137,11 +137,11 @@ Credentials are stored using Android secure storage, but users should still prot
 
 pfSense Manager is licensed under **GPL-3.0-only**. Distributed modified versions must remain available under GPLv3 with corresponding source code.
 
-## Current version
+## Release metadata
 
-`1.7.4+13`
+The canonical application version is the `version:` field in `pubspec.yaml`.
 
-Release APKs and checksums are available from the repository's Releases page.
+The matching section in `CHANGELOG.md` supplies the release notes. Release APKs and checksums are available from the repository's Releases page.
 
 ## Status
 
