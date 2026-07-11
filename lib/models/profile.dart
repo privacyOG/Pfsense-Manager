@@ -1,3 +1,5 @@
+import '../utils/pfsense_endpoint.dart';
+
 /// Represents a pfSense instance profile stored locally.
 class PfSenseProfile {
   final String id;
@@ -18,12 +20,22 @@ class PfSenseProfile {
     this.allowSelfSignedCert = false,
     required this.username,
     required this.apiKey,
-  });
-
-  String get baseUrl {
-    final scheme = useHttps ? 'https' : 'http';
-    return '$scheme://$host:$port';
+  }) {
+    final endpoint = parsePfSenseEndpoint(
+      host,
+      fallbackPort: port,
+      fallbackUseHttps: useHttps,
+    );
+    host = endpoint.host;
+    port = endpoint.port;
+    useHttps = endpoint.useHttps;
   }
+
+  String get baseUrl => buildPfSenseBaseUrl(
+        host: host,
+        port: port,
+        useHttps: useHttps,
+      );
 
   Map<String, dynamic> toJson() {
     return {
