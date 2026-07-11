@@ -98,7 +98,12 @@ List<SystemLogSource> systemLogSourcesFromOpenApi(dynamic document) {
     final path = entry.key.toString().trim();
     final operation = _asMap(entry.value);
     final slug = _systemLogSlug(path);
-    if (slug == null || operation == null || !_supportsGet(operation)) continue;
+    if (slug == null ||
+        !_isSafeRelativePath(path) ||
+        operation == null ||
+        !_supportsGet(operation)) {
+      continue;
+    }
     availablePaths.putIfAbsent(slug, () => path);
   }
 
@@ -155,10 +160,23 @@ bool _supportsGet(Map<String, dynamic> operation) {
   return operation.keys.any((key) => key.toLowerCase() == 'get');
 }
 
+bool _isSafeRelativePath(String path) {
+  if (!path.startsWith('/') || path.startsWith('//') || path.contains('\\')) {
+    return false;
+  }
+  final uri = Uri.tryParse(path);
+  if (uri == null ||
+      uri.hasScheme ||
+      uri.hasAuthority ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    return false;
+  }
+  return !uri.pathSegments.any((segment) => segment == '.' || segment == '..');
+}
+
 String? _systemLogSlug(String path) {
   final normalized = path
-      .split('?')
-      .first
       .trim()
       .replaceAll(RegExp(r'/+$'), '')
       .toLowerCase();
