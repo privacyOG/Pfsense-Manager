@@ -36,6 +36,7 @@ void main() {
       },
     });
     PfSenseProfile? resolvedProfile;
+    final identities = <_NotificationIdentity>[];
     final clock = _Clock([
       DateTime.utc(2026, 7, 11, 10, 0),
       DateTime.utc(2026, 7, 11, 10, 1),
@@ -49,7 +50,20 @@ void main() {
         resolvedProfile = profile;
         return client;
       },
-      notificationId: (name, kind) => '$name:$kind'.length,
+      notificationId: ({
+        required String profileId,
+        required String monitoredItem,
+        required String alertType,
+      }) {
+        identities.add(
+          _NotificationIdentity(
+            profileId: profileId,
+            monitoredItem: monitoredItem,
+            alertType: alertType,
+          ),
+        );
+        return identities.length;
+      },
       clock: clock.call,
     ).run();
 
@@ -63,6 +77,21 @@ void main() {
     expect(
       notifier.shown.map((item) => item.title),
       contains('High Temperature Alert'),
+    );
+    expect(
+      identities,
+      const [
+        _NotificationIdentity(
+          profileId: 'firewall-1',
+          monitoredItem: 'WAN_DHCP',
+          alertType: 'down',
+        ),
+        _NotificationIdentity(
+          profileId: 'firewall-1',
+          monitoredItem: 'CPU Package',
+          alertType: 'temp',
+        ),
+      ],
     );
 
     final diagnostics = BackgroundAlertDiagnosticsStore(prefs).read();
@@ -98,7 +127,7 @@ void main() {
       secureStorage: const FlutterSecureStorage(),
       notifier: _FakeNotifier(),
       clientFactory: (_) => client,
-      notificationId: (_, __) => 1,
+      notificationId: _constantNotificationId,
       clock: () => DateTime.utc(2026, 7, 11, 11),
     ).run();
 
@@ -130,7 +159,7 @@ void main() {
         clientCreated = true;
         return _FakeAlertClient(const {});
       },
-      notificationId: (_, __) => 1,
+      notificationId: _constantNotificationId,
       clock: () => DateTime.utc(2026, 7, 11, 12),
     ).run();
 
@@ -162,7 +191,7 @@ void main() {
       secureStorage: const FlutterSecureStorage(),
       notifier: _FakeNotifier(throwOnShow: true),
       clientFactory: (_) => client,
-      notificationId: (_, __) => 1,
+      notificationId: _constantNotificationId,
       clock: () => DateTime.utc(2026, 7, 11, 13),
     ).run();
 
@@ -195,7 +224,7 @@ void main() {
         resolvedProfile = profile;
         return client;
       },
-      notificationId: (_, __) => 1,
+      notificationId: _constantNotificationId,
       clock: () => DateTime.utc(2026, 7, 11, 14),
     ).run();
 
@@ -219,7 +248,7 @@ void main() {
         clientCreated = true;
         return _FakeAlertClient(const {});
       },
-      notificationId: (_, __) => 1,
+      notificationId: _constantNotificationId,
     ).run();
 
     expect(result.attempted, isFalse);
@@ -228,6 +257,13 @@ void main() {
     expect(BackgroundAlertDiagnosticsStore(prefs).read().hasAttempted, isFalse);
   });
 }
+
+int _constantNotificationId({
+  required String profileId,
+  required String monitoredItem,
+  required String alertType,
+}) =>
+    1;
 
 Future<SharedPreferences> _configuredPreferences({
   bool enabled = true,
@@ -311,6 +347,29 @@ class _ShownNotification {
   final int id;
   final String title;
   final String body;
+}
+
+class _NotificationIdentity {
+  const _NotificationIdentity({
+    required this.profileId,
+    required this.monitoredItem,
+    required this.alertType,
+  });
+
+  final String profileId;
+  final String monitoredItem;
+  final String alertType;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _NotificationIdentity &&
+        other.profileId == profileId &&
+        other.monitoredItem == monitoredItem &&
+        other.alertType == alertType;
+  }
+
+  @override
+  int get hashCode => Object.hash(profileId, monitoredItem, alertType);
 }
 
 class _Clock {
