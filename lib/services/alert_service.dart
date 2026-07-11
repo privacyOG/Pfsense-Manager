@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
+import '../utils/background_notification_id.dart';
 import 'background_alert_diagnostics.dart';
 import 'background_alert_runner.dart';
 
@@ -165,7 +166,7 @@ class AlertService {
       secureStorage: storage,
       notifier: _LocalAlertNotifier(_notifications),
       clientFactory: PfSenseBackgroundAlertApiClient.new,
-      notificationId: _stableId,
+      notificationId: backgroundNotificationId,
     );
     return runner.run();
   }
@@ -186,9 +187,6 @@ class AlertService {
       // itself is unavailable.
     }
   }
-
-  static int _stableId(String name, String kind) =>
-      '${name}_$kind'.hashCode.abs() % 100000;
 }
 
 class _LocalAlertNotifier implements BackgroundAlertNotifier {
