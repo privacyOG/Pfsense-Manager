@@ -3,15 +3,21 @@ class SystemService {
   final int? id;
   final String name;
   final String displayName;
+  final bool enabled;
   final bool running;
   final String? pid;
+  final String? mode;
+  final String? vpnId;
 
   SystemService({
     this.id,
     required this.name,
     required this.displayName,
+    this.enabled = true,
     required this.running,
     this.pid,
+    this.mode,
+    this.vpnId,
   });
 
   factory SystemService.fromJson(Map<String, dynamic> json) {
@@ -24,8 +30,11 @@ class SystemService {
           _nullableString(json['display_name']) ??
           _nullableString(json['name']) ??
           '',
+      enabled: _parseBool(json['enabled'], fallback: true),
       running: _isRunningStatus(status),
       pid: _nullableString(json['pid']),
+      mode: _nullableString(json['mode']),
+      vpnId: _nullableString(json['vpnid'] ?? json['vpn_id']),
     );
   }
 
@@ -37,11 +46,29 @@ class SystemService {
     );
   }
 
+  bool get isOpenVpn => name.trim().toLowerCase() == 'openvpn';
+
+  String get instanceKey => id == null ? name : '$name:$id';
+
+  String get instanceDetails {
+    final details = <String>[
+      if (mode != null && mode!.isNotEmpty) mode!,
+      if (vpnId != null && vpnId!.isNotEmpty) 'VPN ID $vpnId',
+      if (id != null) 'Service #$id',
+    ];
+    return details.join(' · ');
+  }
+
+  String get instanceLabel {
+    if (instanceDetails.isEmpty) return displayName;
+    return '$displayName ($instanceDetails)';
+  }
+
   static String _getDisplayName(String name) {
     const displayNames = {
       'dnsmasq': 'DNS Resolver (Dnsmasq)',
       'unbound': 'DNS Resolver (Unbound)',
-      'openvpn': 'OpenVPN Server',
+      'openvpn': 'OpenVPN',
       'openssh': 'SSH Daemon',
       'dhcpd': 'DHCP Server',
       'ntpd': 'NTP Client',
@@ -61,6 +88,18 @@ class SystemService {
     return int.tryParse(value.toString());
   }
 
+  static bool _parseBool(dynamic value, {required bool fallback}) {
+    if (value is bool) return value;
+    final normalized = _string(value).trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0' || normalized == 'no') {
+      return false;
+    }
+    return fallback;
+  }
+
   static bool _isRunningStatus(dynamic value) {
     if (value is bool) return value;
     final status = _string(value).toLowerCase().trim();
@@ -73,7 +112,7 @@ class SystemService {
   static String _string(dynamic value) => value?.toString() ?? '';
 
   static String? _nullableString(dynamic value) {
-    final text = value?.toString();
+    final text = value?.toString().trim();
     return text == null || text.isEmpty ? null : text;
   }
 }
