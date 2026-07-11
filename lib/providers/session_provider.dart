@@ -6,11 +6,29 @@ import '../services/connection_check.dart';
 import '../services/pfsense_service.dart';
 import 'profile_provider.dart';
 
+typedef ConnectionProfileResolver = Future<PfSenseProfile> Function(
+  PfSenseProfile profile,
+);
+typedef PfSenseApiClientFactory = PfSenseApiClient Function(
+  PfSenseProfile profile,
+);
+
 /// Holds the active pfSense API session.
 ///
 /// Connection attempts are generation-checked so a slower, older request cannot
 /// replace a newer profile selection. Superseded API clients are always closed.
 class PfSenseSessionProvider extends ChangeNotifier {
+  PfSenseSessionProvider({
+    ConnectionProfileResolver? profileResolver,
+    PfSenseApiClientFactory? apiClientFactory,
+  })  : _profileResolver =
+            profileResolver ?? ProfileProvider.resolveForConnection,
+        _apiClientFactory =
+            apiClientFactory ?? ((profile) => PfSenseApiClient(profile));
+
+  final ConnectionProfileResolver _profileResolver;
+  final PfSenseApiClientFactory _apiClientFactory;
+
   PfSenseProfile? _selectedProfile;
   PfSenseService? _service;
   bool _connected = false;
@@ -55,11 +73,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
     PfSenseApiClient? client;
     PfSenseService? candidate;
     try {
-      final connectionProfile =
-          await ProfileProvider.resolveForConnection(profile);
+      final connectionProfile = await _profileResolver(profile);
       if (generation != _sessionGeneration || _suspendedForLock) return;
 
-      client = PfSenseApiClient(connectionProfile);
+      client = _apiClientFactory(connectionProfile);
       final check = await PfSenseConnectionChecker(client).check();
 
       if (generation != _sessionGeneration || _suspendedForLock) {
