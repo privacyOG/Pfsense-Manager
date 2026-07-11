@@ -50,10 +50,11 @@ abstract class BackgroundAlertNotifier {
 typedef BackgroundAlertApiClientFactory = BackgroundAlertApiClient Function(
   PfSenseProfile profile,
 );
-typedef BackgroundAlertNotificationId = int Function(
-  String name,
-  String kind,
-);
+typedef BackgroundAlertNotificationId = int Function({
+  required String profileId,
+  required String monitoredItem,
+  required String alertType,
+});
 
 class BackgroundAlertCheckResult {
   const BackgroundAlertCheckResult._({
@@ -116,8 +117,8 @@ class BackgroundAlertRunner {
         client.get('/api/v2/status/system'),
       ]);
 
-      await _evaluateGateways(responses[0]);
-      await _evaluateSystem(responses[1]);
+      await _evaluateGateways(profile.id, responses[0]);
+      await _evaluateSystem(profile.id, responses[1]);
 
       await diagnostics.recordSuccess(_clock());
       return const BackgroundAlertCheckResult.success();
@@ -185,7 +186,10 @@ class BackgroundAlertRunner {
     }
   }
 
-  Future<void> _evaluateGateways(dynamic responseData) async {
+  Future<void> _evaluateGateways(
+    String profileId,
+    dynamic responseData,
+  ) async {
     if (!(preferences.getBool(backgroundAlertGatewayKey) ?? true)) return;
     if (responseData is! Map || responseData['data'] is! List) return;
 
@@ -199,13 +203,21 @@ class BackgroundAlertRunner {
 
       if (status == 'down' || status == 'offline') {
         await _show(
-          id: notificationId(name, 'down'),
+          id: notificationId(
+            profileId: profileId,
+            monitoredItem: name,
+            alertType: 'down',
+          ),
           title: 'Gateway Offline',
           body: '$name is not reachable',
         );
       } else if (loss >= threshold) {
         await _show(
-          id: notificationId(name, 'loss'),
+          id: notificationId(
+            profileId: profileId,
+            monitoredItem: name,
+            alertType: 'loss',
+          ),
           title: 'High Packet Loss',
           body: '$name: ${loss.toStringAsFixed(1)}% packet loss',
         );
@@ -213,7 +225,10 @@ class BackgroundAlertRunner {
     }
   }
 
-  Future<void> _evaluateSystem(dynamic responseData) async {
+  Future<void> _evaluateSystem(
+    String profileId,
+    dynamic responseData,
+  ) async {
     if (responseData is! Map) return;
     final data = responseData['data'];
     if (data is! Map<String, dynamic>) return;
@@ -222,7 +237,11 @@ class BackgroundAlertRunner {
     for (final reading in systemTemperatureReadings(data)) {
       if (reading.celsius < threshold) continue;
       await _show(
-        id: notificationId(reading.name, 'temp'),
+        id: notificationId(
+          profileId: profileId,
+          monitoredItem: reading.name,
+          alertType: 'temp',
+        ),
         title: 'High Temperature Alert',
         body:
             '${reading.name} reached ${reading.celsius.toStringAsFixed(1)}°C (limit ${threshold.toStringAsFixed(0)}°C)',
