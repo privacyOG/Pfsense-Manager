@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/profile.dart';
 import '../services/api_client.dart';
+import '../services/connection_check.dart';
 import '../services/pfsense_service.dart';
 import 'profile_provider.dart';
 
@@ -17,6 +18,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   bool _suspendedForLock = false;
   bool _reconnectAfterUnlock = false;
   String? _connectionError;
+  ConnectionCheckResult? _connectionCheck;
   int _sessionGeneration = 0;
 
   PfSenseProfile? get selectedProfile => _selectedProfile;
@@ -25,6 +27,11 @@ class PfSenseSessionProvider extends ChangeNotifier {
   bool get connecting => _connecting;
   bool get suspendedForLock => _suspendedForLock;
   String? get connectionError => _connectionError;
+  ConnectionCheckResult? get connectionCheck => _connectionCheck;
+  String? get connectionNotice =>
+      _connected && _connectionCheck?.restricted == true
+          ? _connectionCheck!.successMessage
+          : null;
 
   /// Changes whenever the active session becomes invalid or is replaced.
   /// Feature screens capture this value before a request and ignore responses
@@ -42,31 +49,36 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _connected = false;
     _connecting = true;
     _connectionError = null;
+    _connectionCheck = null;
     notifyListeners();
 
+    PfSenseApiClient? client;
     PfSenseService? candidate;
     try {
       final connectionProfile =
           await ProfileProvider.resolveForConnection(profile);
       if (generation != _sessionGeneration || _suspendedForLock) return;
 
-      candidate = PfSenseService(PfSenseApiClient(connectionProfile));
-      final healthy = await candidate.healthCheck();
+      client = PfSenseApiClient(connectionProfile);
+      final check = await PfSenseConnectionChecker(client).check();
 
       if (generation != _sessionGeneration || _suspendedForLock) {
-        candidate.dispose();
+        client.dispose();
         return;
       }
 
-      if (!healthy) {
-        candidate.dispose();
+      _connectionCheck = check;
+      if (!check.connected) {
+        client.dispose();
+        client = null;
         _connecting = false;
-        _connectionError =
-            'Connection failed. Check credentials, API permissions and network.';
+        _connectionError = check.userMessage;
         notifyListeners();
         return;
       }
 
+      candidate = PfSenseService(client);
+      client = null;
       _service = candidate;
       _connected = true;
       _connecting = false;
@@ -74,6 +86,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       notifyListeners();
     } catch (error) {
       candidate?.dispose();
+      client?.dispose();
       if (generation != _sessionGeneration || _suspendedForLock) return;
 
       _connected = false;
@@ -103,6 +116,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _connected = false;
     _connecting = false;
     _connectionError = null;
+    _connectionCheck = null;
     notifyListeners();
   }
 
@@ -128,6 +142,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _suspendedForLock = false;
     _reconnectAfterUnlock = false;
     _connectionError = null;
+    _connectionCheck = null;
     notifyListeners();
   }
 
