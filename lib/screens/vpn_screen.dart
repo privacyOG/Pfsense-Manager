@@ -17,6 +17,7 @@ class VpnScreen extends StatefulWidget {
 
 class _VpnScreenState extends State<VpnScreen> {
   List<OpenVpnServerStatus> _openVpn = [];
+  List<SystemService> _openVpnServices = [];
   SystemService? _tailscale;
   List<WireGuardTunnel> _wireGuard = [];
   Object? _error;
@@ -37,6 +38,7 @@ class _VpnScreenState extends State<VpnScreen> {
     if (changed) {
       _requestGeneration++;
       _openVpn = [];
+      _openVpnServices = [];
       _tailscale = null;
       _wireGuard = [];
       _error = null;
@@ -64,6 +66,7 @@ class _VpnScreenState extends State<VpnScreen> {
       if (!mounted) return;
       setState(() {
         _openVpn = [];
+        _openVpnServices = [];
         _tailscale = null;
         _wireGuard = [];
         _lastSuccessfulRefresh = null;
@@ -106,6 +109,7 @@ class _VpnScreenState extends State<VpnScreen> {
         _openVpn = (results[0] as List<Map<String, dynamic>>)
             .map(OpenVpnServerStatus.fromJson)
             .toList();
+        _openVpnServices = services.where((service) => service.isOpenVpn).toList();
         _tailscale = tailscale;
         _wireGuard = results[2] as List<WireGuardTunnel>;
         _lastSuccessfulRefresh = DateTime.now();
@@ -121,7 +125,11 @@ class _VpnScreenState extends State<VpnScreen> {
     }
   }
 
-  Future<void> _restart(String title, Future<void> Function() action) async {
+  Future<void> _restart({
+    required String actionKey,
+    required String title,
+    required Future<void> Function() action,
+  }) async {
     if (_busyAction != null) return;
     final strings = AppStrings.of(context);
     final confirmed = await showSlideToConfirmSheet(
@@ -132,13 +140,20 @@ class _VpnScreenState extends State<VpnScreen> {
       icon: Icons.refresh,
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _busyAction = title);
+    setState(() => _busyAction = actionKey);
     try {
       await action();
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppStrings.of(context).f('restartCompleted', {'service': title}))),
+          SnackBar(
+            content: Text(
+              AppStrings.of(context).f(
+                'restartCompleted',
+                {'service': title},
+              ),
+            ),
+          ),
         );
       }
     } catch (error) {
@@ -150,6 +165,25 @@ class _VpnScreenState extends State<VpnScreen> {
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
+  }
+
+  Widget _openVpnServerCard(
+    OpenVpnServerStatus server,
+    PfSenseSessionProvider session,
+  ) {
+    final service = matchOpenVpnService(server, _openVpnServices);
+    return _OpenVpnServerCard(
+      server: server,
+      service: service,
+      busy: service != null && _busyAction == service.instanceKey,
+      onRestart: service == null || !session.connected || _loading
+          ? null
+          : () => _restart(
+                actionKey: service.instanceKey,
+                title: service.instanceLabel,
+                action: () => session.service!.restartServiceInstance(service),
+              ),
+    );
   }
 
   @override
@@ -166,7 +200,10 @@ class _VpnScreenState extends State<VpnScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                strings.f('lastUpdated', {'time': _formatTime(_lastSuccessfulRefresh!)}),
+                strings.f(
+                  'lastUpdated',
+                  {'time': _formatTime(_lastSuccessfulRefresh!)},
+                ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -190,24 +227,15 @@ class _VpnScreenState extends State<VpnScreen> {
             child: ListTile(
               leading: const Icon(Icons.vpn_lock),
               title: Text(strings.t('openvpn')),
-              subtitle: Text(strings.f('vpnConnectionsCount', {
-                'count': openVpnConnectionCount(_openVpn).toString(),
-              })),
-              trailing: _busyAction == 'OpenVPN'
-                  ? const CircularProgressIndicator()
-                  : IconButton(
-                      tooltip: strings.t('restart'),
-                      onPressed: session.connected && !_loading
-                          ? () => _restart(
-                                'OpenVPN',
-                                () => session.service!.restartOpenVPN(),
-                              )
-                          : null,
-                      icon: const Icon(Icons.restart_alt),
-                    ),
+              subtitle: Text(
+                '${_openVpn.length} service instances · '
+                '${strings.f('vpnConnectionsCount', {
+                  'count': openVpnConnectionCount(_openVpn).toString(),
+                })}',
+              ),
             ),
           ),
-          for (final server in _openVpn) _OpenVpnServerCard(server: server),
+          for (final server in _openVpn) _openVpnServerCard(server, session),
 
           // ── WireGuard ─────────────────────────────────────────────────────
           Card(
@@ -217,16 +245,22 @@ class _VpnScreenState extends State<VpnScreen> {
               subtitle: Text(
                 _wireGuard.isEmpty
                     ? strings.t('noWireGuardTunnels')
-                    : strings.f('wireGuardTunnelCount', {'count': _wireGuard.length.toString()}),
+                    : strings.f(
+                        'wireGuardTunnelCount',
+                        {'count': _wireGuard.length.toString()},
+                      ),
               ),
-              trailing: _busyAction == 'WireGuard'
+              trailing: _busyAction == 'wireguard'
                   ? const CircularProgressIndicator()
                   : IconButton(
                       tooltip: strings.t('restartWireGuard'),
-                      onPressed: session.connected && !_loading && _wireGuard.isNotEmpty
+                      onPressed: session.connected &&
+                              !_loading &&
+                              _wireGuard.isNotEmpty
                           ? () => _restart(
-                                'WireGuard',
-                                () => session.service!.restartWireGuard(),
+                                actionKey: 'wireguard',
+                                title: 'WireGuard',
+                                action: () => session.service!.restartWireGuard(),
                               )
                           : null,
                       icon: const Icon(Icons.restart_alt),
@@ -243,16 +277,25 @@ class _VpnScreenState extends State<VpnScreen> {
               child: ListTile(
                 leading: const Icon(Icons.hub),
                 title: Text(strings.t('tailscale')),
-                subtitle: Text(_tailscale!.running ? strings.t('running') : strings.t('stopped')),
-                trailing: _busyAction == 'Tailscale'
+                subtitle: Text(
+                  [
+                    _tailscale!.running
+                        ? strings.t('running')
+                        : strings.t('stopped'),
+                    if (_tailscale!.instanceDetails.isNotEmpty)
+                      _tailscale!.instanceDetails,
+                  ].join(' · '),
+                ),
+                trailing: _busyAction == _tailscale!.instanceKey
                     ? const CircularProgressIndicator()
                     : IconButton(
                         tooltip: strings.t('restart'),
                         onPressed: session.connected && !_loading
                             ? () => _restart(
-                                  'Tailscale',
-                                  () => session.service!
-                                      .restartService(_tailscale!.name),
+                                  actionKey: _tailscale!.instanceKey,
+                                  title: _tailscale!.instanceLabel,
+                                  action: () => session.service!
+                                      .restartServiceInstance(_tailscale!),
                                 )
                             : null,
                         icon: const Icon(Icons.restart_alt),
@@ -273,8 +316,17 @@ class _VpnScreenState extends State<VpnScreen> {
 }
 
 class _OpenVpnServerCard extends StatelessWidget {
-  const _OpenVpnServerCard({required this.server});
+  const _OpenVpnServerCard({
+    required this.server,
+    required this.service,
+    required this.busy,
+    required this.onRestart,
+  });
+
   final OpenVpnServerStatus server;
+  final SystemService? service;
+  final bool busy;
+  final VoidCallback? onRestart;
 
   @override
   Widget build(BuildContext context) {
@@ -282,16 +334,30 @@ class _OpenVpnServerCard extends StatelessWidget {
     final details = [
       if (server.mode.isNotEmpty) server.mode,
       if (server.port.isNotEmpty) 'Port ${server.port}',
+      if (server.vpnId.isNotEmpty) 'VPN ID ${server.vpnId}',
+      if (service?.id != null) 'Service #${service!.id}',
       strings.f('vpnConnectionsCount', {
         'count': server.connections.length.toString(),
       }),
-    ].join('  ·  ');
+    ].join(' · ');
 
     return Card(
       child: ExpansionTile(
         leading: const Icon(Icons.vpn_key_outlined),
         title: Text(server.displayName),
         subtitle: Text(details),
+        trailing: busy
+            ? const SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : IconButton(
+                tooltip: service == null
+                    ? 'No matching OpenVPN service instance'
+                    : 'Restart ${service!.instanceLabel}',
+                onPressed: onRestart,
+                icon: const Icon(Icons.restart_alt),
+              ),
         children: [
           if (server.connections.isEmpty)
             ListTile(
@@ -308,7 +374,7 @@ class _OpenVpnServerCard extends StatelessWidget {
                   [
                     if (connection.remoteHost.isNotEmpty) connection.remoteHost,
                     if (connection.status.isNotEmpty) connection.status,
-                  ].join('  ·  '),
+                  ].join(' · '),
                 ),
               ),
         ],
@@ -343,7 +409,7 @@ class _WireGuardTunnelCard extends StatelessWidget {
               tunnel.enabled ? s.t('active') : s.t('disabled'),
               if (tunnel.listenPort.isNotEmpty) 'Port ${tunnel.listenPort}',
               s.f('peerCount', {'count': tunnel.peers.length.toString()}),
-            ].join('  ·  '),
+            ].join(' · '),
           );
         }),
         children: [
@@ -389,13 +455,25 @@ class _PeerTile extends StatelessWidget {
     String? handshakeLabel;
     if (handshake != null) {
       if (handshakeAge!.inSeconds < 60) {
-        handshakeLabel = strings.f('handshakeSecondsAgo', {'n': handshakeAge.inSeconds.toString()});
+        handshakeLabel = strings.f(
+          'handshakeSecondsAgo',
+          {'n': handshakeAge.inSeconds.toString()},
+        );
       } else if (handshakeAge.inMinutes < 60) {
-        handshakeLabel = strings.f('handshakeMinutesAgo', {'n': handshakeAge.inMinutes.toString()});
+        handshakeLabel = strings.f(
+          'handshakeMinutesAgo',
+          {'n': handshakeAge.inMinutes.toString()},
+        );
       } else if (handshakeAge.inHours < 24) {
-        handshakeLabel = strings.f('handshakeHoursAgo', {'n': handshakeAge.inHours.toString()});
+        handshakeLabel = strings.f(
+          'handshakeHoursAgo',
+          {'n': handshakeAge.inHours.toString()},
+        );
       } else {
-        handshakeLabel = strings.f('handshakeDaysAgo', {'n': handshakeAge.inDays.toString()});
+        handshakeLabel = strings.f(
+          'handshakeDaysAgo',
+          {'n': handshakeAge.inDays.toString()},
+        );
       }
     }
 
@@ -406,7 +484,9 @@ class _PeerTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,7 +497,9 @@ class _PeerTile extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    peer.description.isNotEmpty ? peer.description : strings.t('peerLabel'),
+                    peer.description.isNotEmpty
+                        ? peer.description
+                        : strings.t('peerLabel'),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -425,11 +507,18 @@ class _PeerTile extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.handshake_outlined, size: 14, color: handshakeColor),
+                      Icon(
+                        Icons.handshake_outlined,
+                        size: 14,
+                        color: handshakeColor,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         handshakeLabel,
-                        style: TextStyle(fontSize: 12, color: handshakeColor),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: handshakeColor,
+                        ),
                       ),
                     ],
                   ),
@@ -440,7 +529,9 @@ class _PeerTile extends StatelessWidget {
               Text(
                 '${strings.t('endpoint')}: ${peer.endpoint}',
                 style: TextStyle(
-                    fontSize: 12, color: scheme.onSurfaceVariant),
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
             if (peer.allowedIps.isNotEmpty) ...[
@@ -448,7 +539,9 @@ class _PeerTile extends StatelessWidget {
               Text(
                 '${strings.t('allowedIps')}: ${peer.allowedIps.join(', ')}',
                 style: TextStyle(
-                    fontSize: 12, color: scheme.onSurfaceVariant),
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
