@@ -32,14 +32,11 @@ class PfSenseService {
 
   Future<DashboardData> getDashboard() {
     _ensureActive();
-    final existing = _dashboardRequest;
-    if (existing != null) return existing;
-    final request = _loadDashboard();
-    _dashboardRequest = request;
-    request.whenComplete(() {
-      if (identical(_dashboardRequest, request)) _dashboardRequest = null;
-    });
-    return request;
+    return _cacheSingleRequest<DashboardData>(
+      current: () => _dashboardRequest,
+      store: (request) => _dashboardRequest = request,
+      load: _loadDashboard,
+    );
   }
 
   Future<DashboardData> _loadDashboard() async {
@@ -171,16 +168,11 @@ class PfSenseService {
 
   Future<List<NetworkState>> getFirewallStates({int limit = 200}) {
     _ensureActive();
-    final existing = _firewallStateRequests[limit];
-    if (existing != null) return existing;
-    final request = _loadFirewallStates(limit);
-    _firewallStateRequests[limit] = request;
-    request.whenComplete(() {
-      if (identical(_firewallStateRequests[limit], request)) {
-        _firewallStateRequests.remove(limit);
-      }
-    });
-    return request;
+    return _cacheKeyedRequest<int, List<NetworkState>>(
+      cache: _firewallStateRequests,
+      key: limit,
+      load: () => _loadFirewallStates(limit),
+    );
   }
 
   Future<List<NetworkState>> _loadFirewallStates(int limit) async {
@@ -198,14 +190,11 @@ class PfSenseService {
 
   Future<List<InterfaceStatus>> getInterfaceStatuses() {
     _ensureActive();
-    final existing = _interfaceStatusRequest;
-    if (existing != null) return existing;
-    final request = _loadInterfaceStatuses();
-    _interfaceStatusRequest = request;
-    request.whenComplete(() {
-      if (identical(_interfaceStatusRequest, request)) _interfaceStatusRequest = null;
-    });
-    return request;
+    return _cacheSingleRequest<List<InterfaceStatus>>(
+      current: () => _interfaceStatusRequest,
+      store: (request) => _interfaceStatusRequest = request,
+      load: _loadInterfaceStatuses,
+    );
   }
 
   Future<List<InterfaceStatus>> _loadInterfaceStatuses() async {
@@ -548,6 +537,38 @@ class PfSenseService {
           .map(CaptivePortalVoucher.fromJson)
           .toList();
     });
+  }
+
+  Future<T> _cacheSingleRequest<T>({
+    required Future<T>? Function() current,
+    required void Function(Future<T>?) store,
+    required Future<T> Function() load,
+  }) {
+    final existing = current();
+    if (existing != null) return existing;
+
+    late final Future<T> request;
+    request = Future<T>.sync(load).whenComplete(() {
+      if (!_disposed && identical(current(), request)) store(null);
+    });
+    store(request);
+    return request;
+  }
+
+  Future<T> _cacheKeyedRequest<K, T>({
+    required Map<K, Future<T>> cache,
+    required K key,
+    required Future<T> Function() load,
+  }) {
+    final existing = cache[key];
+    if (existing != null) return existing;
+
+    late final Future<T> request;
+    request = Future<T>.sync(load).whenComplete(() {
+      if (!_disposed && identical(cache[key], request)) cache.remove(key);
+    });
+    cache[key] = request;
+    return request;
   }
 
   void _ensureActive() {
