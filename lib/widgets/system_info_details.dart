@@ -33,7 +33,7 @@ class SystemInfoDetails extends StatelessWidget {
           'pfSense Manager app': appVersion,
           'Architecture': info.architecture,
           'Git commit hash': info.gitCommit,
-          'Package mirror': info.packageMirrorUrl,
+          'Package mirror': _reported(info.packageMirrorUrl),
           if (info.buildTime.isNotEmpty) 'Build time': info.buildTime,
         }),
         const SizedBox(height: 18),
@@ -41,16 +41,19 @@ class SystemInfoDetails extends StatelessWidget {
           icon: Icons.inventory_2_outlined,
           title: 'Repository information',
         ),
-        for (final repository in info.repositories)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _DetailCard(rows: {
-              'Repository': repository.name,
-              'Priority': repository.priority.toString(),
-              'Status': repository.enabled ? 'Enabled' : 'Disabled',
-              'URL': repository.url,
-            }),
-          ),
+        if (info.repositories.isEmpty)
+          const _UnavailableRepositoryCard()
+        else
+          for (final repository in info.repositories)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _DetailCard(rows: {
+                'Repository': _reported(repository.name),
+                'Priority': repository.priority?.toString() ?? 'Not reported',
+                'Status': _repositoryStatus(repository.enabled),
+                'URL': _reported(repository.url),
+              }),
+            ),
         const SizedBox(height: 8),
         const _SectionTitle(
           icon: Icons.monitor_heart_outlined,
@@ -116,6 +119,48 @@ class SystemInfoDetails extends StatelessWidget {
   }
 }
 
+class _UnavailableRepositoryCard extends StatelessWidget {
+  const _UnavailableRepositoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Repository data not reported',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'pfREST did not return repository information for this firewall.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.icon, required this.title});
 
@@ -176,6 +221,17 @@ class _DetailCard extends StatelessWidget {
     );
   }
 }
+
+String _reported(String? value) {
+  final text = value?.trim();
+  return text == null || text.isEmpty ? 'Not reported' : text;
+}
+
+String _repositoryStatus(bool? enabled) => switch (enabled) {
+      true => 'Enabled',
+      false => 'Disabled',
+      null => 'Not reported',
+    };
 
 String formatSystemTimestamp(DateTime value) {
   final local = value.toLocal();
