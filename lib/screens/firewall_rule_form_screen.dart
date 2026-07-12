@@ -32,7 +32,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   late String _type = widget.rule?.type ?? 'pass';
   late List<String> _interfaces = [...?widget.rule?.interfaces];
   late String _ipProtocol = widget.rule?.ipProtocol ?? 'inet';
-  late String _protocol = widget.rule?.protocol ?? 'any';
+  late String _protocol = widget.rule?.protocol ?? 'tcp';
   late bool _enabled = widget.rule?.enabled ?? true;
   late bool _floating = widget.rule?.floating ?? false;
   late bool _quick = widget.rule?.quick ?? false;
@@ -42,8 +42,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   late bool _log = widget.rule?.log ?? false;
   late String _stateType = widget.rule?.stateType ?? 'keep state';
   late bool _tcpFlagsAny = widget.rule?.tcpFlagsAny ?? false;
-  late Set<String> _tcpFlagsOutOf = {...?widget.rule?.tcpFlagsOutOf};
-  late Set<String> _tcpFlagsSet = {...?widget.rule?.tcpFlagsSet};
+  late final Set<String> _tcpFlagsOutOf = {...?widget.rule?.tcpFlagsOutOf};
+  late final Set<String> _tcpFlagsSet = {...?widget.rule?.tcpFlagsSet};
 
   late final _source = TextEditingController(
     text: widget.rule?.sourceNetwork ?? 'any',
@@ -130,19 +130,14 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     );
   }
 
-  bool _supports(
-    PfRestOperationCapability? operation,
-    String field,
-  ) {
-    return operation == null || operation.field(field) != null;
-  }
+  bool _supports(PfRestOperationCapability? operation, String field) =>
+      operation == null || operation.field(field) != null;
 
   bool _schemaBlocksWrite(
     PfSenseSessionProvider session,
     PfRestOperationCapability? operation,
-  ) {
-    return session.capabilities?.isAvailable == true && operation == null;
-  }
+  ) =>
+      session.capabilities?.isAvailable == true && operation == null;
 
   FirewallRule _draft() {
     final base = widget.rule ?? FirewallRule(createdTime: '');
@@ -191,9 +186,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     final strings = AppLocalizations.of(context);
     if (!session.connected || session.service == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(strings?.disconnectedMessage ?? 'Disconnected'),
-        ),
+        SnackBar(content: Text(strings?.disconnectedMessage ?? 'Disconnected')),
       );
       return;
     }
@@ -219,7 +212,6 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
           await ruleService.create(draft, operation: operation);
         }
       } else {
-        // Compatibility path for isolated widget tests and older sessions.
         final legacy = session.service!;
         if (_editing) {
           await legacy.updateFirewallRule(
@@ -262,10 +254,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     }
   }
 
-  bool _placementChanged(FirewallRule draft) {
-    if (draft.placement == null) return false;
-    return draft.placement != widget.rule?.placement;
-  }
+  bool _placementChanged(FirewallRule draft) =>
+      draft.placement != null && draft.placement != widget.rule?.placement;
 
   Future<bool> _confirmPlacement(FirewallRule draft) async {
     return await showDialog<bool>(
@@ -296,10 +286,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     final session = context.watch<PfSenseSessionProvider>();
     final operation = _operation(session);
     final blocked = _schemaBlocksWrite(session, operation);
-    final canSave = session.connected &&
-        !_saving &&
-        !_permissionDenied &&
-        !blocked;
+    final canSave =
+        session.connected && !_saving && !_permissionDenied && !blocked;
 
     final typeValues = firewallRuleAllowedValues(
       operation,
@@ -358,10 +346,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
               selected: {_safeValue(_type, typeValues)},
               segments: [
                 for (final value in typeValues)
-                  ButtonSegment(
-                    value: value,
-                    label: Text(_title(value)),
-                  ),
+                  ButtonSegment(value: value, label: Text(_title(value))),
               ],
               onSelectionChanged: canSave
                   ? (values) => setState(() => _type = values.first)
@@ -371,7 +356,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
               _errorText(_validation!.errorFor('type')!),
             SwitchListTile(
               value: _enabled,
-              onChanged: canSave ? (value) => setState(() => _enabled = value) : null,
+              onChanged:
+                  canSave ? (value) => setState(() => _enabled = value) : null,
               title: Text(
                 _enabled
                     ? (strings?.enabled ?? 'Enabled')
@@ -401,19 +387,21 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
               values: protocolValues,
               onChanged: canSave ? _setProtocol : null,
               key: const Key('firewall-protocol'),
+              itemLabel: (value) => value.toUpperCase(),
               errorText: _validation?.errorFor('protocol'),
             ),
             const SizedBox(height: 12),
             _field(
               _source,
               strings?.source ?? 'Source',
-              validator: (_) => _validation?.errorFor('source') ?? _required(_source.text),
+              validator: (_) =>
+                  _validation?.errorFor('source') ?? _required(_source.text),
             ),
             _field(
               _destination,
               strings?.destination ?? 'Destination',
-              validator: (_) =>
-                  _validation?.errorFor('destination') ?? _required(_destination.text),
+              validator: (_) => _validation?.errorFor('destination') ??
+                  _required(_destination.text),
             ),
             if (_supportsPorts) ...[
               _portEditor(
@@ -478,16 +466,22 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
                     key: const Key('firewall-quick'),
                     contentPadding: EdgeInsets.zero,
                     value: _quick,
-                    onChanged: canSave ? (value) => setState(() => _quick = value) : null,
+                    onChanged: canSave
+                        ? (value) => setState(() => _quick = value)
+                        : null,
                     title: const Text('Quick match'),
-                    subtitle: const Text('Apply the action immediately when this rule matches.'),
+                    subtitle: const Text(
+                      'Apply the action immediately when this rule matches.',
+                    ),
                   ),
                 if (_floating && _supports(operation, 'direction'))
                   _drop(
                     label: 'Direction',
                     value: _safeValue(_direction, directionValues),
                     values: directionValues,
-                    onChanged: canSave ? (value) => setState(() => _direction = value) : null,
+                    onChanged: canSave
+                        ? (value) => setState(() => _direction = value)
+                        : null,
                     key: const Key('firewall-direction'),
                     errorText: _validation?.errorFor('direction'),
                   ),
@@ -496,7 +490,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
                     key: const Key('firewall-log'),
                     contentPadding: EdgeInsets.zero,
                     value: _log,
-                    onChanged: canSave ? (value) => setState(() => _log = value) : null,
+                    onChanged:
+                        canSave ? (value) => setState(() => _log = value) : null,
                     title: const Text('Log matching traffic'),
                   ),
                 if (_supports(operation, 'tag'))
@@ -528,7 +523,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
                     _icmpTypes,
                     'ICMP types',
                     key: const Key('firewall-icmp-types'),
-                    helperText: 'Comma-separated values; use “any” for all types.',
+                    helperText:
+                        'Comma-separated values; use “any” for all types.',
                     validator: (_) => _validation?.errorFor('icmptype'),
                   ),
                 if (_supports(operation, 'statetype'))
@@ -536,7 +532,9 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
                     label: 'State type',
                     value: _safeValue(_stateType, stateValues),
                     values: stateValues,
-                    onChanged: canSave ? (value) => setState(() => _stateType = value) : null,
+                    onChanged: canSave
+                        ? (value) => setState(() => _stateType = value)
+                        : null,
                     key: const Key('firewall-state-type'),
                     errorText: _validation?.errorFor('statetype'),
                   ),
@@ -625,7 +623,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     }.where((value) => value.trim().isNotEmpty).toList();
 
     if (!_floating) {
-      final selected = values.contains(_interfaces.first) ? _interfaces.first : values.first;
+      final selected =
+          values.contains(_interfaces.first) ? _interfaces.first : values.first;
       return DropdownButtonFormField<String>(
         key: const Key('firewall-interface'),
         initialValue: selected,
@@ -663,7 +662,9 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
               onSelected: enabled
                   ? (selected) => setState(() {
                         if (selected) {
-                          if (!_interfaces.contains(value)) _interfaces.add(value);
+                          if (!_interfaces.contains(value)) {
+                            _interfaces.add(value);
+                          }
                         } else if (_interfaces.length > 1) {
                           _interfaces.remove(value);
                         }
@@ -760,7 +761,10 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('Flags that must be set', style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            'Flags that must be set',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           Wrap(
             spacing: 6,
             children: [
@@ -838,11 +842,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     );
   }
 
-  Widget _notice(IconData icon, String text) {
-    return Card(
-      child: ListTile(leading: Icon(icon), title: Text(text)),
-    );
-  }
+  Widget _notice(IconData icon, String text) =>
+      Card(child: ListTile(leading: Icon(icon), title: Text(text)));
 
   Widget _errorText(String text) {
     return Padding(
@@ -928,9 +929,8 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
     return text.isEmpty ? null : text;
   }
 
-  static String _safeValue(String value, List<String> values) {
-    return values.contains(value) ? value : values.first;
-  }
+  static String _safeValue(String value, List<String> values) =>
+      values.contains(value) ? value : values.first;
 
   static String _title(String value) {
     return value
