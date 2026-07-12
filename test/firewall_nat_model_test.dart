@@ -83,6 +83,24 @@ void main() {
     expect(payload['custom_option'], 'preserved');
   });
 
+  test('translated outbound mappings receive safe default subnet values', () {
+    final ipv4 = NatOutboundMapping(
+      interface: 'wan',
+      source: '192.168.0.0/16',
+      destination: 'any',
+      target: '203.0.113.10',
+    ).toPayload();
+    final alias = NatOutboundMapping(
+      interface: 'wan',
+      source: '192.168.0.0/16',
+      destination: 'any',
+      target: 'PublicAddresses',
+    ).toPayload();
+
+    expect(ipv4['target_subnet'], 32);
+    expect(alias['target_subnet'], 128);
+  });
+
   test('outbound mode exposes pfSense manual wording without changing API value', () {
     expect(OutboundNatMode.parse('advanced'), OutboundNatMode.advanced);
     expect(OutboundNatMode.advanced.name, 'advanced');
