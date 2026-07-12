@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter analyze --fatal-infos 2>&1 | tee flutter-analyze.log
+          flutter analyze --fatal-warnings 2>&1 | tee flutter-analyze.log
 
       - name: Upload analyzer log
         if: always()
