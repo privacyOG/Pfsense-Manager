@@ -161,7 +161,7 @@ class _PingTabState extends State<_PingTab>
           children: [
             for (final count in pingPacketCountChoices)
               ChoiceChip(
-                label: Text('$count packets'),
+                label: Text('$count'),
                 selected: _count == count,
                 onSelected: (_) => setState(() => _count = count),
               ),
