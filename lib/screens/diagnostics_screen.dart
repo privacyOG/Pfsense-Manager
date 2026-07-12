@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/session_provider.dart';
+import '../services/pfrest_feature_registry.dart';
 import '../utils/ping_request_validation.dart';
+import '../widgets/pfrest_feature_gate.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
@@ -30,47 +32,88 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<PfSenseSessionProvider>();
+    final registry = PfRestFeatureRegistry(
+      activeProfileId: session.selectedProfile?.id,
+      capabilities: session.capabilities,
+    );
+    final traceroute = registry.decision(PfRestFeature.traceroute);
+    final dnsLookup = registry.decision(PfRestFeature.dnsLookup);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Remote Diagnostics'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh capabilities',
+            onPressed: session.connected
+                ? () => session.refreshCapabilities()
+                : null,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(icon: Icon(Icons.network_ping_outlined), text: 'Ping'),
-            Tab(icon: Icon(Icons.route_outlined), text: 'Traceroute'),
-            Tab(icon: Icon(Icons.dns_outlined), text: 'DNS Lookup'),
+          tabs: [
+            const Tab(icon: Icon(Icons.network_ping_outlined), text: 'Ping'),
+            Tab(
+              icon: Icon(
+                traceroute.isUnsupported
+                    ? Icons.extension_off_outlined
+                    : Icons.route_outlined,
+              ),
+              text: 'Traceroute',
+            ),
+            Tab(
+              icon: Icon(
+                dnsLookup.isUnsupported
+                    ? Icons.extension_off_outlined
+                    : Icons.dns_outlined,
+              ),
+              text: 'DNS Lookup',
+            ),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabs,
-        children: const [
-          _PingTab(),
-          _TracerouteTab(),
-          _DnsTab(),
+        children: [
+          const _PingTab(),
+          traceroute.isUnsupported
+              ? PfRestFeatureBlockedView(
+                  decision: traceroute,
+                  onRefresh: () => session.refreshCapabilities(),
+                )
+              : _TracerouteTab(decision: traceroute),
+          dnsLookup.isUnsupported
+              ? PfRestFeatureBlockedView(
+                  decision: dnsLookup,
+                  onRefresh: () => session.refreshCapabilities(),
+                )
+              : _DnsTab(decision: dnsLookup),
         ],
       ),
     );
   }
 }
 
-// ── Ping ─────────────────────────────────────────────────────────────────────
-
 class _PingTab extends StatefulWidget {
   const _PingTab();
+
   @override
   State<_PingTab> createState() => _PingTabState();
 }
 
-class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
+class _PingTabState extends State<_PingTab>
+    with AutomaticKeepAliveClientMixin {
   final _host = TextEditingController();
   int _count = 4;
   Map<String, dynamic>? _result;
   bool _running = false;
   Object? _error;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -94,8 +137,8 @@ class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
     try {
       final data = await session.service!.runPing(host, count: _count);
       if (mounted) setState(() => _result = data);
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -107,19 +150,20 @@ class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HostField(controller: _host, label: 'Target host or IP', hint: '8.8.8.8 or example.com'),
+        _HostField(
+          controller: _host,
+          label: 'Target host or IP',
+          hint: '8.8.8.8 or example.com',
+        ),
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
           children: [
-            const Text('Packets: '),
-            for (final n in pingPacketCountChoices)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ChoiceChip(
-                  label: Text('$n'),
-                  selected: _count == n,
-                  onSelected: (_) => setState(() => _count = n),
-                ),
+            for (final count in pingPacketCountChoices)
+              ChoiceChip(
+                label: Text('$count packets'),
+                selected: _count == count,
+                onSelected: (_) => setState(() => _count = count),
               ),
           ],
         ),
@@ -127,7 +171,7 @@ class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
         _RunButton(running: _running, onPressed: _run, label: 'Run Ping'),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          _ErrorCard(error: _error!),
+          _ErrorCard(message: _error.toString()),
         ],
         if (_result != null) ...[
           const SizedBox(height: 12),
@@ -138,24 +182,25 @@ class _PingTabState extends State<_PingTab> with AutomaticKeepAliveClientMixin {
   }
 }
 
-// ── Traceroute ────────────────────────────────────────────────────────────────
-
 class _TracerouteTab extends StatefulWidget {
-  const _TracerouteTab();
+  const _TracerouteTab({required this.decision});
+
+  final PfRestFeatureDecision decision;
+
   @override
   State<_TracerouteTab> createState() => _TracerouteTabState();
 }
 
 class _TracerouteTabState extends State<_TracerouteTab>
     with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
   final _host = TextEditingController();
   int _maxHops = 30;
   Map<String, dynamic>? _result;
   bool _running = false;
-  Object? _error;
+  String? _error;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -177,10 +222,20 @@ class _TracerouteTabState extends State<_TracerouteTab>
       _result = null;
     });
     try {
-      final data = await session.service!.runTraceroute(host, maxHops: _maxHops);
+      final data = await session.service!.runTraceroute(
+        host,
+        maxHops: _maxHops,
+      );
       if (mounted) setState(() => _result = data);
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = pfRestFeatureRequestErrorMessage(
+            PfRestFeature.traceroute,
+            error,
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -189,30 +244,43 @@ class _TracerouteTabState extends State<_TracerouteTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final session = context.watch<PfSenseSessionProvider>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HostField(controller: _host, label: 'Target host or IP', hint: '8.8.8.8 or example.com'),
+        if (widget.decision.isUnknown) ...[
+          PfRestFeatureNotice(
+            decision: widget.decision,
+            onRefresh: () => session.refreshCapabilities(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _HostField(
+          controller: _host,
+          label: 'Target host or IP',
+          hint: '8.8.8.8 or example.com',
+        ),
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
           children: [
-            const Text('Max hops: '),
-            for (final n in [15, 30, 64])
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ChoiceChip(
-                  label: Text('$n'),
-                  selected: _maxHops == n,
-                  onSelected: (_) => setState(() => _maxHops = n),
-                ),
+            for (final hops in const [15, 30, 64])
+              ChoiceChip(
+                label: Text('$hops hops'),
+                selected: _maxHops == hops,
+                onSelected: (_) => setState(() => _maxHops = hops),
               ),
           ],
         ),
         const SizedBox(height: 14),
-        _RunButton(running: _running, onPressed: _run, label: 'Run Traceroute'),
+        _RunButton(
+          running: _running,
+          onPressed: _run,
+          label: 'Run Traceroute',
+        ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          _ErrorCard(error: _error!),
+          _ErrorCard(message: _error!),
         ],
         if (_result != null) ...[
           const SizedBox(height: 12),
@@ -223,23 +291,25 @@ class _TracerouteTabState extends State<_TracerouteTab>
   }
 }
 
-// ── DNS Lookup ────────────────────────────────────────────────────────────────
-
 class _DnsTab extends StatefulWidget {
-  const _DnsTab();
+  const _DnsTab({required this.decision});
+
+  final PfRestFeatureDecision decision;
+
   @override
   State<_DnsTab> createState() => _DnsTabState();
 }
 
-class _DnsTabState extends State<_DnsTab> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
+class _DnsTabState extends State<_DnsTab>
+    with AutomaticKeepAliveClientMixin {
   final _host = TextEditingController();
   String _type = 'A';
   Map<String, dynamic>? _result;
   bool _running = false;
-  Object? _error;
+  String? _error;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void dispose() {
@@ -263,8 +333,15 @@ class _DnsTabState extends State<_DnsTab> with AutomaticKeepAliveClientMixin {
     try {
       final data = await session.service!.runDnsLookup(host, type: _type);
       if (mounted) setState(() => _result = data);
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = pfRestFeatureRequestErrorMessage(
+            PfRestFeature.dnsLookup,
+            error,
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -273,27 +350,43 @@ class _DnsTabState extends State<_DnsTab> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final session = context.watch<PfSenseSessionProvider>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HostField(controller: _host, label: 'Host or IP address', hint: 'example.com or 192.168.1.1'),
+        if (widget.decision.isUnknown) ...[
+          PfRestFeatureNotice(
+            decision: widget.decision,
+            onRefresh: () => session.refreshCapabilities(),
+          ),
+          const SizedBox(height: 12),
+        ],
+        _HostField(
+          controller: _host,
+          label: 'Host or IP address',
+          hint: 'example.com or 192.168.1.1',
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 6,
           children: [
-            for (final t in ['A', 'AAAA', 'MX', 'PTR', 'TXT', 'CNAME'])
+            for (final type in const ['A', 'AAAA', 'MX', 'PTR', 'TXT', 'CNAME'])
               ChoiceChip(
-                label: Text(t),
-                selected: _type == t,
-                onSelected: (_) => setState(() => _type = t),
+                label: Text(type),
+                selected: _type == type,
+                onSelected: (_) => setState(() => _type = type),
               ),
           ],
         ),
         const SizedBox(height: 14),
-        _RunButton(running: _running, onPressed: _run, label: 'Run DNS Lookup'),
+        _RunButton(
+          running: _running,
+          onPressed: _run,
+          label: 'Run DNS Lookup',
+        ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          _ErrorCard(error: _error!),
+          _ErrorCard(message: _error!),
         ],
         if (_result != null) ...[
           const SizedBox(height: 12),
@@ -304,10 +397,13 @@ class _DnsTabState extends State<_DnsTab> with AutomaticKeepAliveClientMixin {
   }
 }
 
-// ── Shared widgets ────────────────────────────────────────────────────────────
-
 class _HostField extends StatelessWidget {
-  const _HostField({required this.controller, required this.label, required this.hint});
+  const _HostField({
+    required this.controller,
+    required this.label,
+    required this.hint,
+  });
+
   final TextEditingController controller;
   final String label;
   final String hint;
@@ -328,7 +424,12 @@ class _HostField extends StatelessWidget {
 }
 
 class _RunButton extends StatelessWidget {
-  const _RunButton({required this.running, required this.onPressed, required this.label});
+  const _RunButton({
+    required this.running,
+    required this.onPressed,
+    required this.label,
+  });
+
   final bool running;
   final VoidCallback onPressed;
   final String label;
@@ -352,18 +453,24 @@ class _RunButton extends StatelessWidget {
 }
 
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.error});
-  final Object error;
+  const _ErrorCard({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       color: Theme.of(context).colorScheme.errorContainer,
       child: ListTile(
-        leading: Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+        leading: Icon(
+          Icons.error_outline,
+          color: Theme.of(context).colorScheme.onErrorContainer,
+        ),
         title: Text(
-          error.toString(),
-          style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+          message,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onErrorContainer,
+          ),
         ),
       ),
     );
@@ -372,17 +479,15 @@ class _ErrorCard extends StatelessWidget {
 
 class _ResultCard extends StatelessWidget {
   const _ResultCard({required this.data});
+
   final Map<String, dynamic> data;
 
   @override
   Widget build(BuildContext context) {
-    // Build a formatted display from whatever keys the API returns
     final output = data['output'] as String? ??
         data['result'] as String? ??
         data['raw'] as String? ??
-        data.entries
-            .map((e) => '${e.key}: ${e.value}')
-            .join('\n');
+        data.entries.map((entry) => '${entry.key}: ${entry.value}').join('\n');
 
     return Card(
       child: Padding(
@@ -392,7 +497,11 @@ class _ResultCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.check_circle_outline, size: 18, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text('Result', style: Theme.of(context).textTheme.titleSmall),
                 const Spacer(),
@@ -418,42 +527,12 @@ class _ResultCard extends StatelessWidget {
               ),
               child: SelectableText(
                 output,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.5),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
             ),
-            // Show structured stats if available
-            if (data['rtt_avg'] != null || data['rtt_min'] != null) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 16,
-                children: [
-                  if (data['rtt_min'] != null) _Stat('Min RTT', '${data['rtt_min']} ms'),
-                  if (data['rtt_avg'] != null) _Stat('Avg RTT', '${data['rtt_avg']} ms'),
-                  if (data['rtt_max'] != null) _Stat('Max RTT', '${data['rtt_max']} ms'),
-                  if (data['loss'] != null) _Stat('Packet loss', '${data['loss']}%'),
-                ],
-              ),
-            ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-        Text(value, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-      ],
     );
   }
 }
