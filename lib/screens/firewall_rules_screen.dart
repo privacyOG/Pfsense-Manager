@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../models/firewall_rule.dart';
 import '../providers/session_provider.dart';
 import 'firewall_aliases_screen.dart';
+import 'firewall_nat_screen.dart';
 import 'firewall_rule_form_screen.dart';
 
 class FirewallRulesScreen extends StatefulWidget {
@@ -172,6 +173,12 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     );
   }
 
+  void _openNat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const FirewallNatScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
@@ -216,6 +223,13 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                   tooltip: 'Firewall aliases',
                   onPressed: session.connected ? _openAliases : null,
                   icon: const Icon(Icons.label_outline),
+                ),
+                const SizedBox(width: 4),
+                IconButton.filledTonal(
+                  key: const Key('open-firewall-nat'),
+                  tooltip: 'NAT management',
+                  onPressed: session.connected ? _openNat : null,
+                  icon: const Icon(Icons.swap_horiz),
                 ),
                 const SizedBox(width: 4),
                 IconButton.filledTonal(
