@@ -27,6 +27,7 @@ class FirewallRuleFormScreen extends StatefulWidget {
 
 class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
   static const _fallbackInterfaces = ['wan', 'lan', 'opt1', 'opt2', 'any'];
+  static const _commonProtocols = {'tcp', 'udp', 'tcp/udp', 'icmp'};
 
   final _key = GlobalKey<FormState>();
   late String _type = widget.rule?.type ?? 'pass';
@@ -299,14 +300,19 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       'ipprotocol',
       const ['inet', 'inet6', 'inet46'],
     );
-    final protocolValues = <String>[
+    final supportedProtocols = firewallRuleAllowedValues(
+      operation,
+      'protocol',
+      firewallRuleProtocols,
+    );
+    final extendedProtocols = supportedProtocols
+        .where((value) => !_commonProtocols.contains(value))
+        .toList(growable: false);
+    final protocolValues = <String>{
       'any',
-      ...firewallRuleAllowedValues(
-        operation,
-        'protocol',
-        firewallRuleProtocols,
-      ),
-    ];
+      ...supportedProtocols.where(_commonProtocols.contains),
+      if (_protocol != 'any' && !_commonProtocols.contains(_protocol)) _protocol,
+    }.toList(growable: false);
     final stateValues = firewallRuleAllowedValues(
       operation,
       'statetype',
@@ -439,6 +445,21 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
                   'Logging, floating rules, policy routing, state handling and traffic shaping',
                 ),
                 children: [
+                  if (extendedProtocols.isNotEmpty)
+                    _drop(
+                      label: 'Extended protocol',
+                      value: extendedProtocols.contains(_protocol)
+                          ? _protocol
+                          : 'none',
+                      values: ['none', ...extendedProtocols],
+                      onChanged: canSave
+                          ? (value) =>
+                              _setProtocol(value == 'none' ? 'any' : value)
+                          : null,
+                      key: const Key('firewall-extended-protocol'),
+                      itemLabel: (value) =>
+                          value == 'none' ? 'None' : value.toUpperCase(),
+                    ),
                   if (_supports(operation, 'floating'))
                     SwitchListTile(
                       key: const Key('firewall-floating'),
