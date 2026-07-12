@@ -8,6 +8,9 @@ import 'package:provider/provider.dart';
 import '../models/dashboard.dart';
 import '../models/smart_drive.dart';
 import '../providers/session_provider.dart';
+import '../services/hardware_health_loader.dart';
+import '../services/pfrest_feature_registry.dart';
+import '../widgets/pfrest_feature_gate.dart';
 import '../widgets/state_message.dart';
 import '../widgets/thermal_sensors_panel.dart';
 
@@ -22,14 +25,14 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
   static const _maxSamples = 30;
 
   DashboardData? _data;
-  List<SmartDrive> _drives = [];
-  Object? _error;
+  List<SmartDrive> _drives = const [];
+  String? _healthError;
+  String? _smartError;
   bool _loading = false;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
   DateTime? _lastSuccessfulRefresh;
-
   final _memSamples = <_UsageSample>[];
   final _swapSamples = <_UsageSample>[];
   Timer? _refreshTimer;
@@ -52,8 +55,9 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
     if (changed) {
       _requestGeneration++;
       _data = null;
-      _drives = [];
-      _error = null;
+      _drives = const [];
+      _healthError = null;
+      _smartError = null;
       _lastSuccessfulRefresh = null;
       _memSamples.clear();
       _swapSamples.clear();
@@ -78,6 +82,13 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
     super.dispose();
   }
 
+  PfRestFeatureDecision _smartDecision(PfSenseSessionProvider session) {
+    return PfRestFeatureRegistry(
+      activeProfileId: session.selectedProfile?.id,
+      capabilities: session.capabilities,
+    ).decision(PfRestFeature.smartStatus);
+  }
+
   Future<void> _load() async {
     if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
@@ -85,9 +96,10 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
       if (!mounted) return;
       setState(() {
         _data = null;
-        _drives = [];
+        _drives = const [];
+        _healthError = 'Disconnected';
+        _smartError = null;
         _lastSuccessfulRefresh = null;
-        _error = 'Disconnected';
       });
       return;
     }
@@ -95,28 +107,33 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
     final request = ++_requestGeneration;
     final sessionGeneration = session.sessionGeneration;
     final profileId = session.selectedProfile?.id;
+    final smartDecision = _smartDecision(session);
     setState(() {
       _loading = true;
-      _error = null;
+      _healthError = null;
+      _smartError = null;
     });
 
     try {
-      final results = await Future.wait([
-        session.service!.getHardwareHealth(),
-        session.service!.getSmartStatus(),
-      ]);
+      final result = await loadHardwareHealthData(
+        loadHealth: session.service!.getHardwareHealth,
+        loadSmart: session.service!.getSmartStatus,
+        smartDecision: smartDecision,
+      );
       if (!mounted ||
           request != _requestGeneration ||
           sessionGeneration != session.sessionGeneration ||
           profileId != session.selectedProfile?.id) {
         return;
       }
-      final health = results[0] as DashboardData;
-      final drives = results[1] as List<SmartDrive>;
 
       final now = DateTime.now();
-      _memSamples.add(_UsageSample(capturedAt: now, value: health.memoryUsage));
-      _swapSamples.add(_UsageSample(capturedAt: now, value: health.swapUsage));
+      _memSamples.add(
+        _UsageSample(capturedAt: now, value: result.health.memoryUsage),
+      );
+      _swapSamples.add(
+        _UsageSample(capturedAt: now, value: result.health.swapUsage),
+      );
       if (_memSamples.length > _maxSamples) {
         _memSamples.removeRange(0, _memSamples.length - _maxSamples);
       }
@@ -125,13 +142,14 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
       }
 
       setState(() {
-        _data = health;
-        _drives = drives;
-        _lastSuccessfulRefresh = DateTime.now();
+        _data = result.health;
+        _drives = result.drives;
+        _smartError = result.smartError;
+        _lastSuccessfulRefresh = now;
       });
     } catch (error) {
       if (!mounted || request != _requestGeneration) return;
-      setState(() => _error = error);
+      setState(() => _healthError = error.toString());
     } finally {
       if (mounted && request == _requestGeneration) {
         setState(() => _loading = false);
@@ -142,6 +160,7 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
+    final smartDecision = _smartDecision(session);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -149,14 +168,15 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
           _HeaderCard(
-            sensorCount: session.connected ? (_data?.thermalSensors.length ?? 0) : 0,
+            sensorCount:
+                session.connected ? (_data?.thermalSensors.length ?? 0) : 0,
             driveCount: session.connected ? _drives.length : 0,
             memUsage: session.connected ? (_data?.memoryUsage ?? 0) : 0,
           ),
           if (_lastSuccessfulRefresh != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Last updated ${_formatTime(_lastSuccessfulRefresh!)}  ·  auto-refreshes every 30 s',
+              'Last updated ${_formatTime(_lastSuccessfulRefresh!)} · auto-refreshes every 30 s',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -167,24 +187,30 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
               icon: Icons.cloud_off_outlined,
               text: 'Disconnected',
             )
-          else if (_error != null)
+          else if (_healthError != null)
             StateMessage(
               icon: Icons.error_outline,
-              text: _error.toString(),
+              text: _healthError!,
             )
           else if (_data != null) ...[
-            // ── CPU thermal sensors ────────────────────────────────────────
             ThermalSensorsPanel(
               sensors: _data!.thermalSensors,
               fallbackTemperatureC: _data!.temperatureC,
             ),
             const SizedBox(height: 14),
-
-            // ── SMART drive health ─────────────────────────────────────────
-            _SmartSection(drives: _drives),
+            if (smartDecision.isUnknown) ...[
+              PfRestFeatureNotice(
+                decision: smartDecision,
+                onRefresh: () => session.refreshCapabilities(),
+              ),
+              const SizedBox(height: 14),
+            ],
+            _SmartSection(
+              decision: smartDecision,
+              drives: _drives,
+              error: _smartError,
+            ),
             const SizedBox(height: 14),
-
-            // ── Memory & swap ──────────────────────────────────────────────
             _MemorySwapSection(
               memUsage: _data!.memoryUsage,
               swapUsage: _data!.swapUsage,
@@ -205,15 +231,12 @@ class _HardwareHealthScreenState extends State<HardwareHealthScreen> {
   }
 }
 
-// ── Data helpers ─────────────────────────────────────────────────────────────
-
 class _UsageSample {
   const _UsageSample({required this.capturedAt, required this.value});
+
   final DateTime capturedAt;
   final double value;
 }
-
-// ── Header card ───────────────────────────────────────────────────────────────
 
 class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
@@ -234,11 +257,16 @@ class _HeaderCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: scheme.surfaceContainerHighest.withValues(alpha: .55),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: .5)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: .5),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.monitor_heart_outlined, color: Color(0xFF00C2A8)),
+          const Icon(
+            Icons.monitor_heart_outlined,
+            color: Color(0xFF00C2A8),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -276,15 +304,20 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-// ── SMART section ─────────────────────────────────────────────────────────────
-
 class _SmartSection extends StatelessWidget {
-  const _SmartSection({required this.drives});
+  const _SmartSection({
+    required this.decision,
+    required this.drives,
+    required this.error,
+  });
 
+  final PfRestFeatureDecision decision;
   final List<SmartDrive> drives;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
+    final status = _statusText();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -293,7 +326,12 @@ class _SmartSection extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.storage_outlined, size: 20),
+                Icon(
+                  decision.isUnsupported
+                      ? Icons.extension_off_outlined
+                      : Icons.storage_outlined,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -302,20 +340,17 @@ class _SmartSection extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  drives.isEmpty ? 'Not available' : '${drives.length} drive${drives.length == 1 ? '' : 's'}',
+                  drives.isEmpty
+                      ? decision.isUnsupported
+                          ? 'Unsupported'
+                          : 'No drives'
+                      : '${drives.length} drive${drives.length == 1 ? '' : 's'}',
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(
-              drives.isEmpty
-                  ? 'SMART data was not returned. Requires pfSense REST API ≥ 2.x and a compatible drive.'
-                  : drives.every((d) => d.healthPassed)
-                      ? 'All drives report a healthy status.'
-                      : 'One or more drives may need attention.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(status, style: Theme.of(context).textTheme.bodySmall),
             if (drives.isNotEmpty) ...[
               const SizedBox(height: 14),
               for (final drive in drives) _SmartDriveCard(drive: drive),
@@ -324,6 +359,19 @@ class _SmartSection extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _statusText() {
+    if (decision.isUnsupported) return decision.message;
+    if (error != null) return error!;
+    if (drives.isEmpty) {
+      return decision.isUnknown
+          ? 'The direct request completed without drive records while capability discovery remains limited.'
+          : 'The supported endpoint returned no SMART drive records.';
+    }
+    return drives.every((drive) => drive.healthPassed)
+        ? 'All reported drives are healthy.'
+        : 'One or more reported drives may need attention.';
   }
 }
 
@@ -335,7 +383,8 @@ class _SmartDriveCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final statusColor = drive.healthPassed ? const Color(0xFF00C2A8) : scheme.error;
+    final statusColor =
+        drive.healthPassed ? const Color(0xFF00C2A8) : scheme.error;
     final statusLabel = drive.healthPassed ? 'PASSED' : 'FAILED';
 
     return Card(
@@ -343,7 +392,11 @@ class _SmartDriveCard extends StatelessWidget {
       child: ExpansionTile(
         leading: CircleAvatar(
           backgroundColor: statusColor.withValues(alpha: .12),
-          child: Icon(Icons.storage_outlined, color: statusColor, size: 20),
+          child: Icon(
+            Icons.storage_outlined,
+            color: statusColor,
+            size: 20,
+          ),
         ),
         title: Text(
           drive.description.isNotEmpty ? drive.description : drive.device,
@@ -360,10 +413,10 @@ class _SmartDriveCard extends StatelessWidget {
           ),
           child: Text(
             statusLabel,
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: statusColor,
+                  fontWeight: FontWeight.w700,
+                ),
           ),
         ),
         children: [
@@ -397,11 +450,12 @@ class _SmartDriveCard extends StatelessWidget {
             ),
           if (drive.powerOnHours == null &&
               drive.reallocatedSectors == null &&
+              drive.pendingSectors == null &&
               drive.wearLevelingCount == null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: Text(
-                'No detailed SMART attributes available for this drive.',
+                'No detailed SMART attributes were reported for this drive.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -419,7 +473,11 @@ class _SmartDriveCard extends StatelessWidget {
 }
 
 class _DriveRow extends StatelessWidget {
-  const _DriveRow({required this.label, required this.value, this.warn = false});
+  const _DriveRow({
+    required this.label,
+    required this.value,
+    this.warn = false,
+  });
 
   final String label;
   final String value;
@@ -443,8 +501,6 @@ class _DriveRow extends StatelessWidget {
   }
 }
 
-// ── Memory & swap section ─────────────────────────────────────────────────────
-
 class _MemorySwapSection extends StatelessWidget {
   const _MemorySwapSection({
     required this.memUsage,
@@ -461,7 +517,6 @@ class _MemorySwapSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -511,7 +566,7 @@ class _MemorySwapSection extends StatelessWidget {
                   const SizedBox(width: 5),
                   Text('RAM', style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(width: 14),
-                  _LegendDot(color: Colors.orangeAccent),
+                  const _LegendDot(color: Colors.orangeAccent),
                   const SizedBox(width: 5),
                   Text('Swap', style: Theme.of(context).textTheme.bodySmall),
                 ],
@@ -521,10 +576,9 @@ class _MemorySwapSection extends StatelessWidget {
               Center(
                 child: Text(
                   'Collecting usage samples…',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                 ),
               ),
             ],
@@ -549,7 +603,7 @@ class _UsageBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final pct = usage.clamp(0.0, 100.0);
+    final percentage = usage.clamp(0.0, 100.0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -558,7 +612,7 @@ class _UsageBar extends StatelessWidget {
             Text(label, style: Theme.of(context).textTheme.bodyMedium),
             const Spacer(),
             Text(
-              '${pct.toStringAsFixed(1)}%',
+              '${percentage.toStringAsFixed(1)}%',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ],
@@ -567,7 +621,7 @@ class _UsageBar extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: pct / 100,
+            value: percentage / 100,
             backgroundColor: scheme.surfaceContainerHighest,
             color: color,
             minHeight: 8,
@@ -580,6 +634,7 @@ class _UsageBar extends StatelessWidget {
 
 class _LegendDot extends StatelessWidget {
   const _LegendDot({required this.color});
+
   final Color color;
 
   @override
@@ -592,7 +647,7 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
-class _MemSwapChart extends StatefulWidget {
+class _MemSwapChart extends StatelessWidget {
   const _MemSwapChart({
     required this.memSamples,
     required this.swapSamples,
@@ -606,22 +661,16 @@ class _MemSwapChart extends StatefulWidget {
   final Color swapColor;
 
   @override
-  State<_MemSwapChart> createState() => _MemSwapChartState();
-}
-
-class _MemSwapChartState extends State<_MemSwapChart> {
-  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final maxX = math.max(1, widget.memSamples.length - 1).toDouble();
-
+    final maxX = math.max(1, memSamples.length - 1).toDouble();
     final memSpots = [
-      for (var i = 0; i < widget.memSamples.length; i++)
-        FlSpot(i.toDouble(), widget.memSamples[i].value),
+      for (var index = 0; index < memSamples.length; index++)
+        FlSpot(index.toDouble(), memSamples[index].value),
     ];
     final swapSpots = [
-      for (var i = 0; i < widget.swapSamples.length; i++)
-        FlSpot(i.toDouble(), widget.swapSamples[i].value),
+      for (var index = 0; index < swapSamples.length; index++)
+        FlSpot(index.toDouble(), swapSamples[index].value),
     ];
 
     return SizedBox(
@@ -677,18 +726,21 @@ class _MemSwapChartState extends State<_MemSwapChart> {
                 reservedSize: 22,
                 interval: math.max(1, maxX / 2),
                 getTitlesWidget: (value, _) {
-                  final idx = value
+                  final index = value
                       .round()
-                      .clamp(0, widget.memSamples.length - 1)
+                      .clamp(0, memSamples.length - 1)
                       .toInt();
-                  final isStart = idx == 0;
-                  final isEnd = idx == widget.memSamples.length - 1;
-                  final isMid = (idx - (widget.memSamples.length - 1) / 2).abs() <= 1;
-                  if (!isStart && !isMid && !isEnd) return const SizedBox.shrink();
+                  final isStart = index == 0;
+                  final isEnd = index == memSamples.length - 1;
+                  final isMiddle =
+                      (index - (memSamples.length - 1) / 2).abs() <= 1;
+                  if (!isStart && !isMiddle && !isEnd) {
+                    return const SizedBox.shrink();
+                  }
                   return Padding(
                     padding: const EdgeInsets.only(top: 5),
                     child: Text(
-                      _formatClock(widget.memSamples[idx].capturedAt),
+                      _formatClock(memSamples[index].capturedAt),
                       style: const TextStyle(fontSize: 9),
                     ),
                   );
@@ -699,28 +751,6 @@ class _MemSwapChartState extends State<_MemSwapChart> {
           lineTouchData: LineTouchData(
             enabled: true,
             handleBuiltInTouches: true,
-            getTouchedSpotIndicator: (barData, spotIndexes) {
-              return spotIndexes.map((_) {
-                return TouchedSpotIndicatorData(
-                  FlLine(
-                    color: widget.memColor.withValues(alpha: .65),
-                    strokeWidth: 1.5,
-                    dashArray: [4, 3],
-                  ),
-                  FlDotData(
-                    show: true,
-                    getDotPainter: (spot, percent, barData, index) {
-                      return FlDotCirclePainter(
-                        radius: 4,
-                        color: barData.color ?? widget.memColor,
-                        strokeWidth: 1.5,
-                        strokeColor: scheme.surface,
-                      );
-                    },
-                  ),
-                );
-              }).toList();
-            },
             touchTooltipData: LineTouchTooltipData(
               getTooltipColor: (_) => scheme.surfaceContainerHigh,
               tooltipRoundedRadius: 8,
@@ -728,16 +758,16 @@ class _MemSwapChartState extends State<_MemSwapChart> {
                 horizontal: 10,
                 vertical: 6,
               ),
-              getTooltipItems: (touchedSpots) {
-                return touchedSpots.map((spot) {
-                  final idx = spot.spotIndex
-                      .clamp(0, widget.memSamples.length - 1);
-                  final time = _formatClock(widget.memSamples[idx].capturedAt);
+              getTooltipItems: (spots) {
+                return spots.map((spot) {
+                  final index = spot.spotIndex.clamp(0, memSamples.length - 1);
+                  final time = _formatClock(memSamples[index].capturedAt);
                   final label = spot.barIndex == 0 ? 'RAM' : 'Swap';
+                  final color = spot.barIndex == 0 ? memColor : swapColor;
                   return LineTooltipItem(
-                    '$label  $time\n${spot.y.toStringAsFixed(1)}%',
+                    '$label $time\n${spot.y.toStringAsFixed(1)}%',
                     TextStyle(
-                      color: spot.barIndex == 0 ? widget.memColor : widget.swapColor,
+                      color: color,
                       fontWeight: FontWeight.w700,
                       fontSize: 11,
                       height: 1.4,
@@ -751,25 +781,25 @@ class _MemSwapChartState extends State<_MemSwapChart> {
             LineChartBarData(
               spots: memSpots,
               isCurved: false,
-              color: widget.memColor,
+              color: memColor,
               barWidth: 2.2,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: widget.memColor.withValues(alpha: .10),
+                color: memColor.withValues(alpha: .10),
               ),
             ),
             LineChartBarData(
               spots: swapSpots,
               isCurved: false,
-              color: widget.swapColor,
+              color: swapColor,
               barWidth: 2.2,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: widget.swapColor.withValues(alpha: .10),
+                color: swapColor.withValues(alpha: .10),
               ),
             ),
           ],
