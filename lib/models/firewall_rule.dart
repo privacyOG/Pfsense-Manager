@@ -1,13 +1,12 @@
-import '../models/pfrest_capabilities.dart';
+import 'pfrest_capabilities.dart';
 import '../utils/firewall_port_validation.dart';
 
 /// Complete writable pfREST firewall-rule representation.
 ///
-/// The constructor keeps the original basic named parameters for compatibility,
-/// while [interfaces], [sourcePort] and [destinationPort] preserve the richer
-/// API representation used by floating rules, aliases and port ranges.
+/// The original basic constructor parameters remain supported while richer
+/// fields preserve floating, policy-routing, scheduling and shaping settings.
 class FirewallRule {
-  static const Object _copyUnset = Object();
+  static const Object _unset = Object();
 
   FirewallRule({
     this.id,
@@ -55,15 +54,15 @@ class FirewallRule {
     this.updatedTime = '',
     this.updatedBy = '',
   })  : interfaces = List.unmodifiable(
-          _normalizeInterfaces(interfaces, interface),
+          _normaliseInterfaces(interfaces, interface),
         ),
-        _protocol = _normalizeProtocol(protocol),
-        sourcePort = _normalizePortSpec(
-          sourcePort ?? _portSpecFromNumbers(sourcePortFrom, sourcePortTo),
+        _protocol = _normaliseProtocol(protocol),
+        sourcePort = _normalisePort(
+          sourcePort ?? _portFromNumbers(sourcePortFrom, sourcePortTo),
         ),
-        destinationPort = _normalizePortSpec(
+        destinationPort = _normalisePort(
           destinationPort ??
-              _portSpecFromNumbers(destinationPortFrom, destinationPortTo),
+              _portFromNumbers(destinationPortFrom, destinationPortTo),
         );
 
   final String? id;
@@ -99,7 +98,7 @@ class FirewallRule {
   final bool quick;
   final String direction;
 
-  /// Optional pfREST common control parameter used to insert or move a rule.
+  /// Optional common control parameter used to insert or move a rule.
   final int? placement;
 
   final String? tracker;
@@ -119,11 +118,11 @@ class FirewallRule {
     return FirewallRule(
       id: (json['id'] ?? json['uuid'])?.toString(),
       section: json['section']?.toString() ?? 'rules',
-      type: _lower(json['type'], fallback: 'pass'),
-      interfaces: _stringList(json['interface']),
-      ipProtocol: _lower(json['ipprotocol'], fallback: 'inet'),
+      type: _lower(json['type'], 'pass'),
+      interfaces: _strings(json['interface']),
+      ipProtocol: _lower(json['ipprotocol'], 'inet'),
       protocol: json['protocol']?.toString(),
-      icmpTypes: _stringList(json['icmptype'], fallback: const ['any']),
+      icmpTypes: _strings(json['icmptype'], fallback: const ['any']),
       sourceType: json['source_type']?.toString() ?? 'network',
       sourceNetwork: source.value,
       sourceInverted: source.inverted,
@@ -132,49 +131,49 @@ class FirewallRule {
       destinationNetwork: destination.value,
       destinationInverted: destination.inverted,
       destinationPort: json['destination_port']?.toString() ??
-          _portSpecFromNumbers(
-            _int(json['dst_port_from']),
-            _int(json['dst_port_to']),
+          _portFromNumbers(
+            _integer(json['dst_port_from']),
+            _integer(json['dst_port_to']),
           ),
       description: (json['descr'] ?? json['description'])?.toString() ?? '',
-      enabled: !_bool(json['disabled']),
-      log: _bool(json['log']),
+      enabled: !_boolean(json['disabled']),
+      log: _boolean(json['log']),
       tag: json['tag']?.toString() ?? '',
       stateType: json['statetype']?.toString() ?? 'keep state',
-      tcpFlagsAny: _bool(json['tcp_flags_any'] ?? json['tcpflags_any']),
+      tcpFlagsAny: _boolean(json['tcp_flags_any'] ?? json['tcpflags_any']),
       tcpFlagsOutOf:
-          _stringList(json['tcp_flags_out_of'] ?? json['tcpflags2']),
-      tcpFlagsSet: _stringList(json['tcp_flags_set'] ?? json['tcpflags1']),
-      gateway: _nullableText(json['gateway']),
-      schedule: _nullableText(json['sched'] ?? json['schedule']),
-      dnpipe: _nullableText(json['dnpipe']),
-      pdnpipe: _nullableText(json['pdnpipe']),
-      defaultQueue: _nullableText(json['defaultqueue']),
-      ackQueue: _nullableText(json['ackqueue']),
-      floating: _bool(json['floating']),
-      quick: _bool(json['quick']),
+          _strings(json['tcp_flags_out_of'] ?? json['tcpflags2']),
+      tcpFlagsSet: _strings(json['tcp_flags_set'] ?? json['tcpflags1']),
+      gateway: _text(json['gateway']),
+      schedule: _text(json['sched'] ?? json['schedule']),
+      dnpipe: _text(json['dnpipe']),
+      pdnpipe: _text(json['pdnpipe']),
+      defaultQueue: _text(json['defaultqueue']),
+      ackQueue: _text(json['ackqueue']),
+      floating: _boolean(json['floating']),
+      quick: _boolean(json['quick']),
       direction: json['direction']?.toString() ?? 'any',
-      placement: _int(json['placement']),
-      tracker: _nullableText(json['tracker']),
-      associatedRuleId: _nullableText(
-        json['associated_rule_id'] ?? json['associated-rule-id'],
-      ),
+      placement: _integer(json['placement']),
+      tracker: _text(json['tracker']),
+      associatedRuleId:
+          _text(json['associated_rule_id'] ?? json['associated-rule-id']),
       createdTime: json['created_time']?.toString() ??
           created?['time']?.toString() ??
           created?['utc']?.toString() ??
           '',
-      createdBy:
-          json['created_by']?.toString() ?? created?['username']?.toString() ?? '',
+      createdBy: json['created_by']?.toString() ??
+          created?['username']?.toString() ??
+          '',
       updatedTime: json['updated_time']?.toString() ??
           updated?['time']?.toString() ??
           updated?['utc']?.toString() ??
           '',
-      updatedBy:
-          json['updated_by']?.toString() ?? updated?['username']?.toString() ?? '',
+      updatedBy: json['updated_by']?.toString() ??
+          updated?['username']?.toString() ??
+          '',
     );
   }
 
-  /// Backward-compatible create payload.
   Map<String, dynamic> toJson() => toCreatePayload();
 
   Map<String, dynamic> toCreatePayload({
@@ -182,7 +181,7 @@ class FirewallRule {
   }) {
     return _payload(
       operation: operation,
-      includeNullOptionals: false,
+      includeNulls: false,
       includeFloating: true,
     );
   }
@@ -192,111 +191,106 @@ class FirewallRule {
   }) {
     return _payload(
       operation: operation,
-      includeNullOptionals: true,
+      includeNulls: true,
       includeFloating: false,
     );
   }
 
   Map<String, dynamic> _payload({
     required PfRestOperationCapability? operation,
-    required bool includeNullOptionals,
+    required bool includeNulls,
     required bool includeFloating,
   }) {
-    final fields = operation?.requestFields.values
+    final supported = operation?.requestFields.values
         .where((field) => field.location == 'body')
         .map((field) => field.name)
         .toSet();
-    bool supports(String name) => fields == null || fields.contains(name);
+    bool allows(String name) => supported == null || supported.contains(name);
 
-    final payload = <String, dynamic>{};
-    void requiredField(String name, Object? value) {
-      if (supports(name)) payload[name] = value;
+    final result = <String, dynamic>{};
+    void put(String name, Object? value, {bool nullable = false}) {
+      if (!allows(name)) return;
+      if (value != null || !nullable || includeNulls) result[name] = value;
     }
 
-    void optionalField(String name, Object? value) {
-      if (!supports(name)) return;
-      if (value != null || includeNullOptionals) payload[name] = value;
+    put('type', type.trim().toLowerCase());
+    put('interface', interfaces);
+    put('ipprotocol', _resolvedIpProtocol());
+    put('protocol', _protocol, nullable: true);
+
+    if (_protocol == 'icmp' && _resolvedIpProtocol() == 'inet') {
+      put('icmptype', icmpTypes.isEmpty ? const ['any'] : icmpTypes);
+    } else if (includeNulls) {
+      put('icmptype', null, nullable: true);
     }
 
-    requiredField('type', type.trim().toLowerCase());
-    requiredField('interface', interfaces);
-    requiredField('ipprotocol', _resolveIpProtocol());
-    optionalField('protocol', _protocol);
-
-    if (_protocol == 'icmp' && _resolveIpProtocol() == 'inet') {
-      optionalField(
-        'icmptype',
-        icmpTypes.isEmpty ? const ['any'] : List<String>.from(icmpTypes),
-      );
-    } else if (includeNullOptionals) {
-      optionalField('icmptype', null);
-    }
-
-    requiredField('source', _apiAddress(sourceNetwork, sourceInverted));
-    optionalField(
+    put('source', _apiAddress(sourceNetwork, sourceInverted));
+    put(
       'source_port',
       firewallProtocolSupportsPorts(_protocol) ? sourcePort : null,
+      nullable: true,
     );
-    requiredField(
-      'destination',
-      _apiAddress(destinationNetwork, destinationInverted),
-    );
-    optionalField(
+    put('destination', _apiAddress(destinationNetwork, destinationInverted));
+    put(
       'destination_port',
       firewallProtocolSupportsPorts(_protocol) ? destinationPort : null,
+      nullable: true,
     );
-    requiredField('descr', description.trim());
-    requiredField('disabled', !enabled);
-    requiredField('log', log);
-    requiredField('tag', tag.trim());
-    requiredField('statetype', stateType.trim().toLowerCase());
+    put('descr', description.trim());
+    put('disabled', !enabled);
+    put('log', log);
+    put('tag', tag.trim());
+    put('statetype', stateType.trim().toLowerCase());
 
     if (_protocol == 'tcp') {
-      requiredField('tcp_flags_any', tcpFlagsAny);
-      optionalField(
+      put('tcp_flags_any', tcpFlagsAny);
+      put(
         'tcp_flags_out_of',
-        tcpFlagsAny ? null : List<String>.from(tcpFlagsOutOf),
+        tcpFlagsAny ? null : tcpFlagsOutOf,
+        nullable: true,
       );
-      optionalField(
+      put(
         'tcp_flags_set',
-        tcpFlagsAny ? null : List<String>.from(tcpFlagsSet),
+        tcpFlagsAny ? null : tcpFlagsSet,
+        nullable: true,
       );
-    } else if (includeNullOptionals) {
-      optionalField('tcp_flags_any', false);
-      optionalField('tcp_flags_out_of', null);
-      optionalField('tcp_flags_set', null);
+    } else if (includeNulls) {
+      put('tcp_flags_any', false);
+      put('tcp_flags_out_of', null, nullable: true);
+      put('tcp_flags_set', null, nullable: true);
     }
 
-    optionalField('gateway', _nullableText(gateway));
-    optionalField('sched', _nullableText(schedule));
-    optionalField('dnpipe', _nullableText(dnpipe));
-    optionalField('pdnpipe', _nullableText(pdnpipe));
-    optionalField('defaultqueue', _nullableText(defaultQueue));
-    optionalField('ackqueue', _nullableText(ackQueue));
+    put('gateway', _text(gateway), nullable: true);
+    put('sched', _text(schedule), nullable: true);
+    put('dnpipe', _text(dnpipe), nullable: true);
+    put('pdnpipe', _text(pdnpipe), nullable: true);
+    put('defaultqueue', _text(defaultQueue), nullable: true);
+    put('ackqueue', _text(ackQueue), nullable: true);
 
-    if (includeFloating) requiredField('floating', floating);
+    if (includeFloating) put('floating', floating);
     if (floating) {
-      requiredField('quick', quick);
-      requiredField('direction', direction.trim().toLowerCase());
-    } else if (includeNullOptionals) {
-      optionalField('quick', false);
-      optionalField('direction', 'any');
+      put('quick', quick);
+      put('direction', direction.trim().toLowerCase());
+    } else if (includeNulls) {
+      put('quick', false);
+      put('direction', 'any');
     }
 
-    if (placement != null) payload['placement'] = placement;
-    return payload;
+    if (placement != null &&
+        (operation == null || operation.field('placement') != null)) {
+      result['placement'] = placement;
+    }
+    return result;
   }
 
   String get interface => interfaces.join(', ');
   String get protocol => _protocol ?? 'any';
   String? get apiProtocol => _protocol;
   String get protocolLabel => protocol.toUpperCase();
-
-  int? get sourcePortFrom => _numericPortRange(sourcePort).$1;
-  int? get sourcePortTo => _numericPortRange(sourcePort).$2;
-  int? get destinationPortFrom => _numericPortRange(destinationPort).$1;
-  int? get destinationPortTo => _numericPortRange(destinationPort).$2;
-
+  int? get sourcePortFrom => _numericPorts(sourcePort).$1;
+  int? get sourcePortTo => _numericPorts(sourcePort).$2;
+  int? get destinationPortFrom => _numericPorts(destinationPort).$1;
+  int? get destinationPortTo => _numericPorts(destinationPort).$2;
   String get sourcePortRange => _displayPort(sourcePort);
   String get portRange => _displayPort(destinationPort);
 
@@ -307,13 +301,12 @@ class FirewallRule {
         _ => '?',
       };
 
-  String _resolveIpProtocol() {
+  String _resolvedIpProtocol() {
     final value = ipProtocol.trim().toLowerCase();
-    if (value == 'inet' || value == 'inet6' || value == 'inet46') return value;
-    if (_looksIpv6(sourceNetwork) || _looksIpv6(destinationNetwork)) {
-      return 'inet6';
-    }
-    return 'inet';
+    if (const {'inet', 'inet6', 'inet46'}.contains(value)) return value;
+    return _looksIpv6(sourceNetwork) || _looksIpv6(destinationNetwork)
+        ? 'inet6'
+        : 'inet';
   }
 
   FirewallRule copyWith({
@@ -323,16 +316,16 @@ class FirewallRule {
     String? interface,
     List<String>? interfaces,
     String? ipProtocol,
-    Object? protocol = _copyUnset,
+    Object? protocol = _unset,
     List<String>? icmpTypes,
     String? sourceType,
     String? sourceNetwork,
     bool? sourceInverted,
-    Object? sourcePort = _copyUnset,
+    Object? sourcePort = _unset,
     String? destinationType,
     String? destinationNetwork,
     bool? destinationInverted,
-    Object? destinationPort = _copyUnset,
+    Object? destinationPort = _unset,
     String? description,
     bool? enabled,
     bool? log,
@@ -341,16 +334,16 @@ class FirewallRule {
     bool? tcpFlagsAny,
     List<String>? tcpFlagsOutOf,
     List<String>? tcpFlagsSet,
-    Object? gateway = _copyUnset,
-    Object? schedule = _copyUnset,
-    Object? dnpipe = _copyUnset,
-    Object? pdnpipe = _copyUnset,
-    Object? defaultQueue = _copyUnset,
-    Object? ackQueue = _copyUnset,
+    Object? gateway = _unset,
+    Object? schedule = _unset,
+    Object? dnpipe = _unset,
+    Object? pdnpipe = _unset,
+    Object? defaultQueue = _unset,
+    Object? ackQueue = _unset,
     bool? floating,
     bool? quick,
     String? direction,
-    Object? placement = _copyUnset,
+    Object? placement = _unset,
   }) {
     return FirewallRule(
       id: id ?? this.id,
@@ -358,21 +351,21 @@ class FirewallRule {
       type: type ?? this.type,
       interface: interface ?? '',
       interfaces: interfaces ??
-          (interface == null ? this.interfaces : _normalizeInterfaces(null, interface)),
+          (interface == null
+              ? this.interfaces
+              : _normaliseInterfaces(null, interface)),
       ipProtocol: ipProtocol ?? this.ipProtocol,
-      protocol:
-          identical(protocol, _copyUnset) ? _protocol : protocol as String?,
+      protocol: identical(protocol, _unset) ? _protocol : protocol as String?,
       icmpTypes: icmpTypes ?? this.icmpTypes,
       sourceType: sourceType ?? this.sourceType,
       sourceNetwork: sourceNetwork ?? this.sourceNetwork,
       sourceInverted: sourceInverted ?? this.sourceInverted,
-      sourcePort: identical(sourcePort, _copyUnset)
-          ? this.sourcePort
-          : sourcePort as String?,
+      sourcePort:
+          identical(sourcePort, _unset) ? this.sourcePort : sourcePort as String?,
       destinationType: destinationType ?? this.destinationType,
       destinationNetwork: destinationNetwork ?? this.destinationNetwork,
       destinationInverted: destinationInverted ?? this.destinationInverted,
-      destinationPort: identical(destinationPort, _copyUnset)
+      destinationPort: identical(destinationPort, _unset)
           ? this.destinationPort
           : destinationPort as String?,
       description: description ?? this.description,
@@ -383,23 +376,21 @@ class FirewallRule {
       tcpFlagsAny: tcpFlagsAny ?? this.tcpFlagsAny,
       tcpFlagsOutOf: tcpFlagsOutOf ?? this.tcpFlagsOutOf,
       tcpFlagsSet: tcpFlagsSet ?? this.tcpFlagsSet,
-      gateway: identical(gateway, _copyUnset) ? this.gateway : gateway as String?,
+      gateway: identical(gateway, _unset) ? this.gateway : gateway as String?,
       schedule:
-          identical(schedule, _copyUnset) ? this.schedule : schedule as String?,
-      dnpipe: identical(dnpipe, _copyUnset) ? this.dnpipe : dnpipe as String?,
-      pdnpipe:
-          identical(pdnpipe, _copyUnset) ? this.pdnpipe : pdnpipe as String?,
-      defaultQueue: identical(defaultQueue, _copyUnset)
+          identical(schedule, _unset) ? this.schedule : schedule as String?,
+      dnpipe: identical(dnpipe, _unset) ? this.dnpipe : dnpipe as String?,
+      pdnpipe: identical(pdnpipe, _unset) ? this.pdnpipe : pdnpipe as String?,
+      defaultQueue: identical(defaultQueue, _unset)
           ? this.defaultQueue
           : defaultQueue as String?,
       ackQueue:
-          identical(ackQueue, _copyUnset) ? this.ackQueue : ackQueue as String?,
+          identical(ackQueue, _unset) ? this.ackQueue : ackQueue as String?,
       floating: floating ?? this.floating,
       quick: quick ?? this.quick,
       direction: direction ?? this.direction,
-      placement: identical(placement, _copyUnset)
-          ? this.placement
-          : placement as int?,
+      placement:
+          identical(placement, _unset) ? this.placement : placement as int?,
       tracker: tracker,
       associatedRuleId: associatedRuleId,
       createdTime: createdTime,
@@ -410,17 +401,17 @@ class FirewallRule {
   }
 }
 
-List<String> _normalizeInterfaces(List<String>? interfaces, String interface) {
-  final values = interfaces ?? interface.split(',');
+List<String> _normaliseInterfaces(List<String>? values, String fallback) {
+  final source = values ?? fallback.split(',');
   final result = <String>[];
-  for (final value in values) {
-    final normalized = value.trim();
-    if (normalized.isNotEmpty && !result.contains(normalized)) result.add(normalized);
+  for (final value in source) {
+    final item = value.trim();
+    if (item.isNotEmpty && !result.contains(item)) result.add(item);
   }
   return result.isEmpty ? const ['wan'] : result;
 }
 
-(String value, bool inverted) _parseAddress(dynamic raw) {
+({String value, bool inverted}) _parseAddress(dynamic raw) {
   var value = raw?.toString().trim() ?? 'any';
   final inverted = value.startsWith('!');
   if (inverted) value = value.substring(1).trim();
@@ -429,38 +420,29 @@ List<String> _normalizeInterfaces(List<String>? interfaces, String interface) {
 }
 
 String _apiAddress(String value, bool inverted) {
-  final normalized = _normalizeAddress(value);
-  return inverted ? '!$normalized' : normalized;
-}
-
-String _normalizeAddress(String value) {
   final trimmed = value.trim();
-  if (trimmed.isEmpty || trimmed == '*') return 'any';
-  return trimmed;
+  final normalised = trimmed.isEmpty || trimmed == '*' ? 'any' : trimmed;
+  return inverted ? '!$normalised' : normalised;
 }
 
-String? _normalizeProtocol(String? value) {
-  final normalized = value?.trim().toLowerCase();
-  if (normalized == null || normalized.isEmpty || normalized == 'any') {
-    return null;
-  }
-  return normalized;
+String? _normaliseProtocol(String? value) {
+  final text = value?.trim().toLowerCase();
+  return text == null || text.isEmpty || text == 'any' ? null : text;
 }
 
-String? _normalizePortSpec(String? value) {
-  final normalized = value?.trim();
-  return normalized == null || normalized.isEmpty ? null : normalized;
+String? _normalisePort(String? value) {
+  final text = value?.trim();
+  return text == null || text.isEmpty ? null : text;
 }
 
-String? _portSpecFromNumbers(int? from, int? to) {
-  if (from == null && to == null) return null;
+String? _portFromNumbers(int? from, int? to) {
   final start = from ?? to;
   final end = to ?? from;
   if (start == null) return null;
   return end == null || end == start ? '$start' : '$start:$end';
 }
 
-(int?, int?) _numericPortRange(String? value) {
+(int?, int?) _numericPorts(String? value) {
   if (value == null || value.isEmpty) return (null, null);
   final parts = value.split(RegExp('[:-]'));
   if (parts.length == 1) {
@@ -470,44 +452,42 @@ String? _portSpecFromNumbers(int? from, int? to) {
   return (int.tryParse(parts.first), int.tryParse(parts.last));
 }
 
-String _displayPort(String? value) {
-  if (value == null) return '';
-  return value.replaceFirst(':', '-');
-}
+String _displayPort(String? value) => value?.replaceFirst(':', '-') ?? '';
 
 bool _looksIpv6(String value) {
-  final trimmed = value.toLowerCase();
-  return trimmed.contains(':') && trimmed != 'any' && trimmed != '*';
+  final text = value.toLowerCase();
+  return text.contains(':') && text != 'any' && text != '*';
 }
 
-List<String> _stringList(dynamic value, {List<String> fallback = const []}) {
+List<String> _strings(dynamic value, {List<String> fallback = const []}) {
   if (value == null) return List.unmodifiable(fallback);
-  final values = value is List ? value : value.toString().split(',');
-  final result = values
+  final source = value is List ? value : value.toString().split(',');
+  final result = source
       .map((item) => item?.toString().trim().toLowerCase() ?? '')
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
   return result.isEmpty ? List.unmodifiable(fallback) : List.unmodifiable(result);
 }
 
-String _lower(dynamic value, {required String fallback}) {
+String _lower(dynamic value, String fallback) {
   final text = value?.toString().trim().toLowerCase();
   return text == null || text.isEmpty ? fallback : text;
 }
 
-String? _nullableText(dynamic value) {
+String? _text(dynamic value) {
   final text = value?.toString().trim();
-  if (text == null || text.isEmpty || text.toLowerCase() == 'null') return null;
-  return text;
+  return text == null || text.isEmpty || text.toLowerCase() == 'null'
+      ? null
+      : text;
 }
 
-bool _bool(dynamic value) {
+bool _boolean(dynamic value) {
   if (value is bool) return value;
-  final text = value?.toString().trim().toLowerCase();
-  return text == 'true' || text == '1' || text == 'yes' || text == 'on';
+  return const {'true', '1', 'yes', 'on'}
+      .contains(value?.toString().trim().toLowerCase());
 }
 
-int? _int(dynamic value) {
+int? _integer(dynamic value) {
   if (value is int) return value;
   return int.tryParse(value?.toString() ?? '');
 }
