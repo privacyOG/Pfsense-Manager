@@ -69,10 +69,7 @@ FirewallRuleValidationResult validateFirewallRule(
   if (rule.interfaces.isEmpty) {
     error('interface', 'Select at least one interface.');
   } else if (!rule.floating && rule.interfaces.length > 1) {
-    error(
-      'interface',
-      'Multiple interfaces require a floating firewall rule.',
-    );
+    error('interface', 'Multiple interfaces require a floating firewall rule.');
   }
 
   final ipProtocols =
@@ -122,10 +119,7 @@ FirewallRuleValidationResult validateFirewallRule(
   if (rule.icmpTypes.isNotEmpty &&
       !(protocol == 'icmp' && rule.ipProtocol == 'inet') &&
       rule.icmpTypes.any((value) => value != 'any')) {
-    error(
-      'icmptype',
-      'ICMP types require an IPv4 ICMP rule.',
-    );
+    error('icmptype', 'ICMP types require an IPv4 ICMP rule.');
   }
   final allowedIcmpTypes = _allowed(operation, 'icmptype', const []);
   if (allowedIcmpTypes.isNotEmpty &&
@@ -173,7 +167,8 @@ FirewallRuleValidationResult validateFirewallRule(
       error('direction', 'Direction applies only to floating rules.');
     }
   } else {
-    final directions = _allowed(operation, 'direction', const ['any', 'in', 'out']);
+    final directions =
+        _allowed(operation, 'direction', const ['any', 'in', 'out']);
     if (!directions.contains(rule.direction)) {
       error('direction', 'Select a supported floating-rule direction.');
     }
@@ -254,29 +249,41 @@ void _validateAddressFamily(
     'destination': rule.destinationNetwork,
   }.entries) {
     final value = entry.value.trim();
-    if (!_isLiteralAddress(value)) continue;
-    final ipv6 = value.contains(':');
-    if (rule.ipProtocol == 'inet' && ipv6) {
+    final family = _literalAddressFamily(value);
+    if (family == null) continue;
+    if (rule.ipProtocol == 'inet' && family == 6) {
       error(entry.key, '${_label(entry.key)} is IPv6 but the rule is IPv4 only.');
     }
-    if (rule.ipProtocol == 'inet6' && !ipv6) {
+    if (rule.ipProtocol == 'inet6' && family == 4) {
       error(entry.key, '${_label(entry.key)} is IPv4 but the rule is IPv6 only.');
     }
   }
 }
 
-bool _isLiteralAddress(String value) {
+int? _literalAddressFamily(String value) {
   final normalized = value.startsWith('!') ? value.substring(1) : value;
-  if (normalized == 'any' ||
-      normalized == '*' ||
-      normalized == '(self)' ||
-      normalized == 'l2tp' ||
-      normalized == 'pppoe') {
-    return false;
+  final lowered = normalized.toLowerCase();
+  if (lowered == 'any' ||
+      lowered == '*' ||
+      lowered == '(self)' ||
+      lowered == 'l2tp' ||
+      lowered == 'pppoe' ||
+      RegExp(
+        r'^[a-z0-9_.-]+:(?:ip|network)$',
+        caseSensitive: false,
+      ).hasMatch(normalized)) {
+    return null;
   }
-  if (normalized.contains(':')) return true;
-  return RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$')
-      .hasMatch(normalized);
+  if (RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?$')
+      .hasMatch(normalized)) {
+    return 4;
+  }
+  if (RegExp(r'^[0-9a-f:]+(?:/\d{1,3})?$', caseSensitive: false)
+          .hasMatch(normalized) &&
+      ':'.allMatches(normalized).length >= 2) {
+    return 6;
+  }
+  return null;
 }
 
 void _validatePortSpec(
@@ -288,6 +295,11 @@ void _validatePortSpec(
   if (text == null || text.isEmpty) return;
   if (RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(text)) return;
 
+  if (text.startsWith(':') || text.startsWith('-')) {
+    error(field, 'Enter a starting port.');
+    return;
+  }
+
   final parts = text.split(RegExp('[:-]'));
   if (parts.length > 2 || parts.any((part) => int.tryParse(part) == null)) {
     error(field, 'Use a port, an ascending range, or a port alias.');
@@ -298,7 +310,10 @@ void _validatePortSpec(
   if (from < 1 || from > 65535 || to < 1 || to > 65535) {
     error(field, 'Ports must be between 1 and 65535.');
   } else if (to < from) {
-    error(field, 'The ending port must be greater than or equal to the start.');
+    error(
+      field,
+      'Ending port must be greater than or equal to starting port.',
+    );
   }
 }
 
@@ -322,8 +337,7 @@ void _validateText(
         error(field, '${_label(field)} does not match the installed schema.');
       }
     } on FormatException {
-      // A server-side regular expression may not use Dart syntax. The server
-      // remains the final authority when the expression cannot be evaluated.
+      // Server regular expressions may use syntax unavailable in Dart.
     }
   }
 }
