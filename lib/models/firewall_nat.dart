@@ -1,3 +1,5 @@
+import 'dart:io';
+
 enum FirewallNatRuleType {
   portForward,
   oneToOne,
@@ -216,9 +218,7 @@ class NatOneToOneMapping {
 
   bool get enabled => !disabled;
 
-  NatOneToOneMapping copyWith({
-    bool? disabled,
-  }) {
+  NatOneToOneMapping copyWith({bool? disabled}) {
     return NatOneToOneMapping(
       id: id,
       interface: interface,
@@ -343,6 +343,8 @@ class NatOutboundMapping {
 
   Map<String, dynamic> toPayload({bool includeId = false}) {
     final payload = _editableRaw(raw);
+    final effectiveTargetSubnet =
+        noNat ? null : targetSubnet ?? _defaultTargetSubnet(target);
     if (includeId && id != null) payload['id'] = id;
     payload
       ..['interface'] = interface.trim()
@@ -355,12 +357,13 @@ class NatOutboundMapping {
       ..['destination'] = destination.trim()
       ..['destination_port'] = _emptyToNull(destinationPort)
       ..['target'] = noNat ? null : _emptyToNull(target)
-      ..['target_subnet'] = noNat ? null : targetSubnet
+      ..['target_subnet'] = effectiveTargetSubnet
       ..['nat_port'] = noNat || staticNatPort ? null : _emptyToNull(natPort)
       ..['static_nat_port'] = noNat ? false : staticNatPort
       ..['poolopts'] = noNat ? null : _emptyToNull(poolOptions)
-      ..['source_hash_key'] =
-          noNat || poolOptions != 'source-hash' ? null : _emptyToNull(sourceHashKey)
+      ..['source_hash_key'] = noNat || poolOptions != 'source-hash'
+          ? null
+          : _emptyToNull(sourceHashKey)
       ..['descr'] = description.trim();
     return payload;
   }
@@ -380,6 +383,11 @@ Map<String, dynamic> _editableRaw(Map<String, dynamic> raw) {
     payload.remove(key);
   }
   return payload;
+}
+
+int _defaultTargetSubnet(String? target) {
+  final address = InternetAddress.tryParse(target?.trim() ?? '');
+  return address?.type == InternetAddressType.IPv4 ? 32 : 128;
 }
 
 String _text(dynamic value, {String fallback = ''}) {
