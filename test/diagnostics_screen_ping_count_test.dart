@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pfsense_manager/providers/session_provider.dart';
 import 'package:pfsense_manager/screens/diagnostics_screen.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  testWidgets('Ping offers only packet counts accepted by pfREST', (tester) async {
+  testWidgets('Ping offers only packet counts accepted by pfREST',
+      (tester) async {
+    final session = PfSenseSessionProvider();
+    addTearDown(session.dispose);
+
     await tester.pumpWidget(
-      const MaterialApp(home: DiagnosticsScreen()),
+      ChangeNotifierProvider<PfSenseSessionProvider>.value(
+        value: session,
+        child: const MaterialApp(home: DiagnosticsScreen()),
+      ),
     );
     await tester.pumpAndSettle();
 
