@@ -55,33 +55,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze changed Dart files
+      - name: Analyze full Flutter project
         shell: bash
         run: |
           set -o pipefail
-          {
-            dart analyze lib/main.dart
-            dart analyze lib/widgets/app_lock_gate.dart
-            dart analyze lib/screens/lock_screen.dart
-            dart analyze lib/screens/profile_form_screen.dart
-            dart analyze lib/providers/app_settings_provider.dart
-            dart analyze lib/providers/profile_provider.dart
-            dart analyze lib/providers/session_provider.dart
-            dart analyze lib/services/pin_verifier.dart
-            dart analyze test/helpers/memory_pin_verifier_store.dart
-            dart analyze test/pin_retry_test.dart
-            dart analyze test/profile_loading_test.dart
-            dart analyze test/app_lock_gate_test.dart
-            dart analyze lib/screens/home_shell.dart
-            dart analyze test/home_shell_navigation_test.dart
-          } 2>&1 | tee dart-analyze.log
+          flutter analyze --fatal-warnings --no-fatal-infos 2>&1 | tee flutter-analyze.log
 
       - name: Upload analyzer log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dart-analyze-${{ github.sha }}
-          path: dart-analyze.log
+          name: flutter-analyze-${{ github.sha }}
+          path: flutter-analyze.log
           if-no-files-found: error
           retention-days: 14
 
@@ -97,7 +82,7 @@ jobs:
         with:
           name: flutter-test-${{ github.sha }}
           path: flutter-test.log
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Upload coverage report

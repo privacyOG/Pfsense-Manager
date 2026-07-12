@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pfsense_manager/models/dashboard.dart';
 import 'package:pfsense_manager/models/profile.dart';
 import 'package:pfsense_manager/services/api_client.dart';
 import 'package:pfsense_manager/services/dashboard_loader.dart';

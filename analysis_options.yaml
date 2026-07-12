@@ -1,13 +1,5 @@
 include: package:flutter_lints/flutter.yaml
 
-analyzer:
-  exclude:
-    - lib/l10n/app_localizations.dart
-    - lib/screens/firewall_rule_form_screen.dart
-    - lib/screens/home_screen.dart
-    - lib/screens/profile_form_screen.dart
-    - lib/screens/system_info_screen.dart
-
 linter:
   rules:
     prefer_const_constructors: true

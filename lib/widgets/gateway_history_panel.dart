@@ -234,6 +234,9 @@ class _HistoryChartState extends State<_HistoryChart> {
       for (var index = 0; index < widget.values.length; index++)
         FlSpot(index.toDouble(), widget.values[index]),
     ];
+    final chartDuration = _touchedIndex == null
+        ? const Duration(milliseconds: 250)
+        : Duration.zero;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,7 +403,7 @@ class _HistoryChartState extends State<_HistoryChart> {
                 ),
               ],
             ),
-            duration: const Duration(milliseconds: 250),
+            duration: chartDuration,
             curve: Curves.easeOutCubic,
           ),
         ),

@@ -5,8 +5,7 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
     if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) {
-      if (!mounted) return;
-      setState(() {
+      _commitState(() {
         _clearLiveData();
         _error = 'Disconnected';
       });
@@ -17,7 +16,7 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
     final sessionGeneration = session.sessionGeneration;
     final profileId = session.selectedProfile?.id;
     if (showSpinner) {
-      setState(() {
+      _commitState(() {
         _loading = true;
         _error = null;
       });
@@ -33,7 +32,7 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
       final interfaces = results[0] as List<InterfaceStatus>;
       final states = results[1] as List<NetworkState>;
       _recordRates(interfaces);
-      setState(() {
+      _commitState(() {
         _interfaces = interfaces;
         _states = states;
         _error = null;
@@ -41,11 +40,11 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
       });
     } catch (error) {
       if (mounted && request == _requestGeneration) {
-        setState(() => _error = error);
+        _commitState(() => _error = error);
       }
     } finally {
       if (mounted && request == _requestGeneration && showSpinner) {
-        setState(() => _loading = false);
+        _commitState(() => _loading = false);
       }
     }
   }
@@ -63,14 +62,14 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
       final interfaces = await session.service!.getInterfaceStatuses();
       if (!_isCurrentRequest(request, sessionGeneration, profileId)) return;
       _recordRates(interfaces);
-      setState(() {
+      _commitState(() {
         _interfaces = interfaces;
         _error = null;
         _lastSuccessfulRefresh = DateTime.now();
       });
     } catch (error) {
       if (mounted && request == _requestGeneration) {
-        setState(() => _error = error);
+        _commitState(() => _error = error);
       }
     } finally {
       _interfacesRefreshing = false;
@@ -89,14 +88,14 @@ extension _NetworkMonitorPolling on _NetworkMonitorScreenState {
     try {
       final states = await session.service!.getFirewallStates(limit: 500);
       if (!_isCurrentRequest(request, sessionGeneration, profileId)) return;
-      setState(() {
+      _commitState(() {
         _states = states;
         _error = null;
         _lastSuccessfulRefresh = DateTime.now();
       });
     } catch (error) {
       if (mounted && request == _requestGeneration) {
-        setState(() => _error = error);
+        _commitState(() => _error = error);
       }
     } finally {
       _statesRefreshing = false;
