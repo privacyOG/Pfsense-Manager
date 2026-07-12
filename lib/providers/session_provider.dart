@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../models/pfrest_capabilities.dart';
 import '../models/profile.dart';
 import '../services/api_client.dart';
 import '../services/connection_check.dart';
+import '../services/pfrest_capability_service.dart';
 import '../services/pfsense_service.dart';
 import 'profile_provider.dart';
 
@@ -31,6 +33,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? _selectedProfile;
   PfSenseService? _service;
+  PfRestCapabilityService? _capabilityService;
   bool _connected = false;
   bool _connecting = false;
   bool _suspendedForLock = false;
@@ -41,15 +44,29 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? get selectedProfile => _selectedProfile;
   PfSenseService? get service => _service;
+  PfRestCapabilityService? get capabilityService => _capabilityService;
+  PfRestCapabilities? get capabilities => _capabilityService?.current;
   bool get connected => _connected;
   bool get connecting => _connecting;
   bool get suspendedForLock => _suspendedForLock;
   String? get connectionError => _connectionError;
   ConnectionCheckResult? get connectionCheck => _connectionCheck;
-  String? get connectionNotice =>
-      _connected && _connectionCheck?.restricted == true
-          ? _connectionCheck!.successMessage
-          : null;
+
+  String? get connectionNotice {
+    if (!_connected) return null;
+    final notices = <String>[];
+    if (_connectionCheck?.restricted == true) {
+      notices.add(_connectionCheck!.successMessage);
+    }
+    final snapshot = _capabilityService?.current;
+    if (snapshot != null &&
+        snapshot.isLimited &&
+        snapshot.issue != PfRestCapabilityIssue.notLoaded &&
+        snapshot.message != null) {
+      notices.add(snapshot.message!);
+    }
+    return notices.isEmpty ? null : notices.join('\n');
+  }
 
   /// Changes whenever the active session becomes invalid or is replaced.
   /// Feature screens capture this value before a request and ignore responses
@@ -61,6 +78,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     final generation = ++_sessionGeneration;
 
+    _capabilityService?.dispose();
+    _capabilityService = null;
     _service?.dispose();
     _service = null;
     _selectedProfile = profile.copyWith(apiKey: '', password: '');
@@ -72,6 +91,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     PfSenseApiClient? client;
     PfSenseService? candidate;
+    PfRestCapabilityService? candidateCapabilities;
     try {
       final connectionProfile = await _profileResolver(profile);
       if (generation != _sessionGeneration || _suspendedForLock) return;
@@ -95,13 +115,29 @@ class PfSenseSessionProvider extends ChangeNotifier {
       }
 
       candidate = PfSenseService(client);
+      candidateCapabilities = PfRestCapabilityService(
+        client,
+        profileId: connectionProfile.id,
+      );
       client = null;
+      await candidateCapabilities.refresh();
+
+      if (generation != _sessionGeneration || _suspendedForLock) {
+        candidateCapabilities.dispose();
+        candidate.dispose();
+        return;
+      }
+
       _service = candidate;
+      _capabilityService = candidateCapabilities;
+      candidate = null;
+      candidateCapabilities = null;
       _connected = true;
       _connecting = false;
       _connectionError = null;
       notifyListeners();
     } catch (error) {
+      candidateCapabilities?.dispose();
       candidate?.dispose();
       client?.dispose();
       if (generation != _sessionGeneration || _suspendedForLock) return;
@@ -111,6 +147,15 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _connectionError = error.toString();
       notifyListeners();
     }
+  }
+
+  Future<PfRestCapabilities?> refreshCapabilities() async {
+    final capabilityService = _capabilityService;
+    if (!_connected || capabilityService == null) return null;
+    final generation = _sessionGeneration;
+    final snapshot = await capabilityService.refresh();
+    if (generation == _sessionGeneration) notifyListeners();
+    return snapshot;
   }
 
   Future<void> reconnect(PfSenseProfile profile) async {
@@ -128,6 +173,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _reconnectAfterUnlock = _connected || _connecting;
     _suspendedForLock = true;
     _sessionGeneration++;
+    _capabilityService?.dispose();
+    _capabilityService = null;
     _service?.dispose();
     _service = null;
     _connected = false;
@@ -151,6 +198,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   Future<void> disconnect({bool keepProfile = true}) async {
     _sessionGeneration++;
+    _capabilityService?.dispose();
+    _capabilityService = null;
     _service?.dispose();
     _service = null;
     if (!keepProfile) _selectedProfile = null;
@@ -171,6 +220,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   @override
   void dispose() {
     _sessionGeneration++;
+    _capabilityService?.dispose();
     _service?.dispose();
     super.dispose();
   }
