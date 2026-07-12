@@ -329,288 +329,292 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
       body: Form(
         key: _key,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: ListView(
-          cacheExtent: 5000,
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          children: [
-            if (blocked)
-              _notice(
-                Icons.extension_off_outlined,
-                'Firewall rule writes are not reported by the installed pfREST schema.',
-              ),
-            if (_permissionDenied)
-              _notice(
-                Icons.lock_outline,
-                'This credential cannot write firewall rules. Reconnect after changing its permissions.',
-              ),
-            SegmentedButton<String>(
-              selected: {_safeValue(_type, typeValues)},
-              segments: [
-                for (final value in typeValues)
-                  ButtonSegment(value: value, label: Text(_title(value))),
-              ],
-              onSelectionChanged: canSave
-                  ? (values) => setState(() => _type = values.first)
-                  : null,
-            ),
-            if (_validation?.errorFor('type') != null)
-              _errorText(_validation!.errorFor('type')!),
-            SwitchListTile(
-              value: _enabled,
-              onChanged:
-                  canSave ? (value) => setState(() => _enabled = value) : null,
-              title: Text(
-                _enabled
-                    ? (strings?.enabled ?? 'Enabled')
-                    : (strings?.disabled ?? 'Disabled'),
-              ),
-            ),
-            _interfaceEditor(canSave),
-            const SizedBox(height: 12),
-            _drop(
-              label: 'IP version',
-              value: _safeValue(_ipProtocol, ipValues),
-              values: ipValues,
-              onChanged: canSave
-                  ? (value) => setState(() {
-                        _ipProtocol = value;
-                        if (!_isIpv4Icmp) _icmpTypes.text = 'any';
-                      })
-                  : null,
-              key: const Key('firewall-ip-protocol'),
-              itemLabel: _ipProtocolLabel,
-              errorText: _validation?.errorFor('ipprotocol'),
-            ),
-            const SizedBox(height: 12),
-            _drop(
-              label: strings?.protocol ?? 'Protocol',
-              value: _safeValue(_protocol, protocolValues),
-              values: protocolValues,
-              onChanged: canSave ? _setProtocol : null,
-              key: const Key('firewall-protocol'),
-              itemLabel: (value) => value.toUpperCase(),
-              errorText: _validation?.errorFor('protocol'),
-            ),
-            const SizedBox(height: 12),
-            _field(
-              _source,
-              strings?.source ?? 'Source',
-              validator: (_) =>
-                  _validation?.errorFor('source') ?? _required(_source.text),
-            ),
-            _field(
-              _destination,
-              strings?.destination ?? 'Destination',
-              validator: (_) => _validation?.errorFor('destination') ??
-                  _required(_destination.text),
-            ),
-            if (_supportsPorts) ...[
-              _portEditor(
-                title: 'Source port',
-                from: _sourcePortFrom,
-                to: _sourcePortTo,
-                fromKey: const Key('source-port-from'),
-                toKey: const Key('source-port-to'),
-                error: _validation?.errorFor('source_port'),
-              ),
-              _portEditor(
-                title: 'Destination port',
-                from: _destinationPortFrom,
-                to: _destinationPortTo,
-                fromKey: const Key('destination-port-from'),
-                toKey: const Key('destination-port-to'),
-                error: _validation?.errorFor('destination_port'),
-              ),
-            ],
-            _field(
-              _description,
-              strings?.description ?? 'Description',
-              maxLines: 3,
-              validator: (_) => _validation?.errorFor('descr'),
-            ),
-            const SizedBox(height: 8),
-            ExpansionTile(
-              key: const Key('firewall-rule-advanced'),
-              initiallyExpanded: _hasAdvancedValues(),
-              tilePadding: EdgeInsets.zero,
-              title: const Text('Advanced options'),
-              subtitle: const Text(
-                'Logging, floating rules, policy routing, state handling and traffic shaping',
-              ),
-              children: [
-                if (_supports(operation, 'floating'))
-                  SwitchListTile(
-                    key: const Key('firewall-floating'),
-                    contentPadding: EdgeInsets.zero,
-                    value: _floating,
-                    onChanged: !_editing && canSave
-                        ? (value) => setState(() {
-                              _floating = value;
-                              if (!value && _interfaces.length > 1) {
-                                _interfaces = [_interfaces.first];
-                              }
-                              if (!value) {
-                                _quick = false;
-                                _direction = 'any';
-                              }
-                            })
-                        : null,
-                    title: const Text('Floating rule'),
-                    subtitle: Text(
-                      _editing
-                          ? 'pfREST does not allow an existing rule to change between interface and floating mode.'
-                          : 'Floating rules can match several interfaces and directions.',
-                    ),
-                  ),
-                if (_floating && _supports(operation, 'quick'))
-                  SwitchListTile(
-                    key: const Key('firewall-quick'),
-                    contentPadding: EdgeInsets.zero,
-                    value: _quick,
-                    onChanged: canSave
-                        ? (value) => setState(() => _quick = value)
-                        : null,
-                    title: const Text('Quick match'),
-                    subtitle: const Text(
-                      'Apply the action immediately when this rule matches.',
-                    ),
-                  ),
-                if (_floating && _supports(operation, 'direction'))
-                  _drop(
-                    label: 'Direction',
-                    value: _safeValue(_direction, directionValues),
-                    values: directionValues,
-                    onChanged: canSave
-                        ? (value) => setState(() => _direction = value)
-                        : null,
-                    key: const Key('firewall-direction'),
-                    errorText: _validation?.errorFor('direction'),
-                  ),
-                if (_supports(operation, 'log'))
-                  SwitchListTile(
-                    key: const Key('firewall-log'),
-                    contentPadding: EdgeInsets.zero,
-                    value: _log,
-                    onChanged:
-                        canSave ? (value) => setState(() => _log = value) : null,
-                    title: const Text('Log matching traffic'),
-                  ),
-                if (_supports(operation, 'tag'))
-                  _field(
-                    _tag,
-                    'Packet tag',
-                    validator: (_) => _validation?.errorFor('tag'),
-                  ),
-                SwitchListTile(
-                  key: const Key('firewall-source-invert'),
-                  contentPadding: EdgeInsets.zero,
-                  value: _sourceInverted,
-                  onChanged: canSave
-                      ? (value) => setState(() => _sourceInverted = value)
-                      : null,
-                  title: const Text('Invert source'),
+          child: Column(
+            children: [
+              if (blocked)
+                _notice(
+                  Icons.extension_off_outlined,
+                  'Firewall rule writes are not reported by the installed pfREST schema.',
                 ),
-                SwitchListTile(
-                  key: const Key('firewall-destination-invert'),
-                  contentPadding: EdgeInsets.zero,
-                  value: _destinationInverted,
-                  onChanged: canSave
-                      ? (value) => setState(() => _destinationInverted = value)
-                      : null,
-                  title: const Text('Invert destination'),
+              if (_permissionDenied)
+                _notice(
+                  Icons.lock_outline,
+                  'This credential cannot write firewall rules. Reconnect after changing its permissions.',
                 ),
-                if (_isIpv4Icmp && _supports(operation, 'icmptype'))
-                  _field(
-                    _icmpTypes,
-                    'ICMP types',
-                    key: const Key('firewall-icmp-types'),
-                    helperText:
-                        'Comma-separated values; use “any” for all types.',
-                    validator: (_) => _validation?.errorFor('icmptype'),
-                  ),
-                if (_supports(operation, 'statetype'))
-                  _drop(
-                    label: 'State type',
-                    value: _safeValue(_stateType, stateValues),
-                    values: stateValues,
-                    onChanged: canSave
-                        ? (value) => setState(() => _stateType = value)
-                        : null,
-                    key: const Key('firewall-state-type'),
-                    errorText: _validation?.errorFor('statetype'),
-                  ),
-                if (_isTcp && _supports(operation, 'tcp_flags_any'))
-                  _tcpFlagEditor(canSave),
-                if (_supports(operation, 'gateway'))
-                  _field(
-                    _gateway,
-                    'Gateway or gateway group',
-                    key: const Key('firewall-gateway'),
-                    helperText: 'Leave empty to use the default route.',
-                    validator: (_) => _validation?.errorFor('gateway'),
-                  ),
-                if (_supports(operation, 'sched'))
-                  _field(
-                    _schedule,
-                    'Schedule',
-                    key: const Key('firewall-schedule'),
-                    helperText: 'Existing pfSense schedule name.',
-                  ),
-                if (_supports(operation, 'dnpipe'))
-                  _field(
-                    _dnpipe,
-                    'Inbound limiter',
-                    key: const Key('firewall-dnpipe'),
-                  ),
-                if (_supports(operation, 'pdnpipe'))
-                  _field(
-                    _pdnpipe,
-                    'Outbound limiter',
-                    key: const Key('firewall-pdnpipe'),
-                    validator: (_) => _validation?.errorFor('pdnpipe'),
-                  ),
-                if (_supports(operation, 'defaultqueue'))
-                  _field(
-                    _defaultQueue,
-                    'Default queue',
-                    key: const Key('firewall-default-queue'),
-                  ),
-                if (_supports(operation, 'ackqueue'))
-                  _field(
-                    _ackQueue,
-                    'ACK queue',
-                    key: const Key('firewall-ack-queue'),
-                    validator: (_) => _validation?.errorFor('ackqueue'),
-                  ),
-                if (_supports(operation, 'placement'))
-                  _field(
-                    _placement,
-                    'Rule placement',
-                    key: const Key('firewall-placement'),
-                    number: true,
-                    helperText:
-                        'Optional configuration position. Changing this moves the rule and requires confirmation.',
-                    validator: (_) => _validation?.errorFor('placement'),
-                  ),
+              SegmentedButton<String>(
+                selected: {_safeValue(_type, typeValues)},
+                segments: [
+                  for (final value in typeValues)
+                    ButtonSegment(value: value, label: Text(_title(value))),
+                ],
+                onSelectionChanged: canSave
+                    ? (values) => setState(() => _type = values.first)
+                    : null,
+              ),
+              if (_validation?.errorFor('type') != null)
+                _errorText(_validation!.errorFor('type')!),
+              SwitchListTile(
+                value: _enabled,
+                onChanged: canSave
+                    ? (value) => setState(() => _enabled = value)
+                    : null,
+                title: Text(
+                  _enabled
+                      ? (strings?.enabled ?? 'Enabled')
+                      : (strings?.disabled ?? 'Disabled'),
+                ),
+              ),
+              _interfaceEditor(canSave),
+              const SizedBox(height: 12),
+              _drop(
+                label: 'IP version',
+                value: _safeValue(_ipProtocol, ipValues),
+                values: ipValues,
+                onChanged: canSave
+                    ? (value) => setState(() {
+                          _ipProtocol = value;
+                          if (!_isIpv4Icmp) _icmpTypes.text = 'any';
+                        })
+                    : null,
+                key: const Key('firewall-ip-protocol'),
+                itemLabel: _ipProtocolLabel,
+                errorText: _validation?.errorFor('ipprotocol'),
+              ),
+              const SizedBox(height: 12),
+              _drop(
+                label: strings?.protocol ?? 'Protocol',
+                value: _safeValue(_protocol, protocolValues),
+                values: protocolValues,
+                onChanged: canSave ? _setProtocol : null,
+                key: const Key('firewall-protocol'),
+                itemLabel: (value) => value.toUpperCase(),
+                errorText: _validation?.errorFor('protocol'),
+              ),
+              const SizedBox(height: 12),
+              _field(
+                _source,
+                strings?.source ?? 'Source',
+                validator: (_) =>
+                    _validation?.errorFor('source') ?? _required(_source.text),
+              ),
+              _field(
+                _destination,
+                strings?.destination ?? 'Destination',
+                validator: (_) => _validation?.errorFor('destination') ??
+                    _required(_destination.text),
+              ),
+              if (_supportsPorts) ...[
+                _portEditor(
+                  title: 'Source port',
+                  from: _sourcePortFrom,
+                  to: _sourcePortTo,
+                  fromKey: const Key('source-port-from'),
+                  toKey: const Key('source-port-to'),
+                  error: _validation?.errorFor('source_port'),
+                ),
+                _portEditor(
+                  title: 'Destination port',
+                  from: _destinationPortFrom,
+                  to: _destinationPortTo,
+                  fromKey: const Key('destination-port-from'),
+                  toKey: const Key('destination-port-to'),
+                  error: _validation?.errorFor('destination_port'),
+                ),
               ],
-            ),
-            if (_validation?.summary != null) ...[
+              _field(
+                _description,
+                strings?.description ?? 'Description',
+                maxLines: 3,
+                validator: (_) => _validation?.errorFor('descr'),
+              ),
               const SizedBox(height: 8),
-              _errorText(_validation!.summary!),
+              ExpansionTile(
+                key: const Key('firewall-rule-advanced'),
+                initiallyExpanded: _hasAdvancedValues(),
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Advanced options'),
+                subtitle: const Text(
+                  'Logging, floating rules, policy routing, state handling and traffic shaping',
+                ),
+                children: [
+                  if (_supports(operation, 'floating'))
+                    SwitchListTile(
+                      key: const Key('firewall-floating'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _floating,
+                      onChanged: !_editing && canSave
+                          ? (value) => setState(() {
+                                _floating = value;
+                                if (!value && _interfaces.length > 1) {
+                                  _interfaces = [_interfaces.first];
+                                }
+                                if (!value) {
+                                  _quick = false;
+                                  _direction = 'any';
+                                }
+                              })
+                          : null,
+                      title: const Text('Floating rule'),
+                      subtitle: Text(
+                        _editing
+                            ? 'pfREST does not allow an existing rule to change between interface and floating mode.'
+                            : 'Floating rules can match several interfaces and directions.',
+                      ),
+                    ),
+                  if (_floating && _supports(operation, 'quick'))
+                    SwitchListTile(
+                      key: const Key('firewall-quick'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _quick,
+                      onChanged: canSave
+                          ? (value) => setState(() => _quick = value)
+                          : null,
+                      title: const Text('Quick match'),
+                      subtitle: const Text(
+                        'Apply the action immediately when this rule matches.',
+                      ),
+                    ),
+                  if (_floating && _supports(operation, 'direction'))
+                    _drop(
+                      label: 'Direction',
+                      value: _safeValue(_direction, directionValues),
+                      values: directionValues,
+                      onChanged: canSave
+                          ? (value) => setState(() => _direction = value)
+                          : null,
+                      key: const Key('firewall-direction'),
+                      errorText: _validation?.errorFor('direction'),
+                    ),
+                  if (_supports(operation, 'log'))
+                    SwitchListTile(
+                      key: const Key('firewall-log'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _log,
+                      onChanged: canSave
+                          ? (value) => setState(() => _log = value)
+                          : null,
+                      title: const Text('Log matching traffic'),
+                    ),
+                  if (_supports(operation, 'tag'))
+                    _field(
+                      _tag,
+                      'Packet tag',
+                      validator: (_) => _validation?.errorFor('tag'),
+                    ),
+                  SwitchListTile(
+                    key: const Key('firewall-source-invert'),
+                    contentPadding: EdgeInsets.zero,
+                    value: _sourceInverted,
+                    onChanged: canSave
+                        ? (value) => setState(() => _sourceInverted = value)
+                        : null,
+                    title: const Text('Invert source'),
+                  ),
+                  SwitchListTile(
+                    key: const Key('firewall-destination-invert'),
+                    contentPadding: EdgeInsets.zero,
+                    value: _destinationInverted,
+                    onChanged: canSave
+                        ? (value) =>
+                            setState(() => _destinationInverted = value)
+                        : null,
+                    title: const Text('Invert destination'),
+                  ),
+                  if (_isIpv4Icmp && _supports(operation, 'icmptype'))
+                    _field(
+                      _icmpTypes,
+                      'ICMP types',
+                      key: const Key('firewall-icmp-types'),
+                      helperText:
+                          'Comma-separated values; use “any” for all types.',
+                      validator: (_) => _validation?.errorFor('icmptype'),
+                    ),
+                  if (_supports(operation, 'statetype'))
+                    _drop(
+                      label: 'State type',
+                      value: _safeValue(_stateType, stateValues),
+                      values: stateValues,
+                      onChanged: canSave
+                          ? (value) => setState(() => _stateType = value)
+                          : null,
+                      key: const Key('firewall-state-type'),
+                      errorText: _validation?.errorFor('statetype'),
+                    ),
+                  if (_isTcp && _supports(operation, 'tcp_flags_any'))
+                    _tcpFlagEditor(canSave),
+                  if (_supports(operation, 'gateway'))
+                    _field(
+                      _gateway,
+                      'Gateway or gateway group',
+                      key: const Key('firewall-gateway'),
+                      helperText: 'Leave empty to use the default route.',
+                      validator: (_) => _validation?.errorFor('gateway'),
+                    ),
+                  if (_supports(operation, 'sched'))
+                    _field(
+                      _schedule,
+                      'Schedule',
+                      key: const Key('firewall-schedule'),
+                      helperText: 'Existing pfSense schedule name.',
+                    ),
+                  if (_supports(operation, 'dnpipe'))
+                    _field(
+                      _dnpipe,
+                      'Inbound limiter',
+                      key: const Key('firewall-dnpipe'),
+                    ),
+                  if (_supports(operation, 'pdnpipe'))
+                    _field(
+                      _pdnpipe,
+                      'Outbound limiter',
+                      key: const Key('firewall-pdnpipe'),
+                      validator: (_) => _validation?.errorFor('pdnpipe'),
+                    ),
+                  if (_supports(operation, 'defaultqueue'))
+                    _field(
+                      _defaultQueue,
+                      'Default queue',
+                      key: const Key('firewall-default-queue'),
+                    ),
+                  if (_supports(operation, 'ackqueue'))
+                    _field(
+                      _ackQueue,
+                      'ACK queue',
+                      key: const Key('firewall-ack-queue'),
+                      validator: (_) => _validation?.errorFor('ackqueue'),
+                    ),
+                  if (_supports(operation, 'placement'))
+                    _field(
+                      _placement,
+                      'Rule placement',
+                      key: const Key('firewall-placement'),
+                      number: true,
+                      helperText:
+                          'Optional configuration position. Changing this moves the rule and requires confirmation.',
+                      validator: (_) => _validation?.errorFor('placement'),
+                    ),
+                ],
+              ),
+              if (_validation?.summary != null) ...[
+                const SizedBox(height: 8),
+                _errorText(_validation!.summary!),
+              ],
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                key: const Key('save-firewall-rule'),
+                onPressed: canSave ? _save : null,
+                icon: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_saving ? 'Saving…' : (strings?.save ?? 'Save')),
+              ),
             ],
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              key: const Key('save-firewall-rule'),
-              onPressed: canSave ? _save : null,
-              icon: _saving
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: Text(_saving ? 'Saving…' : (strings?.save ?? 'Save')),
-            ),
-          ],
+          ),
         ),
       ),
     );
