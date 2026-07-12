@@ -168,11 +168,19 @@ class _NetworkMonitorScreenState extends State<NetworkMonitorScreen>
           if (mounted) _load(showSpinner: true);
         });
       }
-    } else if (_states.isEmpty && _interfaces.isEmpty && session.connected && !_loading) {
+    } else if (_states.isEmpty &&
+        _interfaces.isEmpty &&
+        session.connected &&
+        !_loading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _load(showSpinner: true);
       });
     }
+  }
+
+  void _commitState(VoidCallback callback) {
+    if (!mounted) return;
+    setState(callback);
   }
 
   void _clearLiveData() {
