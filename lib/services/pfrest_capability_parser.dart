@@ -316,7 +316,17 @@ bool _isSafeRelativePath(String path) {
       uri.hasFragment) {
     return false;
   }
-  return !uri.pathSegments.any((segment) => segment == '.' || segment == '..');
+  for (final rawSegment in path.split('/')) {
+    if (rawSegment.isEmpty) continue;
+    String decoded;
+    try {
+      decoded = Uri.decodeComponent(rawSegment);
+    } on FormatException {
+      return false;
+    }
+    if (decoded == '.' || decoded == '..') return false;
+  }
+  return true;
 }
 
 String _schemaFingerprint(Map<String, dynamic> root) {
