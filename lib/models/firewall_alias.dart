@@ -35,8 +35,16 @@ class FirewallAlias {
   bool get isSupportedType => supportedTypes.contains(type.toLowerCase());
 
   factory FirewallAlias.fromJson(Map<String, dynamic> json) {
-    final addresses = _stringValues(json['address'], delimiter: ' ');
-    final details = _stringValues(json['detail'], delimiter: '||');
+    final addresses = _stringValues(
+      json['address'],
+      delimiter: ' ',
+      preserveEmpty: false,
+    );
+    final details = _stringValues(
+      json['detail'],
+      delimiter: '||',
+      preserveEmpty: true,
+    );
     final entries = <FirewallAliasEntry>[];
     for (var index = 0; index < addresses.length; index++) {
       entries.add(
@@ -98,20 +106,19 @@ class FirewallAlias {
   }
 }
 
-List<String> _stringValues(dynamic value, {required String delimiter}) {
-  if (value is List) {
-    return value
-        .map((item) => item?.toString().trim() ?? '')
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-  }
-  final text = value?.toString() ?? '';
-  if (text.trim().isEmpty) return const [];
-  return text
-      .split(delimiter)
-      .map((item) => item.trim())
-      .where((item) => item.isNotEmpty)
-      .toList(growable: false);
+List<String> _stringValues(
+  dynamic value, {
+  required String delimiter,
+  required bool preserveEmpty,
+}) {
+  final values = value is List
+      ? value.map((item) => item?.toString().trim() ?? '').toList()
+      : (value?.toString() ?? '')
+          .split(delimiter)
+          .map((item) => item.trim())
+          .toList();
+  if (preserveEmpty) return List.unmodifiable(values);
+  return values.where((item) => item.isNotEmpty).toList(growable: false);
 }
 
 int? _intValue(dynamic value) {
