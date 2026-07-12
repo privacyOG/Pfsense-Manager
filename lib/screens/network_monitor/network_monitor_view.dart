@@ -173,7 +173,7 @@ extension _NetworkMonitorView on _NetworkMonitorScreenState {
                   child: Switch(
                     value: _live,
                     onChanged: (value) {
-                      setState(() => _live = value);
+                      _commitState(() => _live = value);
                       _savePreferences();
                       if (value) _load();
                     },
@@ -213,7 +213,7 @@ extension _NetworkMonitorView on _NetworkMonitorScreenState {
                 ),
               ),
               onSelectionChanged: (values) {
-                setState(() => _bandwidthUnit = values.first);
+                _commitState(() => _bandwidthUnit = values.first);
                 _savePreferences();
               },
             ),
@@ -318,7 +318,7 @@ extension _NetworkMonitorView on _NetworkMonitorScreenState {
                   ),
                   onSelectionChanged: (values) {
                     final value = values.first;
-                    setState(() {
+                    _commitState(() {
                       _refreshSeconds = math.max(
                         networkMonitorMinimumInterfaceSeconds,
                         value,
@@ -362,7 +362,7 @@ extension _NetworkMonitorView on _NetworkMonitorScreenState {
                 label: Text(value.toUpperCase()),
                 selected: _quickFilter == value,
                 onSelected: (_) {
-                  setState(() => _quickFilter = value);
+                  _commitState(() => _quickFilter = value);
                   _savePreferences();
                 },
               ),
