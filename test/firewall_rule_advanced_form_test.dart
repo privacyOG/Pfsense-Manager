@@ -85,7 +85,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('firewall-protocol')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Icmp').last);
+    await tester.tap(find.text('ICMP').last);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('firewall-tcp-flags-any')), findsNothing);
