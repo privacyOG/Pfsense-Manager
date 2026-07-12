@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../services/connection_check.dart';
 import '../services/firewall_alias_service.dart';
 import '../services/firewall_nat_service.dart';
+import '../services/firewall_rule_service.dart';
 import '../services/pfrest_capability_service.dart';
 import '../services/pfsense_service.dart';
 import 'profile_provider.dart';
@@ -37,6 +38,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   PfSenseService? _service;
   FirewallAliasService? _firewallAliasService;
   FirewallNatService? _firewallNatService;
+  FirewallRuleService? _firewallRuleService;
   PfRestCapabilityService? _capabilityService;
   bool _connected = false;
   bool _connecting = false;
@@ -50,6 +52,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   PfSenseService? get service => _service;
   FirewallAliasService? get firewallAliasService => _firewallAliasService;
   FirewallNatService? get firewallNatService => _firewallNatService;
+  FirewallRuleService? get firewallRuleService => _firewallRuleService;
   PfRestCapabilityService? get capabilityService => _capabilityService;
   PfRestCapabilities? get capabilities => _capabilityService?.current;
   bool get connected => _connected;
@@ -86,6 +89,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     _firewallAliasService = null;
     _firewallNatService = null;
+    _firewallRuleService = null;
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -101,6 +105,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     PfSenseService? candidate;
     FirewallAliasService? candidateAliases;
     FirewallNatService? candidateNat;
+    FirewallRuleService? candidateRules;
     PfRestCapabilityService? candidateCapabilities;
     try {
       final connectionProfile = await _profileResolver(profile);
@@ -127,6 +132,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       candidate = PfSenseService(client);
       candidateAliases = FirewallAliasService(client);
       candidateNat = FirewallNatService(client);
+      candidateRules = FirewallRuleService(client);
       candidateCapabilities = PfRestCapabilityService(
         client,
         profileId: connectionProfile.id,
@@ -143,10 +149,12 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _service = candidate;
       _firewallAliasService = candidateAliases;
       _firewallNatService = candidateNat;
+      _firewallRuleService = candidateRules;
       _capabilityService = candidateCapabilities;
       candidate = null;
       candidateAliases = null;
       candidateNat = null;
+      candidateRules = null;
       candidateCapabilities = null;
       _connected = true;
       _connecting = false;
@@ -191,6 +199,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _sessionGeneration++;
     _firewallAliasService = null;
     _firewallNatService = null;
+    _firewallRuleService = null;
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -218,6 +227,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _sessionGeneration++;
     _firewallAliasService = null;
     _firewallNatService = null;
+    _firewallRuleService = null;
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -242,6 +252,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _sessionGeneration++;
     _firewallAliasService = null;
     _firewallNatService = null;
+    _firewallRuleService = null;
     _capabilityService?.dispose();
     _service?.dispose();
     super.dispose();

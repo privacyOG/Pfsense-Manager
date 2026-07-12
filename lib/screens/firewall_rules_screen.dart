@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/firewall_rule.dart';
+import '../models/pfrest_capabilities.dart';
 import '../providers/session_provider.dart';
+import '../utils/api_exception.dart';
 import 'firewall_aliases_screen.dart';
 import 'firewall_nat_screen.dart';
 import 'firewall_rule_form_screen.dart';
@@ -22,6 +24,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   Object? _error;
   bool _loading = false;
   bool _actionBusy = false;
+  bool _writePermissionDenied = false;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
@@ -44,6 +47,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
         ..add('all');
       _selectedInterface = 'all';
       _error = null;
+      _writePermissionDenied = false;
       _lastSuccessfulRefresh = null;
       _loadedSessionGeneration = session.sessionGeneration;
       _loadedProfileId = profileId;
@@ -63,6 +67,22 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   void dispose() {
     _requestGeneration++;
     super.dispose();
+  }
+
+  PfRestOperationCapability? _operation(
+    PfSenseSessionProvider session,
+    String method,
+  ) {
+    return session.capabilities?.operation('/api/v2/firewall/rule', method);
+  }
+
+  bool _schemaSupports(
+    PfSenseSessionProvider session,
+    String path,
+    String method,
+  ) {
+    final capabilities = session.capabilities;
+    return capabilities?.isAvailable != true || capabilities!.supports(path, method);
   }
 
   Future<void> _load({bool showSpinner = false}) async {
@@ -88,9 +108,11 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     });
 
     try {
-      final rules = await session.service!.getFirewallRules(
-        interface: _selectedInterface == 'all' ? null : _selectedInterface,
-      );
+      final interface =
+          _selectedInterface == 'all' ? null : _selectedInterface;
+      final rules = session.firewallRuleService != null
+          ? await session.firewallRuleService!.list(interface: interface)
+          : await session.service!.getFirewallRules(interface: interface);
       if (!mounted ||
           request != _requestGeneration ||
           sessionGeneration != session.sessionGeneration ||
@@ -100,7 +122,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
       setState(() {
         _rules = rules;
         _interfaces.addAll(
-          rules.map((rule) => rule.interface).where((name) => name.isNotEmpty),
+          rules.expand((rule) => rule.interfaces).where((name) => name.isNotEmpty),
         );
         _error = null;
         _lastSuccessfulRefresh = DateTime.now();
@@ -116,7 +138,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   }
 
   Future<void> _toggle(FirewallRule rule) async {
-    if (rule.id == null || _actionBusy) return;
+    if (rule.id == null || _actionBusy || _writePermissionDenied) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
 
@@ -147,8 +169,18 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
 
     setState(() => _actionBusy = true);
     try {
-      await session.service!.toggleFirewallRule(rule.id!, !rule.enabled);
+      if (session.firewallRuleService != null) {
+        await session.firewallRuleService!.setEnabled(
+          rule,
+          !rule.enabled,
+          operation: _operation(session, 'PATCH'),
+        );
+      } else {
+        await session.service!.toggleFirewallRule(rule.id!, !rule.enabled);
+      }
       await _load(showSpinner: true);
+    } on ApiException catch (error) {
+      _handleWriteError(error);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -160,9 +192,87 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     }
   }
 
+  Future<void> _delete(FirewallRule rule) async {
+    if (rule.id == null || _actionBusy || _writePermissionDenied) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete firewall rule?'),
+        content: Text(
+          '${rule.description.isEmpty ? 'This firewall rule' : '“${rule.description}”'} will be permanently removed and the firewall ruleset will be reloaded.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _actionBusy = true);
+    try {
+      if (session.firewallRuleService != null) {
+        await session.firewallRuleService!.delete(rule);
+      } else {
+        await session.service!.deleteFirewallRule(rule.id!);
+      }
+      await _load(showSpinner: true);
+    } on ApiException catch (error) {
+      _handleWriteError(error);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  void _handleWriteError(ApiException error) {
+    if (!mounted) return;
+    if (error.isPermissionError) {
+      setState(() => _writePermissionDenied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Permission denied (403). Firewall rule management is now read-only for this session.',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
   Future<void> _openForm([FirewallRule? rule]) async {
+    final session = context.read<PfSenseSessionProvider>();
+    final method = rule == null ? 'POST' : 'PATCH';
+    if (!_schemaSupports(session, '/api/v2/firewall/rule', method)) return;
+
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => FirewallRuleFormScreen(rule: rule)),
+      MaterialPageRoute(
+        builder: (_) => FirewallRuleFormScreen(
+          rule: rule,
+          availableInterfaces:
+              _interfaces.where((value) => value != 'all').toList(),
+          onPermissionDenied: () {
+            if (mounted) setState(() => _writePermissionDenied = true);
+          },
+        ),
+      ),
     );
     if (changed == true) await _load(showSpinner: true);
   }
@@ -183,6 +293,12 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final session = context.watch<PfSenseSessionProvider>();
+    final canCreate = session.connected &&
+        !_actionBusy &&
+        !_writePermissionDenied &&
+        _schemaSupports(session, '/api/v2/firewall/rule', 'POST');
+    final canUpdate = !_writePermissionDenied &&
+        _schemaSupports(session, '/api/v2/firewall/rule', 'PATCH');
 
     return Scaffold(
       body: RefreshIndicator(
@@ -238,6 +354,27 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                 ),
               ],
             ),
+            if (_writePermissionDenied)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Read-only firewall rules'),
+                  subtitle: Text(
+                    'The current credential cannot change firewall rules. Reconnect after updating its permissions.',
+                  ),
+                ),
+              ),
+            if (!_schemaSupports(session, '/api/v2/firewall/rule', 'POST') &&
+                session.capabilities?.isAvailable == true)
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.extension_off_outlined),
+                  title: Text('Rule creation unavailable'),
+                  subtitle: Text(
+                    'The installed pfREST schema does not report the singular firewall-rule create endpoint.',
+                  ),
+                ),
+              ),
             if (_lastSuccessfulRefresh != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -265,40 +402,76 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                   Icons.rule_folder_outlined,
                   strings?.emptyState ?? 'Nothing to show yet.',
                 ),
-              for (final rule in _rules)
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _color(rule.type).withValues(alpha: .16),
-                      child: Icon(_icon(rule.type), color: _color(rule.type)),
-                    ),
-                    title: Text(
-                      rule.description.isEmpty
-                          ? '${rule.type.toUpperCase()} ${rule.interface}'
-                          : rule.description,
-                    ),
-                    subtitle: Text(
-                      '${rule.interface} | ${rule.protocolLabel} | '
-                      '${rule.sourceNetwork} → ${rule.destinationNetwork}'
-                      '${rule.portRange.isEmpty ? '' : ':${rule.portRange}'}',
-                    ),
-                    trailing: Switch(
-                      value: rule.enabled,
-                      onChanged: _actionBusy ? null : (_) => _toggle(rule),
-                    ),
-                    onTap: _actionBusy ? null : () => _openForm(rule),
-                  ),
-                ),
+              for (final rule in _rules) _ruleCard(rule, canUpdate),
             ],
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: session.connected && !_actionBusy
-            ? () => _openForm()
-            : null,
+        onPressed: canCreate ? () => _openForm() : null,
         icon: const Icon(Icons.add),
         label: Text(strings?.addRule ?? 'Add rule'),
+      ),
+    );
+  }
+
+  Widget _ruleCard(FirewallRule rule, bool canUpdate) {
+    final details = <String>[
+      rule.interface,
+      rule.protocolLabel,
+      '${rule.sourceNetwork}${rule.sourcePortRange.isEmpty ? '' : ':${rule.sourcePortRange}'} → '
+          '${rule.destinationNetwork}${rule.portRange.isEmpty ? '' : ':${rule.portRange}'}',
+      if (rule.floating) 'FLOATING ${rule.direction.toUpperCase()}',
+      if (rule.log) 'LOGGED',
+      if (rule.gateway != null) 'GW ${rule.gateway}',
+    ];
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: _color(rule.type).withValues(alpha: .16),
+          child: Icon(_icon(rule.type), color: _color(rule.type)),
+        ),
+        title: Text(
+          rule.description.isEmpty
+              ? '${rule.type.toUpperCase()} ${rule.interface}'
+              : rule.description,
+        ),
+        subtitle: Text(details.join(' | ')),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: rule.enabled,
+              onChanged: _actionBusy || !canUpdate ? null : (_) => _toggle(rule),
+            ),
+            PopupMenuButton<String>(
+              enabled: !_actionBusy,
+              onSelected: (value) {
+                if (value == 'edit') _openForm(rule);
+                if (value == 'delete') _delete(rule);
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'edit',
+                  enabled: canUpdate,
+                  child: const ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Edit'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  enabled: !_writePermissionDenied,
+                  child: const ListTile(
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('Delete'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        onTap: _actionBusy || !canUpdate ? null : () => _openForm(rule),
       ),
     );
   }
