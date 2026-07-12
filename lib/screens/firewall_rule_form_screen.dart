@@ -330,6 +330,7 @@ class _FirewallRuleFormScreenState extends State<FirewallRuleFormScreen> {
         key: _key,
         autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
+          cacheExtent: 5000,
           padding: const EdgeInsets.all(16),
           children: [
             if (blocked)
