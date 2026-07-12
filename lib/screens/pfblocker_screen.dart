@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/app_strings.dart';
 import '../providers/session_provider.dart';
+import '../services/pfrest_feature_registry.dart';
+import '../widgets/pfrest_feature_gate.dart';
 
 class PfBlockerScreen extends StatefulWidget {
   const PfBlockerScreen({super.key});
@@ -13,15 +14,21 @@ class PfBlockerScreen extends StatefulWidget {
 
 class _PfBlockerScreenState extends State<PfBlockerScreen> {
   Map<String, dynamic>? _status;
-  bool _available = true;
   bool _loading = false;
   bool _updating = false;
   bool _toggling = false;
-  Object? _error;
+  String? _error;
   DateTime? _lastRefresh;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
+
+  PfRestFeatureRegistry _registry(PfSenseSessionProvider session) {
+    return PfRestFeatureRegistry(
+      activeProfileId: session.selectedProfile?.id,
+      capabilities: session.capabilities,
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -30,28 +37,39 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     final profileId = session.selectedProfile?.id;
     final changed = _loadedSessionGeneration != session.sessionGeneration ||
         _loadedProfileId != profileId;
-    if (changed) {
-      _requestGeneration++;
-      _status = null;
-      _error = null;
-      _lastRefresh = null;
-      _available = true;
-      _loadedSessionGeneration = session.sessionGeneration;
-      _loadedProfileId = profileId;
-      if (session.connected) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _load();
-        });
-      }
+    if (!changed) return;
+
+    _requestGeneration++;
+    _status = null;
+    _error = null;
+    _lastRefresh = null;
+    _loadedSessionGeneration = session.sessionGeneration;
+    _loadedProfileId = profileId;
+
+    final decision = _registry(session).decision(PfRestFeature.pfBlockerStatus);
+    if (session.connected && decision.canAttempt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _requestGeneration++;
+    super.dispose();
   }
 
   Future<void> _load() async {
     if (_loading) return;
     final session = context.read<PfSenseSessionProvider>();
-    if (!session.connected || session.service == null) return;
+    final decision = _registry(session).decision(PfRestFeature.pfBlockerStatus);
+    if (!session.connected || session.service == null || !decision.canAttempt) {
+      return;
+    }
+
     final request = ++_requestGeneration;
-    final sessionGeneration = session.sessionGeneration;
+    final generation = session.sessionGeneration;
     final profileId = session.selectedProfile?.id;
     setState(() {
       _loading = true;
@@ -61,39 +79,54 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
       final data = await session.service!.getPfBlockerStatus();
       if (!mounted ||
           request != _requestGeneration ||
-          sessionGeneration != session.sessionGeneration ||
+          generation != session.sessionGeneration ||
           profileId != session.selectedProfile?.id) {
         return;
       }
       setState(() {
         _status = data;
-        _available = data != null;
         _lastRefresh = DateTime.now();
       });
-    } catch (e) {
-      if (mounted && request == _requestGeneration) setState(() => _error = e);
+    } catch (error) {
+      if (mounted && request == _requestGeneration) {
+        setState(() {
+          _error = pfRestFeatureRequestErrorMessage(
+            PfRestFeature.pfBlockerStatus,
+            error,
+          );
+        });
+      }
     } finally {
-      if (mounted && request == _requestGeneration) setState(() => _loading = false);
+      if (mounted && request == _requestGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
-  Future<void> _update() async {
-    if (_updating) return;
+  Future<void> _updateLists(PfRestFeatureDecision decision) async {
+    if (_updating || !decision.canAttempt) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
-    final updateMsg = AppStrings.of(context).t('pfblockerUpdateTriggered');
+
     setState(() => _updating = true);
     try {
       await session.service!.updatePfBlockerLists();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(updateMsg)),
+          const SnackBar(content: Text('pfBlockerNG update requested.')),
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(
+            content: Text(
+              pfRestFeatureRequestErrorMessage(
+                PfRestFeature.pfBlockerUpdate,
+                error,
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -101,57 +134,51 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     }
   }
 
-  Future<void> _toggleEnabled() async {
-    if (_toggling || _status == null) return;
+  Future<void> _toggleEnabled(PfRestFeatureDecision decision) async {
+    if (_toggling || _status == null || !decision.canAttempt) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
-    final currentlyEnabled = _status!['enable'] as bool? ?? true;
-    if (!currentlyEnabled) {
-      setState(() => _toggling = true);
-      try {
-        await session.service!.setPfBlockerEnabled(true);
-        await _load();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.toString())));
-        }
-      } finally {
-        if (mounted) setState(() => _toggling = false);
-      }
-      return;
-    }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final s = AppStrings.of(ctx);
-        return AlertDialog(
-          title: Text(s.t('pausePfblocker')),
-          content: Text(s.t('pausePfblockerBody')),
+    final currentlyEnabled = _status!['enable'] as bool? ?? true;
+    if (currentlyEnabled) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Pause pfBlockerNG?'),
+          content: const Text(
+            'Blocking will be paused until pfBlockerNG is enabled again.',
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(s.t('cancel')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(s.t('pauseBlocking')),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Pause blocking'),
             ),
           ],
-        );
-      },
-    );
-    if (confirmed != true || !mounted) return;
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
 
     setState(() => _toggling = true);
     try {
-      await session.service!.setPfBlockerEnabled(false);
+      await session.service!.setPfBlockerEnabled(!currentlyEnabled);
       await _load();
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              pfRestFeatureRequestErrorMessage(
+                PfRestFeature.pfBlockerToggle,
+                error,
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _toggling = false);
@@ -161,19 +188,37 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
-    final scheme = Theme.of(context).colorScheme;
-    final strings = AppStrings.of(context);
+    final registry = _registry(session);
+    final statusDecision = registry.decision(PfRestFeature.pfBlockerStatus);
+    final updateDecision = registry.decision(PfRestFeature.pfBlockerUpdate);
+    final toggleDecision = registry.decision(PfRestFeature.pfBlockerToggle);
+
+    if (statusDecision.isUnsupported) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('pfBlockerNG')),
+        body: PfRestFeatureBlockedView(
+          decision: statusDecision,
+          onRefresh: () => session.refreshCapabilities(),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('pfBlockerNG'),
         actions: [
-          if (_lastRefresh != null)
-            IconButton(
-              tooltip: strings.t('refresh'),
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-            ),
+          IconButton(
+            tooltip: 'Refresh capabilities',
+            onPressed: session.connected
+                ? () => session.refreshCapabilities()
+                : null,
+            icon: const Icon(Icons.extension_outlined),
+          ),
+          IconButton(
+            tooltip: 'Refresh status',
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -181,51 +226,62 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (statusDecision.isUnknown) ...[
+              PfRestFeatureNotice(
+                decision: statusDecision,
+                onRefresh: () => session.refreshCapabilities(),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (_loading) const LinearProgressIndicator(),
             if (!session.connected)
-              _InfoCard(
+              const _InfoCard(
                 icon: Icons.cloud_off_outlined,
-                color: scheme.error,
-                title: strings.t('disconnected'),
-                subtitle: strings.t('pfblockerConnectFirst'),
-              )
-            else if (!_available)
-              _InfoCard(
-                icon: Icons.extension_off_outlined,
-                color: scheme.tertiary,
-                title: strings.t('pfblockerNotAvailable'),
-                subtitle: strings.t('pfblockerNotAvailableDetail'),
+                title: 'Disconnected',
+                subtitle: 'Connect to a firewall before loading pfBlockerNG.',
               )
             else if (_error != null)
               _InfoCard(
                 icon: Icons.error_outline,
-                color: scheme.error,
-                title: strings.t('pfblockerLoadFailed'),
-                subtitle: _error.toString(),
+                title: 'pfBlockerNG request failed',
+                subtitle: _error!,
               )
             else if (_status != null) ...[
               _StatusHeader(status: _status!),
               const SizedBox(height: 16),
               _StatsGrid(status: _status!),
-              const SizedBox(height: 20),
-              _ActionRow(
-                status: _status!,
-                loading: _updating || _toggling,
-                onUpdate: _update,
-                onToggle: _toggleEnabled,
-              ),
               const SizedBox(height: 16),
-              if (_lastRefresh != null)
+              _CapabilityAction(
+                decision: updateDecision,
+                label: _updating ? 'Updating…' : 'Update lists',
+                icon: Icons.sync,
+                busy: _updating,
+                onPressed: () => _updateLists(updateDecision),
+              ),
+              const SizedBox(height: 8),
+              _CapabilityAction(
+                decision: toggleDecision,
+                label: _toggling
+                    ? 'Applying…'
+                    : ((_status!['enable'] as bool? ?? true)
+                        ? 'Pause blocking'
+                        : 'Enable blocking'),
+                icon: Icons.power_settings_new,
+                busy: _toggling,
+                onPressed: () => _toggleEnabled(toggleDecision),
+              ),
+              if (_lastRefresh != null) ...[
+                const SizedBox(height: 12),
                 Text(
-                  strings.f('lastUpdated', {'time': _formatTime(_lastRefresh!)}),
+                  'Last updated ${_formatTime(_lastRefresh!)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+              ],
             ] else if (!_loading)
-              _InfoCard(
+              const _InfoCard(
                 icon: Icons.shield_outlined,
-                color: scheme.primary,
                 title: 'pfBlockerNG',
-                subtitle: strings.t('pfblockerLoadHint'),
+                subtitle: 'Pull to refresh or use the refresh button.',
               ),
           ],
         ),
@@ -233,55 +289,71 @@ class _PfBlockerScreenState extends State<PfBlockerScreen> {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    final l = dt.toLocal();
-    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _CapabilityAction extends StatelessWidget {
+  const _CapabilityAction({
+    required this.decision,
+    required this.label,
+    required this.icon,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final PfRestFeatureDecision decision;
+  final String label;
+  final IconData icon;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        enabled: decision.canAttempt && !busy,
+        leading: busy
+            ? const SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(icon),
+        title: Text(label),
+        subtitle: decision.isAvailable
+            ? Text(decision.contract.description)
+            : Text(decision.message),
+        trailing: decision.isUnsupported
+            ? const Icon(Icons.extension_off_outlined)
+            : const Icon(Icons.chevron_right),
+        onTap: decision.canAttempt && !busy ? onPressed : null,
+      ),
+    );
   }
 }
 
 class _StatusHeader extends StatelessWidget {
   const _StatusHeader({required this.status});
+
   final Map<String, dynamic> status;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final enabled = status['enable'] as bool? ?? true;
-    final color = enabled ? const Color(0xFF00C2A8) : scheme.error;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(enabled ? Icons.security : Icons.security_outlined, color: color, size: 28),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  AppStrings.of(context).t(enabled ? 'pfblockerActive' : 'pfblockerPaused'),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700, color: color),
-                ),
-                Text(
-                  status['version']?.toString() ?? '',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
+    final color = enabled
+        ? const Color(0xFF00C2A8)
+        : Theme.of(context).colorScheme.error;
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          enabled ? Icons.security : Icons.security_outlined,
+          color: color,
+        ),
+        title: Text(enabled ? 'pfBlockerNG active' : 'pfBlockerNG paused'),
+        subtitle: Text(status['version']?.toString() ?? 'Version not reported'),
       ),
     );
   }
@@ -289,53 +361,42 @@ class _StatusHeader extends StatelessWidget {
 
 class _StatsGrid extends StatelessWidget {
   const _StatsGrid({required this.status});
+
   final Map<String, dynamic> status;
 
   @override
   Widget build(BuildContext context) {
-    final dnsbl = status['dnsbl'] as Map<String, dynamic>? ?? {};
-    final ip = status['ip'] as Map<String, dynamic>? ?? {};
-
+    final dnsbl = status['dnsbl'] as Map<String, dynamic>? ?? const {};
+    final ip = status['ip'] as Map<String, dynamic>? ?? const {};
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
         _StatCard(
-          label: AppStrings.of(context).t('dnsblBlocked'),
-          value: _fmt(dnsbl['blocked'] ?? status['dnsbl_blocked']),
+          label: 'DNSBL blocked',
+          value: _format(dnsbl['blocked'] ?? status['dnsbl_blocked']),
           icon: Icons.dns_outlined,
-          color: const Color(0xFFE53935),
         ),
         _StatCard(
-          label: AppStrings.of(context).t('dnsblAllowed'),
-          value: _fmt(dnsbl['allowed'] ?? status['dnsbl_allowed']),
+          label: 'DNSBL allowed',
+          value: _format(dnsbl['allowed'] ?? status['dnsbl_allowed']),
           icon: Icons.check_circle_outline,
-          color: const Color(0xFF00C2A8),
         ),
         _StatCard(
-          label: AppStrings.of(context).t('ipBlocked'),
-          value: _fmt(ip['blocked'] ?? status['ip_blocked']),
+          label: 'IP blocked',
+          value: _format(ip['blocked'] ?? status['ip_blocked']),
           icon: Icons.block_outlined,
-          color: const Color(0xFFFF6F00),
         ),
         _StatCard(
-          label: AppStrings.of(context).t('listsLoaded'),
-          value: _fmt(status['lists_loaded'] ?? status['list_count']),
+          label: 'Lists loaded',
+          value: _format(status['lists_loaded'] ?? status['list_count']),
           icon: Icons.list_alt_outlined,
-          color: const Color(0xFF7B61FF),
         ),
       ],
     );
   }
 
-  String _fmt(dynamic value) {
-    if (value == null) return '--';
-    final n = int.tryParse(value.toString());
-    if (n == null) return value.toString();
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}k';
-    return n.toString();
-  }
+  String _format(dynamic value) => value?.toString() ?? '--';
 }
 
 class _StatCard extends StatelessWidget {
@@ -343,90 +404,36 @@ class _StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
-    required this.color,
   });
+
   final String label;
   final String value;
   final IconData icon;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
+    return SizedBox(
       width: 150,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w800, color: color),
-          ),
-          Text(
-            label,
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  const _ActionRow({
-    required this.status,
-    required this.loading,
-    required this.onUpdate,
-    required this.onToggle,
-  });
-  final Map<String, dynamic> status;
-  final bool loading;
-  final VoidCallback onUpdate;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = status['enable'] as bool? ?? true;
-    return Column(
-      children: [
-        FilledButton.icon(
-          onPressed: loading ? null : onUpdate,
-          icon: loading
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync),
-          label: Text(AppStrings.of(context).t('updateBlocklists')),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 22),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: loading ? null : onToggle,
-          icon: Icon(enabled ? Icons.pause_circle_outline : Icons.play_circle_outline),
-          label: Text(AppStrings.of(context).t(enabled ? 'pauseBlocking' : 'resumeBlocking')),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-            foregroundColor: enabled ? Theme.of(context).colorScheme.error : null,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -434,12 +441,11 @@ class _ActionRow extends StatelessWidget {
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
     required this.icon,
-    required this.color,
     required this.title,
     required this.subtitle,
   });
+
   final IconData icon;
-  final Color color;
   final String title;
   final String subtitle;
 
@@ -447,7 +453,7 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        leading: Icon(icon, color: color),
+        leading: Icon(icon),
         title: Text(title),
         subtitle: Text(subtitle),
       ),
