@@ -8,7 +8,6 @@ class FirewallRuleService {
 
   static const rulesPath = '/api/v2/firewall/rules';
   static const rulePath = '/api/v2/firewall/rule';
-  static const applyPath = '/api/v2/firewall/apply';
 
   final PfSenseApiClient _client;
 
@@ -37,7 +36,6 @@ class FirewallRuleService {
       rulePath,
       data: rule.toCreatePayload(operation: operation),
     );
-    await _apply();
     return _single(response.data, fallback: rule);
   }
 
@@ -57,7 +55,6 @@ class FirewallRuleService {
         ...rule.toUpdatePayload(operation: operation),
       },
     );
-    await _apply();
     return _single(response.data, fallback: rule);
   }
 
@@ -78,10 +75,7 @@ class FirewallRuleService {
       rulePath,
       queryParameters: {'id': id.toString()},
     );
-    await _apply();
   }
-
-  Future<void> _apply() => _client.post(applyPath);
 
   int _requiredId(FirewallRule rule) {
     final id = int.tryParse(rule.id ?? '');
