@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/firewall_rule.dart';
 import '../providers/session_provider.dart';
+import 'firewall_aliases_screen.dart';
 import 'firewall_rule_form_screen.dart';
 
 class FirewallRulesScreen extends StatefulWidget {
@@ -30,8 +31,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     super.didChangeDependencies();
     final session = context.watch<PfSenseSessionProvider>();
     final profileId = session.selectedProfile?.id;
-    final sessionChanged = _loadedSessionGeneration != session.sessionGeneration ||
-        _loadedProfileId != profileId;
+    final sessionChanged =
+        _loadedSessionGeneration != session.sessionGeneration ||
+            _loadedProfileId != profileId;
 
     if (sessionChanged) {
       _requestGeneration++;
@@ -70,7 +72,8 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
       setState(() {
         _rules = [];
         _lastSuccessfulRefresh = null;
-        _error = AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
+        _error =
+            AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
       });
       return;
     }
@@ -119,7 +122,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(rule.enabled ? 'Disable firewall rule?' : 'Enable firewall rule?'),
+        title: Text(
+          rule.enabled ? 'Disable firewall rule?' : 'Enable firewall rule?',
+        ),
         content: Text(
           rule.description.isEmpty
               ? 'This changes the ${rule.type.toUpperCase()} rule on ${rule.interface}.'
@@ -161,6 +166,12 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     if (changed == true) await _load(showSpinner: true);
   }
 
+  void _openAliases() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const FirewallAliasesScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
@@ -185,7 +196,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                       for (final name in _interfaces)
                         DropdownMenuItem(
                           value: name,
-                          child: Text(name == 'all' ? (strings?.all ?? 'All') : name),
+                          child: Text(
+                            name == 'all' ? (strings?.all ?? 'All') : name,
+                          ),
                         ),
                     ],
                     onChanged: _loading
@@ -197,7 +210,14 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                           },
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  key: const Key('open-firewall-aliases'),
+                  tooltip: 'Firewall aliases',
+                  onPressed: session.connected ? _openAliases : null,
+                  icon: const Icon(Icons.label_outline),
+                ),
+                const SizedBox(width: 4),
                 IconButton.filledTonal(
                   onPressed: _loading ? null : () => _load(showSpinner: true),
                   icon: const Icon(Icons.refresh),

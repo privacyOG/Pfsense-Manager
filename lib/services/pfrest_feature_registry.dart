@@ -14,6 +14,10 @@ enum PfRestFeature {
   captivePortalDisconnect,
   captivePortalVouchers,
   captivePortalVoucherGeneration,
+  firewallAliasesRead,
+  firewallAliasCreate,
+  firewallAliasUpdate,
+  firewallAliasDelete,
 }
 
 enum PfRestFeatureAvailability {
@@ -128,6 +132,38 @@ const pfRestFeatureContracts = <PfRestFeature, PfRestFeatureContract>{
     method: 'POST',
     dependency: 'captive portal custom pfREST extension',
     description: 'Generates new captive portal vouchers.',
+  ),
+  PfRestFeature.firewallAliasesRead: PfRestFeatureContract(
+    feature: PfRestFeature.firewallAliasesRead,
+    label: 'Firewall aliases',
+    path: '/api/v2/firewall/aliases',
+    method: 'GET',
+    dependency: 'pfREST firewall alias endpoint',
+    description: 'Lists reusable firewall host, network and port aliases.',
+  ),
+  PfRestFeature.firewallAliasCreate: PfRestFeatureContract(
+    feature: PfRestFeature.firewallAliasCreate,
+    label: 'Create firewall alias',
+    path: '/api/v2/firewall/alias',
+    method: 'POST',
+    dependency: 'pfREST firewall alias endpoint',
+    description: 'Creates and applies a firewall alias.',
+  ),
+  PfRestFeature.firewallAliasUpdate: PfRestFeatureContract(
+    feature: PfRestFeature.firewallAliasUpdate,
+    label: 'Update firewall alias',
+    path: '/api/v2/firewall/alias',
+    method: 'PATCH',
+    dependency: 'pfREST firewall alias endpoint',
+    description: 'Updates and applies an existing firewall alias.',
+  ),
+  PfRestFeature.firewallAliasDelete: PfRestFeatureContract(
+    feature: PfRestFeature.firewallAliasDelete,
+    label: 'Delete firewall alias',
+    path: '/api/v2/firewall/alias',
+    method: 'DELETE',
+    dependency: 'pfREST firewall alias endpoint',
+    description: 'Deletes an existing firewall alias and reloads the firewall.',
   ),
 };
 
