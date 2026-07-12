@@ -101,7 +101,7 @@ void main() {
     expect(nameError('12345'), contains('numeric'));
     expect(nameError('pkg_managed'), contains('pkg_'));
     expect(nameError('existing_alias'), contains('already exists'));
-    expect(nameError('A' * 32), contains('31'));
+    expect(nameError(List.filled(32, 'A').join()), contains('31'));
   });
 
   test('allows the current alias name during edits', () {
