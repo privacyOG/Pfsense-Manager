@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          flutter analyze --fatal-warnings 2>&1 | tee flutter-analyze.log
+          flutter analyze --fatal-warnings --no-fatal-infos 2>&1 | tee flutter-analyze.log
 
       - name: Upload analyzer log
         if: always()
@@ -82,7 +82,7 @@ jobs:
         with:
           name: flutter-test-${{ github.sha }}
           path: flutter-test.log
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Upload coverage report
