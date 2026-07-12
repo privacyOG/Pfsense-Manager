@@ -54,12 +54,12 @@ class PfRestOperationCapability {
   PfRestOperationCapability({
     required this.path,
     required this.method,
-    required this.requestFields,
+    required Map<String, PfRestFieldConstraint> requestFields,
     required Set<String> tags,
     this.summary,
     this.operationId,
-  }) : tags = Set.unmodifiable(tags),
-       requestFields = Map.unmodifiable(requestFields);
+  })  : tags = Set.unmodifiable(tags),
+        requestFields = Map.unmodifiable(requestFields);
 
   final String path;
   final String method;
@@ -69,7 +69,9 @@ class PfRestOperationCapability {
   final Map<String, PfRestFieldConstraint> requestFields;
 
   PfRestFieldConstraint? field(String name, {String? location}) {
-    if (location != null) return requestFields['${location.toLowerCase()}:$name'];
+    if (location != null) {
+      return requestFields['${location.toLowerCase()}:$name'];
+    }
     for (final field in requestFields.values) {
       if (field.name == name) return field;
     }
@@ -81,7 +83,7 @@ class PfRestCapabilities {
   PfRestCapabilities({
     required this.profileId,
     required this.status,
-    required this.operations,
+    required Map<String, PfRestOperationCapability> operations,
     required Set<String> packageTags,
     required this.loadedAt,
     this.issue,
@@ -89,8 +91,8 @@ class PfRestCapabilities {
     this.apiVersion,
     this.openApiVersion,
     this.schemaFingerprint,
-  }) : packageTags = Set.unmodifiable(packageTags),
-       operations = Map.unmodifiable(operations);
+  })  : packageTags = Set.unmodifiable(packageTags),
+        operations = Map.unmodifiable(operations);
 
   factory PfRestCapabilities.notLoaded(String profileId) {
     return PfRestCapabilities(
