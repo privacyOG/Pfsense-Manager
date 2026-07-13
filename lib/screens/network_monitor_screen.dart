@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import 'interface_management_screen.dart';
 import 'network_monitor/network_monitor_screen.dart' as live;
 
+export 'network_monitor/network_monitor_screen.dart'
+    show
+        networkMonitorFormatRate,
+        networkMonitorHistorySampleLimit,
+        networkMonitorInterfacePollInterval,
+        networkMonitorStatePollInterval;
+
 class NetworkMonitorScreen extends StatelessWidget {
   const NetworkMonitorScreen({super.key});
 
