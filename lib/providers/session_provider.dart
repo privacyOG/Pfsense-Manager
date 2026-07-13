@@ -7,6 +7,7 @@ import '../services/connection_check.dart';
 import '../services/firewall_alias_service.dart';
 import '../services/firewall_nat_service.dart';
 import '../services/firewall_rule_service.dart';
+import '../services/interface_management_service.dart';
 import '../services/pfrest_capability_service.dart';
 import '../services/pfsense_service.dart';
 import 'profile_provider.dart';
@@ -39,6 +40,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   FirewallAliasService? _firewallAliasService;
   FirewallNatService? _firewallNatService;
   FirewallRuleService? _firewallRuleService;
+  InterfaceManagementService? _interfaceManagementService;
   PfRestCapabilityService? _capabilityService;
   bool _connected = false;
   bool _connecting = false;
@@ -53,6 +55,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
   FirewallAliasService? get firewallAliasService => _firewallAliasService;
   FirewallNatService? get firewallNatService => _firewallNatService;
   FirewallRuleService? get firewallRuleService => _firewallRuleService;
+  InterfaceManagementService? get interfaceManagementService =>
+      _interfaceManagementService;
   PfRestCapabilityService? get capabilityService => _capabilityService;
   PfRestCapabilities? get capabilities => _capabilityService?.current;
   bool get connected => _connected;
@@ -87,9 +91,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     final generation = ++_sessionGeneration;
 
-    _firewallAliasService = null;
-    _firewallNatService = null;
-    _firewallRuleService = null;
+    _clearFeatureServices();
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -106,6 +108,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     FirewallAliasService? candidateAliases;
     FirewallNatService? candidateNat;
     FirewallRuleService? candidateRules;
+    InterfaceManagementService? candidateInterfaces;
     PfRestCapabilityService? candidateCapabilities;
     try {
       final connectionProfile = await _profileResolver(profile);
@@ -137,6 +140,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
         client,
         profileId: connectionProfile.id,
       );
+      candidateInterfaces = InterfaceManagementService(
+        client,
+        capabilityService: candidateCapabilities,
+      );
       client = null;
       await candidateCapabilities.refresh();
 
@@ -150,11 +157,13 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _firewallAliasService = candidateAliases;
       _firewallNatService = candidateNat;
       _firewallRuleService = candidateRules;
+      _interfaceManagementService = candidateInterfaces;
       _capabilityService = candidateCapabilities;
       candidate = null;
       candidateAliases = null;
       candidateNat = null;
       candidateRules = null;
+      candidateInterfaces = null;
       candidateCapabilities = null;
       _connected = true;
       _connecting = false;
@@ -197,9 +206,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _reconnectAfterUnlock = _connected || _connecting;
     _suspendedForLock = true;
     _sessionGeneration++;
-    _firewallAliasService = null;
-    _firewallNatService = null;
-    _firewallRuleService = null;
+    _clearFeatureServices();
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -225,9 +232,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   Future<void> disconnect({bool keepProfile = true}) async {
     _sessionGeneration++;
-    _firewallAliasService = null;
-    _firewallNatService = null;
-    _firewallRuleService = null;
+    _clearFeatureServices();
     _capabilityService?.dispose();
     _capabilityService = null;
     _service?.dispose();
@@ -247,12 +252,17 @@ class PfSenseSessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    _sessionGeneration++;
+  void _clearFeatureServices() {
     _firewallAliasService = null;
     _firewallNatService = null;
     _firewallRuleService = null;
+    _interfaceManagementService = null;
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration++;
+    _clearFeatureServices();
     _capabilityService?.dispose();
     _service?.dispose();
     super.dispose();
