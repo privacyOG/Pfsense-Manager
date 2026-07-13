@@ -28,7 +28,7 @@ class InterfaceManagementService {
   }
 
   Future<List<AvailableInterface>> listAvailableInterfaces() async {
-    final operation = _capabilityService.current?.operation(
+    final operation = _capabilityService.current.operation(
       interfaceAvailablePath,
       'GET',
     );
@@ -93,7 +93,7 @@ class InterfaceManagementService {
   }
 
   Future<bool> hasPendingChanges() async {
-    final operation = _capabilityService.current?.operation(
+    final operation = _capabilityService.current.operation(
       interfaceApplyPath,
       'GET',
     );
@@ -113,7 +113,7 @@ class InterfaceManagementService {
   }
 
   Future<void> apply() async {
-    final operation = _capabilityService.current?.operation(
+    final operation = _capabilityService.current.operation(
       interfaceApplyPath,
       'POST',
     );
@@ -137,7 +137,7 @@ class InterfaceManagementService {
     bool collection = false,
   }) {
     final path = collection ? kind.collectionPath : kind.itemPath;
-    final operation = _capabilityService.current?.operation(path, method);
+    final operation = _capabilityService.current.operation(path, method);
     if (operation == null) {
       throw UnsupportedApiFeatureException(
         '${method.toUpperCase()} ${kind.singularLabel}',
