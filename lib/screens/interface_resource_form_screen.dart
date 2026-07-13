@@ -29,11 +29,9 @@ class InterfaceResourceFormScreen extends StatefulWidget {
 
 class _InterfaceResourceFormScreenState
     extends State<InterfaceResourceFormScreen> {
-  final _formKey = GlobalKey<FormState>();
   late Map<String, dynamic> _values;
   Map<String, String> _errors = const {};
   bool _saving = false;
-  bool _showAdvanced = false;
 
   bool get _editing => widget.resource != null;
 
@@ -54,15 +52,12 @@ class _InterfaceResourceFormScreenState
     final service = session.interfaceManagementService;
     if (!session.connected || service == null) return;
 
-    final capability = service.capabilities.forKind(widget.kind);
-    final operation = _editing ? capability.update : capability.create;
+    final resourceCapability = service.capabilities.forKind(widget.kind);
+    final operation =
+        _editing ? resourceCapability.update : resourceCapability.create;
     if (operation == null || !service.capabilities.canApply) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'This profile cannot save and apply this interface resource.',
-          ),
-        ),
+      _showMessage(
+        'This profile cannot save and apply this interface resource.',
       );
       return;
     }
@@ -75,10 +70,7 @@ class _InterfaceResourceFormScreenState
     );
     if (!validation.isValid) {
       setState(() => _errors = validation.errors);
-      _formKey.currentState?.validate();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(validation.summary)),
-      );
+      _showMessage(validation.summary);
       return;
     }
 
@@ -104,29 +96,17 @@ class _InterfaceResourceFormScreenState
       if (risk == InterfaceChangeRisk.managementPath) {
         await session.disconnect();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'The management interface change was applied. The current session was closed because the firewall address may have changed.',
-            ),
-            duration: Duration(seconds: 8),
-          ),
+        _showMessage(
+          'The management interface change was applied. The current session was closed because the firewall address may have changed.',
+          duration: const Duration(seconds: 8),
         );
       }
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
       if (error.isPermissionError) widget.onPermissionDenied?.call();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
-      }
+      if (mounted) _showMessage(error.toString());
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
-      }
+      if (mounted) _showMessage(error.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -147,7 +127,9 @@ class _InterfaceResourceFormScreenState
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(_editing ? 'Save and apply changes?' : 'Create and apply $name?'),
+        title: Text(
+          _editing ? 'Save and apply changes?' : 'Create and apply $name?',
+        ),
         content: Text(
           risk == InterfaceChangeRisk.connectivity
               ? 'This change affects interface connectivity. Active traffic may be interrupted while pfSense applies the new configuration.'
@@ -170,13 +152,11 @@ class _InterfaceResourceFormScreenState
   Map<String, dynamic> _changedValues(Map<String, dynamic> values) {
     final original = widget.resource?.raw;
     if (original == null) return values;
-    final changes = <String, dynamic>{};
-    for (final entry in values.entries) {
-      if (!_equivalent(original[entry.key], entry.value)) {
-        changes[entry.key] = entry.value;
-      }
-    }
-    return changes;
+    return <String, dynamic>{
+      for (final entry in values.entries)
+        if (!_equivalent(original[entry.key], entry.value))
+          entry.key: entry.value,
+    };
   }
 
   @override
@@ -185,10 +165,6 @@ class _InterfaceResourceFormScreenState
     final service = session.interfaceManagementService;
     final capability = service?.capabilities.forKind(widget.kind);
     final operation = _editing ? capability?.update : capability?.create;
-    final fields = operation?.requestFields.values
-            .where((field) => field.location.toLowerCase() == 'body')
-            .toList(growable: false) ??
-        const <PfRestFieldConstraint>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -198,65 +174,72 @@ class _InterfaceResourceFormScreenState
               : 'Add ${widget.kind.singularLabel}',
         ),
       ),
-      body: operation == null
+      body: service == null || operation == null
           ? const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('This write operation is not available for the selected profile.'),
+                child: Text(
+                  'This write operation is not available for the selected profile.',
+                ),
               ),
             )
-          : Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (!service!.capabilities.canApply)
-                    const Card(
-                      child: ListTile(
-                        leading: Icon(Icons.lock_outline),
-                        title: Text('Apply operation unavailable'),
-                        subtitle: Text(
-                          'Editing is disabled because this installation does not report the interface apply endpoint.',
-                        ),
-                      ),
-                    ),
-                  if (widget.kind.isAssigned)
-                    ..._assignedFields(fields)
-                  else
-                    ..._virtualFields(fields),
-                  const SizedBox(height: 12),
-                  ExpansionTile(
-                    initiallyExpanded: _showAdvanced,
-                    onExpansionChanged: (value) => _showAdvanced = value,
-                    leading: const Icon(Icons.tune),
-                    title: const Text('Additional reported fields'),
-                    subtitle: const Text(
-                      'Fields below are generated from the connected OpenAPI schema.',
-                    ),
-                    children: [
-                      for (final field in _advancedFields(fields))
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                          child: _field(field),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _saving || !service.capabilities.canApply
-                        ? null
-                        : _save,
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(_saving ? 'Applying…' : 'Save and apply'),
-                  ),
-                ],
+          : _buildForm(service, operation),
+    );
+  }
+
+  Widget _buildForm(
+    dynamic service,
+    PfRestOperationCapability operation,
+  ) {
+    final fields = operation.requestFields.values
+        .where((field) => field.location.toLowerCase() == 'body')
+        .toList(growable: false);
+    final canApply = service.capabilities.canApply == true;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (!canApply)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.lock_outline),
+              title: Text('Apply operation unavailable'),
+              subtitle: Text(
+                'Editing is disabled because this installation does not report the interface apply endpoint.',
               ),
             ),
+          ),
+        if (widget.kind.isAssigned)
+          ..._assignedFields(fields)
+        else
+          ..._virtualFields(fields),
+        const SizedBox(height: 12),
+        ExpansionTile(
+          leading: const Icon(Icons.tune),
+          title: const Text('Additional reported fields'),
+          subtitle: const Text(
+            'These controls are generated from the connected OpenAPI schema.',
+          ),
+          children: [
+            for (final field in _advancedFields(fields))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                child: _field(field),
+              ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          onPressed: _saving || !canApply ? null : _save,
+          icon: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined),
+          label: Text(_saving ? 'Applying…' : 'Save and apply'),
+        ),
+      ],
     );
   }
 
@@ -272,49 +255,50 @@ class _InterfaceResourceFormScreenState
       _section('IPv4'),
       if (byName['typev4'] != null) _field(byName['typev4']!),
     ];
-    if (_text(_values['typev4']).toLowerCase() == 'static') {
-      if (byName['ipaddr'] != null) widgets.add(_field(byName['ipaddr']!));
-      if (byName['subnet'] != null) widgets.add(_field(byName['subnet']!));
-      if (byName['gateway'] != null) widgets.add(_field(byName['gateway']!));
-    } else if (_text(_values['typev4']).toLowerCase() == 'dhcp') {
-      if (byName['dhcphostname'] != null) {
-        widgets.add(_field(byName['dhcphostname']!));
-      }
-      if (byName['alias_address'] != null) {
-        widgets.add(_field(byName['alias_address']!));
-      }
-      if (byName['alias_subnet'] != null) {
-        widgets.add(_field(byName['alias_subnet']!));
-      }
+
+    final typev4 = _text(_values['typev4']).toLowerCase();
+    if (typev4 == 'static') {
+      _appendFields(widgets, byName, const ['ipaddr', 'subnet', 'gateway']);
+    } else if (typev4 == 'dhcp') {
+      _appendFields(
+        widgets,
+        byName,
+        const ['dhcphostname', 'alias_address', 'alias_subnet'],
+      );
     }
+
     widgets.add(_section('IPv6'));
     if (byName['typev6'] != null) widgets.add(_field(byName['typev6']!));
     final typev6 = _text(_values['typev6']).toLowerCase();
     if (typev6 == 'static') {
-      if (byName['ipaddrv6'] != null) widgets.add(_field(byName['ipaddrv6']!));
-      if (byName['subnetv6'] != null) widgets.add(_field(byName['subnetv6']!));
-      if (byName['gatewayv6'] != null) widgets.add(_field(byName['gatewayv6']!));
+      _appendFields(
+        widgets,
+        byName,
+        const ['ipaddrv6', 'subnetv6', 'gatewayv6'],
+      );
     } else if (typev6 == 'track6') {
-      if (byName['track6_interface'] != null) {
-        widgets.add(_interfaceField(byName['track6_interface']!));
-      }
-      if (byName['track6_prefix_id_hex'] != null) {
-        widgets.add(_field(byName['track6_prefix_id_hex']!));
-      }
+      final track = byName['track6_interface'];
+      if (track != null) widgets.add(_interfaceField(track));
+      final prefix = byName['track6_prefix_id_hex'];
+      if (prefix != null) widgets.add(_field(prefix));
     }
     return _spaced(widgets);
   }
 
   List<Widget> _virtualFields(List<PfRestFieldConstraint> fields) {
     final preferred = switch (widget.kind) {
-      InterfaceResourceKind.vlan => const ['if', 'parent', 'tag', 'pcp', 'descr'],
+      InterfaceResourceKind.vlan =>
+        const ['if', 'parent', 'tag', 'pcp', 'descr'],
       InterfaceResourceKind.bridge => const ['members', 'descr'],
       InterfaceResourceKind.lagg => const ['members', 'laggproto', 'descr'],
-      InterfaceResourceKind.gre => const [
-          'if', 'parent', 'local', 'remote', 'local_addr', 'remote_addr', 'descr'
-        ],
-      InterfaceResourceKind.gif => const [
-          'if', 'parent', 'local', 'remote', 'local_addr', 'remote_addr', 'descr'
+      InterfaceResourceKind.gre || InterfaceResourceKind.gif => const [
+          'if',
+          'parent',
+          'local',
+          'remote',
+          'local_addr',
+          'remote_addr',
+          'descr',
         ],
       InterfaceResourceKind.assigned => const <String>[],
     };
@@ -332,18 +316,53 @@ class _InterfaceResourceFormScreenState
     return _spaced(widgets);
   }
 
+  void _appendFields(
+    List<Widget> widgets,
+    Map<String, PfRestFieldConstraint> byName,
+    List<String> names,
+  ) {
+    for (final name in names) {
+      final field = byName[name];
+      if (field != null) widgets.add(_field(field));
+    }
+  }
+
   List<PfRestFieldConstraint> _advancedFields(
     List<PfRestFieldConstraint> fields,
   ) {
     const common = {
-      'id', 'if', 'parent', 'enable', 'descr', 'mtu', 'mss',
-      'typev4', 'ipaddr', 'subnet', 'gateway', 'dhcphostname',
-      'alias_address', 'alias_subnet', 'typev6', 'ipaddrv6',
-      'subnetv6', 'gatewayv6', 'track6_interface',
-      'track6_prefix_id_hex', 'tag', 'pcp', 'members', 'laggproto',
-      'local', 'remote', 'local_addr', 'remote_addr',
+      'id',
+      'if',
+      'parent',
+      'enable',
+      'descr',
+      'mtu',
+      'mss',
+      'typev4',
+      'ipaddr',
+      'subnet',
+      'gateway',
+      'dhcphostname',
+      'alias_address',
+      'alias_subnet',
+      'typev6',
+      'ipaddrv6',
+      'subnetv6',
+      'gatewayv6',
+      'track6_interface',
+      'track6_prefix_id_hex',
+      'tag',
+      'pcp',
+      'members',
+      'laggproto',
+      'local',
+      'remote',
+      'local_addr',
+      'remote_addr',
     };
-    return fields.where((field) => !common.contains(field.name)).toList();
+    return fields
+        .where((field) => !common.contains(field.name))
+        .toList(growable: false);
   }
 
   Widget _field(PfRestFieldConstraint field) {
@@ -353,14 +372,9 @@ class _InterfaceResourceFormScreenState
       return SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: Text(_label(name)),
-        subtitle: _errors[name] == null
-            ? null
-            : Text(_errors[name]!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        subtitle: _errorText(name),
         value: _boolean(value),
-        onChanged: (selected) => setState(() {
-          _values[name] = selected;
-          _errors = {..._errors}..remove(name);
-        }),
+        onChanged: (selected) => _setValue(name, selected),
       );
     }
 
@@ -372,7 +386,10 @@ class _InterfaceResourceFormScreenState
         .toList(growable: false);
     if (allowed.isNotEmpty) {
       final current = value?.toString();
-      final choices = <String>{...allowed, if (current != null && current.isNotEmpty) current};
+      final choices = <String>{
+        ...allowed,
+        if (current != null && current.isNotEmpty) current,
+      };
       return DropdownButtonFormField<String>(
         key: ValueKey('interface-field-$name-$current'),
         initialValue: current == null || current.isEmpty ? null : current,
@@ -382,21 +399,20 @@ class _InterfaceResourceFormScreenState
         ),
         items: [
           for (final option in choices)
-            DropdownMenuItem(value: option, child: Text(_displayValue(option))),
+            DropdownMenuItem(
+              value: option,
+              child: Text(_displayValue(option)),
+            ),
         ],
-        onChanged: (selected) => setState(() {
-          _values[name] = selected;
-          _errors = {..._errors}..remove(name);
-        }),
+        onChanged: (selected) => _setValue(name, selected),
       );
     }
 
     final isList = field.type == 'array' || value is List;
     return TextFormField(
-      key: ValueKey('interface-field-$name-${value.hashCode}'),
-      initialValue: isList && value is List
-          ? value.join(', ')
-          : value?.toString() ?? '',
+      key: ValueKey('interface-field-$name-${value?.hashCode ?? 0}'),
+      initialValue:
+          isList && value is List ? value.join(', ') : value?.toString() ?? '',
       obscureText: name.toLowerCase().contains('password'),
       keyboardType: field.type == 'integer' || field.type == 'number'
           ? TextInputType.number
@@ -407,16 +423,18 @@ class _InterfaceResourceFormScreenState
         helperText: isList ? 'Separate values with commas.' : null,
       ),
       onChanged: (text) {
-        setState(() {
-          _values[name] = isList
-              ? text.split(',').map((item) => item.trim()).where((item) => item.isNotEmpty).toList()
-              : field.type == 'integer'
-                  ? int.tryParse(text) ?? text
-                  : field.type == 'number'
-                      ? num.tryParse(text) ?? text
-                      : text;
-          _errors = {..._errors}..remove(name);
-        });
+        final parsed = isList
+            ? text
+                .split(',')
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .toList(growable: false)
+            : field.type == 'integer'
+                ? int.tryParse(text) ?? text
+                : field.type == 'number'
+                    ? num.tryParse(text) ?? text
+                    : text;
+        _setValue(name, parsed);
       },
     );
   }
@@ -426,7 +444,8 @@ class _InterfaceResourceFormScreenState
     final names = <String>{
       if (current.isNotEmpty) current,
       for (final item in widget.availableInterfaces) item.name,
-    }.toList(growable: false)..sort();
+    }.toList(growable: false)
+      ..sort();
     if (names.isEmpty) return _field(field);
     return DropdownButtonFormField<String>(
       key: ValueKey('interface-choice-${field.name}-$current'),
@@ -437,15 +456,25 @@ class _InterfaceResourceFormScreenState
       ),
       items: [
         for (final name in names)
-          DropdownMenuItem(
-            value: name,
-            child: Text(_interfaceLabel(name)),
-          ),
+          DropdownMenuItem(value: name, child: Text(_interfaceLabel(name))),
       ],
-      onChanged: (selected) => setState(() {
-        _values[field.name] = selected;
-        _errors = {..._errors}..remove(field.name);
-      }),
+      onChanged: (selected) => _setValue(field.name, selected),
+    );
+  }
+
+  void _setValue(String name, Object? value) {
+    setState(() {
+      _values[name] = value;
+      _errors = {..._errors}..remove(name);
+    });
+  }
+
+  Widget? _errorText(String name) {
+    final error = _errors[name];
+    if (error == null) return null;
+    return Text(
+      error,
+      style: TextStyle(color: Theme.of(context).colorScheme.error),
     );
   }
 
@@ -475,6 +504,15 @@ class _InterfaceResourceFormScreenState
       }
     }
     return name;
+  }
+
+  void _showMessage(
+    String message, {
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: duration),
+    );
   }
 }
 
@@ -512,8 +550,10 @@ String _displayValue(String value) {
   return value
       .replaceAll('_', ' ')
       .split(' ')
-      .map((word) => word.isEmpty
-          ? word
-          : '${word[0].toUpperCase()}${word.substring(1)}')
+      .map(
+        (word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}',
+      )
       .join(' ');
 }
