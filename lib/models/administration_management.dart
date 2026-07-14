@@ -225,6 +225,20 @@ enum AdministrationActionKind {
     method: 'POST',
     secretResult: true,
   ),
+  revokeCertificate(
+    section: AdministrationSection.certificates,
+    label: 'Revoke certificate',
+    paths: ['/api/v2/system/crl/revoked_certificate'],
+    method: 'POST',
+    highImpact: true,
+  ),
+  removeCertificateRevocation(
+    section: AdministrationSection.certificates,
+    label: 'Remove certificate revocation',
+    paths: ['/api/v2/system/crl/revoked_certificate'],
+    method: 'DELETE',
+    highImpact: true,
+  ),
   availablePackages(
     section: AdministrationSection.system,
     label: 'Available packages',
