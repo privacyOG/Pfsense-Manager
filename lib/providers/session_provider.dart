@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/pfrest_capabilities.dart';
 import '../models/profile.dart';
+import '../services/administration_management_service.dart';
 import '../services/api_client.dart';
 import '../services/connection_check.dart';
 import '../services/dhcp_management_service.dart';
@@ -41,6 +42,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? _selectedProfile;
   PfSenseService? _service;
+  AdministrationManagementService? _administrationService;
   DhcpManagementService? _dhcpManagementService;
   DnsManagementService? _dnsManagementService;
   FirewallAliasService? _firewallAliasService;
@@ -60,6 +62,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? get selectedProfile => _selectedProfile;
   PfSenseService? get service => _service;
+  AdministrationManagementService? get administrationService =>
+      _administrationService;
   DhcpManagementService? get dhcpManagementService => _dhcpManagementService;
   DnsManagementService? get dnsManagementService => _dnsManagementService;
   FirewallAliasService? get firewallAliasService => _firewallAliasService;
@@ -118,6 +122,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     PfSenseApiClient? client;
     PfSenseService? candidate;
+    AdministrationManagementService? candidateAdministration;
     DhcpManagementService? candidateDhcp;
     DnsManagementService? candidateDns;
     FirewallAliasService? candidateAliases;
@@ -157,6 +162,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
         client,
         profileId: connectionProfile.id,
       );
+      candidateAdministration = AdministrationManagementService(
+        client,
+        capabilityService: candidateCapabilities,
+      );
       candidateDhcp = DhcpManagementService(
         client,
         capabilityService: candidateCapabilities,
@@ -187,6 +196,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       }
 
       _service = candidate;
+      _administrationService = candidateAdministration;
       _dhcpManagementService = candidateDhcp;
       _dnsManagementService = candidateDns;
       _firewallAliasService = candidateAliases;
@@ -197,6 +207,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _vpnManagementService = candidateVpn;
       _capabilityService = candidateCapabilities;
       candidate = null;
+      candidateAdministration = null;
       candidateDhcp = null;
       candidateDns = null;
       candidateAliases = null;
@@ -294,6 +305,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   }
 
   void _clearFeatureServices() {
+    _administrationService = null;
     _dhcpManagementService = null;
     _dnsManagementService = null;
     _firewallAliasService = null;
