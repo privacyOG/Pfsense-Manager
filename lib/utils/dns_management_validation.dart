@@ -64,7 +64,8 @@ DnsValidationResult validateResolverSettings({
   _validatePort(values, 'port', errors);
   if (_boolean(values['enablessl'])) {
     if (_text(values['sslcertref']).isEmpty) {
-      errors['sslcertref'] = 'Select a certificate when DNS over TLS is enabled.';
+      errors['sslcertref'] =
+          'Select a certificate when DNS over TLS is enabled.';
     }
     _validatePort(values, 'tlsport', errors);
   }
@@ -89,19 +90,18 @@ DnsValidationResult validateDnsResource({
   final errors = <String, String>{};
   _validateSchema(values, operation, errors);
 
-  switch (kind) {
-    case DnsResourceKind.resolverHostOverride:
-    case DnsResourceKind.forwarderHostOverride:
-      _validateHostOverride(kind, values, context, errors);
-    case DnsResourceKind.resolverDomainOverride:
-      _validateDomainOverride(values, context, errors);
-    case DnsResourceKind.resolverAccessList:
-      _validateAccessList(values, context, errors);
-    case DnsResourceKind.resolverHostAlias:
-    case DnsResourceKind.forwarderHostAlias:
-      _validateAlias(kind, values, context, errors);
-    case DnsResourceKind.resolverAccessListNetwork:
-      _validateNetwork(values, errors);
+  if (kind == DnsResourceKind.resolverHostOverride ||
+      kind == DnsResourceKind.forwarderHostOverride) {
+    _validateHostOverride(kind, values, context, errors);
+  } else if (kind == DnsResourceKind.resolverDomainOverride) {
+    _validateDomainOverride(values, context, errors);
+  } else if (kind == DnsResourceKind.resolverAccessList) {
+    _validateAccessList(values, context, errors);
+  } else if (kind == DnsResourceKind.resolverHostAlias ||
+      kind == DnsResourceKind.forwarderHostAlias) {
+    _validateAlias(kind, values, context, errors);
+  } else {
+    _validateNetwork(values, errors);
   }
 
   return DnsValidationResult(Map.unmodifiable(errors));
@@ -126,9 +126,12 @@ void _validateHostOverride(
   if (ips.isEmpty) {
     errors['ip'] = 'Enter at least one IP address.';
   } else if (ips.any((value) => !_isIp(value))) {
-    errors['ip'] = 'Every override target must be a valid IPv4 or IPv6 address.';
-  } else if (kind == DnsResourceKind.forwarderHostOverride && ips.length > 1) {
-    errors['ip'] = 'The DNS Forwarder accepts one IP address per host override.';
+    errors['ip'] =
+        'Every override target must be a valid IPv4 or IPv6 address.';
+  } else if (kind == DnsResourceKind.forwarderHostOverride &&
+      ips.length > 1) {
+    errors['ip'] =
+        'The DNS Forwarder accepts one IP address per host override.';
   }
 
   for (final resource in context.resources) {
@@ -149,7 +152,8 @@ void _validateHostOverride(
       final aliasHost = _text(alias['host']);
       final aliasDomain = _text(alias['domain']);
       if (!_isHostnamePart(aliasHost) || !_isDomain(aliasDomain)) {
-        errors['aliases'] = 'Every alias must contain a valid host and domain.';
+        errors['aliases'] =
+            'Every alias must contain a valid host and domain.';
         break;
       }
       final key = '$aliasHost.$aliasDomain'.toLowerCase();
@@ -319,7 +323,8 @@ void _validateSchema(
       if (number == null) {
         errors[field.name] = '${_label(field.name)} must be a number.';
       } else if (!field.permitsNumber(number)) {
-        errors[field.name] = '${_label(field.name)} is outside the allowed range.';
+        errors[field.name] =
+            '${_label(field.name)} is outside the allowed range.';
       }
     }
     final text = value is String ? value : null;
