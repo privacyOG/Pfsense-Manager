@@ -6,6 +6,7 @@ import '../models/system_info.dart';
 import '../providers/session_provider.dart';
 import '../widgets/slide_to_confirm.dart';
 import 'administration_screen.dart';
+import 'diagnostics_recovery_screen.dart';
 
 class SystemScreen extends StatefulWidget {
   const SystemScreen({super.key});
@@ -19,6 +20,7 @@ class _SystemScreenState extends State<SystemScreen> {
   Object? _error;
   bool _loading = false;
   bool _rebooting = false;
+  bool _halting = false;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
@@ -97,7 +99,7 @@ class _SystemScreenState extends State<SystemScreen> {
   }
 
   Future<void> _reboot() async {
-    if (_rebooting) return;
+    if (_rebooting || _halting) return;
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
 
@@ -116,22 +118,44 @@ class _SystemScreenState extends State<SystemScreen> {
     try {
       await session.service!.rebootSystem();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Reboot request accepted. The firewall may disconnect while restarting.',
-            ),
-          ),
+        _message(
+          'Reboot request accepted. The firewall may disconnect while restarting.',
         );
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
-      }
+      if (mounted) _message(error.toString());
     } finally {
       if (mounted) setState(() => _rebooting = false);
+    }
+  }
+
+  Future<void> _halt() async {
+    if (_halting || _rebooting) return;
+    final session = context.read<PfSenseSessionProvider>();
+    final diagnostics = session.diagnosticsRecoveryService;
+    if (!session.connected || diagnostics == null) return;
+
+    final profileName = session.selectedProfile?.name ?? 'selected firewall';
+    final confirmed = await showSlideToConfirmSheet(
+      context: context,
+      title: 'Halt firewall?',
+      body:
+          'This will power down $profileName. All network access will stop and the firewall normally requires physical or out-of-band access to start again.',
+      slideLabel: 'Slide to halt system',
+      icon: Icons.power_settings_new,
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _halting = true);
+    try {
+      await diagnostics.haltSystem();
+      if (mounted) {
+        _message('Halt request accepted. The firewall is powering down.');
+      }
+    } catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _halting = false);
     }
   }
 
@@ -140,6 +164,10 @@ class _SystemScreenState extends State<SystemScreen> {
     final strings = AppStrings.of(context);
     final session = context.watch<PfSenseSessionProvider>();
     final info = _info;
+    final diagnostics = session.diagnosticsRecoveryService;
+    final canOpenDiagnostics = diagnostics?.capabilities.canReadAnything == true ||
+        diagnostics?.capabilities.canRunCommands == true;
+    final canHalt = diagnostics?.capabilities.canHalt == true;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -197,21 +225,62 @@ class _SystemScreenState extends State<SystemScreen> {
                   : null,
             ),
           ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: session.connected && !_loading && !_rebooting
-                ? _reboot
-                : null,
-            icon: _rebooting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.power_settings_new),
-            label: Text(
-              _rebooting ? 'Sending reboot request…' : strings.t('reboot'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.build_circle_outlined),
+              title: const Text('Diagnostics & recovery'),
+              subtitle: const Text(
+                'ARP entries, pf tables, configuration history and the separately unlocked command console.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: session.connected && canOpenDiagnostics
+                  ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DiagnosticsRecoveryScreen(),
+                        ),
+                      )
+                  : null,
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: session.connected &&
+                        !_loading &&
+                        !_rebooting &&
+                        !_halting
+                    ? _reboot
+                    : null,
+                icon: _rebooting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.restart_alt),
+                label: Text(
+                  _rebooting ? 'Sending reboot request…' : strings.t('reboot'),
+                ),
+              ),
+              if (canHalt)
+                OutlinedButton.icon(
+                  onPressed: session.connected &&
+                          !_loading &&
+                          !_rebooting &&
+                          !_halting
+                      ? _halt
+                      : null,
+                  icon: _halting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.power_settings_new),
+                  label: Text(_halting ? 'Sending halt request…' : 'Halt'),
+                ),
+            ],
           ),
         ],
       ),
@@ -230,5 +299,9 @@ class _SystemScreenState extends State<SystemScreen> {
   String _formatTime(DateTime value) {
     final local = value.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}:${local.second.toString().padLeft(2, '0')}';
+  }
+
+  void _message(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }

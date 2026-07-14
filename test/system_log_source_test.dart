@@ -16,12 +16,14 @@ void main() {
           '/api/v2/status/logs/openvpn': {'get': <String, dynamic>{}},
           '/api/v2/status/logs/auth': {'get': <String, dynamic>{}},
           '/api/v2/status/logs/dhcp': {'get': <String, dynamic>{}},
+          '/api/v2/status/logs/services': {'get': <String, dynamic>{}},
           '/api/v2/status/logs/system': {'get': <String, dynamic>{}},
         },
       });
 
       expect(sources.map((source) => source.label), [
         'System',
+        'Services',
         'DHCP',
         'Authentication',
         'OpenVPN',
@@ -29,6 +31,7 @@ void main() {
       ]);
       expect(sources.map((source) => source.path), [
         '/api/v2/status/logs/system',
+        '/api/v2/status/logs/services',
         '/api/v2/status/logs/dhcp',
         '/api/v2/status/logs/auth',
         '/api/v2/status/logs/openvpn',
@@ -69,8 +72,14 @@ void main() {
     test('uses returned aliases and preserves the exact schema path', () {
       final sources = systemLogSourcesFromOpenApi({
         'paths': {
+          '/custom/prefix/status/logs/service-manager': {
+            'get': <String, dynamic>{},
+          },
           '/custom/prefix/status/logs/dhcpd/': {'GET': <String, dynamic>{}},
-          '/custom/prefix/status/logs/authentication': {
+          '/custom/prefix/status/logs/system-auth': {
+            'get': <String, dynamic>{},
+          },
+          '/custom/prefix/status/logs/open-vpn': {
             'get': <String, dynamic>{},
           },
           '/custom/prefix/status/logs/rest_api': {
@@ -80,14 +89,22 @@ void main() {
       });
 
       expect(sources.map((source) => source.id), [
+        'services',
         'dhcp',
         'authentication',
+        'openvpn',
         'restapi',
       ]);
-      expect(sources[0].path, '/custom/prefix/status/logs/dhcpd/');
-      expect(sources[0].logType, 'dhcpd');
-      expect(sources[1].path, '/custom/prefix/status/logs/authentication');
-      expect(sources[2].path, '/custom/prefix/status/logs/rest_api');
+      expect(
+        sources[0].path,
+        '/custom/prefix/status/logs/service-manager',
+      );
+      expect(sources[0].logType, 'service-manager');
+      expect(sources[1].path, '/custom/prefix/status/logs/dhcpd/');
+      expect(sources[1].logType, 'dhcpd');
+      expect(sources[2].path, '/custom/prefix/status/logs/system-auth');
+      expect(sources[3].path, '/custom/prefix/status/logs/open-vpn');
+      expect(sources[4].path, '/custom/prefix/status/logs/rest_api');
     });
 
     test('ignores non-GET operations and unrelated log paths', () {
@@ -140,7 +157,10 @@ void main() {
       expect(message, contains('Permission denied for Authentication logs (403)'));
       expect(message, contains('endpoint is supported'));
       expect(message, contains('Read privilege required'));
-      expect(isUnsupportedSystemLogError(const ApiException('Forbidden', 403)), isFalse);
+      expect(
+        isUnsupportedSystemLogError(const ApiException('Forbidden', 403)),
+        isFalse,
+      );
     });
 
     test('distinguishes a stale endpoint from a permission failure', () {
@@ -149,7 +169,10 @@ void main() {
         const ApiException('Not found', 404),
       );
 
-      expect(isUnsupportedSystemLogError(const ApiException('Not found', 404)), isTrue);
+      expect(
+        isUnsupportedSystemLogError(const ApiException('Not found', 404)),
+        isTrue,
+      );
       expect(message, contains('reported by the OpenAPI schema'));
       expect(message, contains('Refresh the log sources'));
     });
