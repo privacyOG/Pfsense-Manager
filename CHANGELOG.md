@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Routing management** — gateways, monitoring addresses and thresholds, default gateways, gateway groups, trigger levels, and static routes can now be managed through capability-reported pfREST endpoints. Gateway status remains linked to configuration, destructive gateway changes check known dependencies, and routing changes are applied only after successful writes.
+
 ### Changed
 
 - Release metadata validation now keeps `pubspec.yaml`, `CHANGELOG.md`, README release guidance, and Android signing instructions consistent in pull-request and signed-release workflows.
