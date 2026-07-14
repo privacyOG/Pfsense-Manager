@@ -91,8 +91,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
     final secretChanges = operation.requestFields.values
         .where((field) =>
             isVpnSecretField(field) &&
-            changes.containsKey(field.name) &&
-            changes[field.name].toString().trim().isNotEmpty)
+            _text(changes[field.name]).isNotEmpty)
         .map((field) => _label(field.name))
         .toList(growable: false);
     final body = StringBuffer(
@@ -103,11 +102,11 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
         '\n\nThe following secret values will be replaced: ${secretChanges.join(', ')}. Existing secret values cannot be viewed or recovered from this form.',
       );
     }
-    if (widget.kind.technology.requiresExplicitApply) {
-      body.write('\n\nThe configuration will be applied after the write succeeds.');
-    } else {
-      body.write('\n\nThe pfREST model applies this change immediately.');
-    }
+    body.write(
+      widget.kind.technology.requiresExplicitApply
+          ? '\n\nThe configuration will be applied after the write succeeds.'
+          : '\n\nThe pfREST model applies this change immediately.',
+    );
 
     final confirmed = await showSlideToConfirmSheet(
       context: context,
@@ -151,8 +150,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
       final field = operation.field(entry.key, location: 'body');
       if (field?.readOnly == true) continue;
       if (field != null && isVpnSecretField(field)) {
-        final text = entry.value?.toString().trim() ?? '';
-        if (text.isNotEmpty) changes[entry.key] = entry.value;
+        if (_text(entry.value).isNotEmpty) changes[entry.key] = entry.value;
         continue;
       }
       if (!_equivalent(original[entry.key], entry.value)) {
@@ -201,19 +199,10 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
             field.location.toLowerCase() == 'body' && !field.readOnly)
         .toList(growable: false);
     _applyDefaults(fields);
-    final coreNames = _coreFields[widget.kind] ?? const <String>[];
-    final coreFields = <PfRestFieldConstraint>[];
-    final additionalFields = <PfRestFieldConstraint>[];
-    for (final field in fields) {
-      if (coreNames.contains(field.name)) {
-        coreFields.add(field);
-      } else {
-        additionalFields.add(field);
-      }
-    }
-    coreFields.sort(
-      (a, b) => coreNames.indexOf(a.name).compareTo(coreNames.indexOf(b.name)),
-    );
+    final relationshipNames = _relationshipFields;
+    final regularFields = fields
+        .where((field) => !relationshipNames.contains(field.name))
+        .toList(growable: false);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -229,51 +218,18 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
               ),
             ),
           ),
-        if (widget.kind.child) ...[
-          _section('Parent resource'),
-          _parentField(operation.field('parent_id', location: 'body')),
+        if (relationshipNames.isNotEmpty) ...[
+          _section('Relationships'),
+          for (final field in fields)
+            if (relationshipNames.contains(field.name))
+              _relationshipField(
+                field: field,
+                parentKind: _parentKindFor(field.name),
+              ),
         ],
-        if (widget.kind == VpnResourceKind.ipsecPhase2 &&
-            fields.any((field) => field.name == 'ikeid')) ...[
-          _section('Parent Phase 1'),
-          _relationshipField(
-            field: fields.firstWhere((field) => field.name == 'ikeid'),
-            parentKind: VpnResourceKind.ipsecPhase1,
-          ),
-        ],
-        if (widget.kind == VpnResourceKind.wireGuardPeer &&
-            fields.any((field) => field.name == 'tun')) ...[
-          _section('Tunnel assignment'),
-          _relationshipField(
-            field: fields.firstWhere((field) => field.name == 'tun'),
-            parentKind: VpnResourceKind.wireGuardTunnel,
-          ),
-        ],
-        _section('Primary settings'),
-        for (final field in coreFields)
-          if (!_isRelationshipField(field.name)) _field(field),
-        if (additionalFields.isNotEmpty)
-          ExpansionTile(
-            initiallyExpanded: coreFields.isEmpty,
-            leading: const Icon(Icons.tune),
-            title: Text(
-              coreFields.isEmpty
-                  ? 'Reported configuration fields'
-                  : 'Additional reported fields',
-            ),
-            subtitle: const Text(
-              'Every control below comes from the connected OpenAPI schema.',
-            ),
-            children: [
-              for (final field in additionalFields)
-                if (!_isRelationshipField(field.name))
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                    child: _field(field),
-                  ),
-            ],
-          ),
-        const SizedBox(height: 24),
+        _section('Reported configuration'),
+        for (final field in regularFields) _field(field),
+        const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: _saving || !canApply ? null : _save,
           icon: _saving
@@ -292,6 +248,23 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
         ),
       ].expand(_withSpacing).toList(growable: false),
     );
+  }
+
+  Set<String> get _relationshipFields {
+    final names = <String>{};
+    if (widget.kind.child) names.add('parent_id');
+    if (widget.kind == VpnResourceKind.ipsecPhase2) names.add('ikeid');
+    if (widget.kind == VpnResourceKind.wireGuardPeer) names.add('tun');
+    return names;
+  }
+
+  VpnResourceKind? _parentKindFor(String fieldName) {
+    return switch (fieldName) {
+      'parent_id' => widget.kind.parentKind,
+      'ikeid' => VpnResourceKind.ipsecPhase1,
+      'tun' => VpnResourceKind.wireGuardTunnel,
+      _ => null,
+    };
   }
 
   void _applyDefaults(List<PfRestFieldConstraint> fields) {
@@ -327,25 +300,20 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
     );
   }
 
-  Widget _parentField(PfRestFieldConstraint? field) {
-    final parentKind = widget.kind.parentKind;
-    if (field == null || parentKind == null) {
-      return const SizedBox.shrink();
-    }
-    return _relationshipField(field: field, parentKind: parentKind);
-  }
-
   Widget _relationshipField({
     required PfRestFieldConstraint field,
-    required VpnResourceKind parentKind,
+    required VpnResourceKind? parentKind,
   }) {
-    final parents = widget.resources
-        .where((resource) => resource.kind == parentKind && resource.id != null)
-        .toList(growable: false);
     final current = _text(_values[field.name]);
+    final parents = parentKind == null
+        ? const <ManagedVpnResource>[]
+        : widget.resources
+            .where((resource) => resource.kind == parentKind)
+            .toList(growable: false);
     final choices = <String, String>{
       for (final parent in parents)
-        parent.id.toString(): parent.displayName,
+        if (vpnRelationshipIdentifier(parent, field.name).isNotEmpty)
+          vpnRelationshipIdentifier(parent, field.name): parent.displayName,
       if (current.isNotEmpty) current: current,
     };
     if (choices.isEmpty) {
@@ -366,6 +334,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
       decoration: InputDecoration(
         labelText: _label(field.name),
         errorText: _errors[field.name],
+        helperText: field.description,
       ),
       items: [
         for (final entry in choices.entries)
@@ -413,9 +382,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
       );
     }
 
-    if (_isNestedObjectField(field.name, value)) {
-      return _jsonField(field);
-    }
+    if (_isNestedObjectField(field.name, value)) return _jsonField(field);
     if (field.type == 'array' || value is List) {
       return TextFormField(
         key: ValueKey('vpn-list-${field.name}-${value.hashCode}'),
@@ -453,7 +420,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
   Widget _secretField(PfRestFieldConstraint field) {
     final revealed = _revealedSecrets.contains(field.name);
     return TextFormField(
-      key: ValueKey('vpn-secret-${field.name}-$revealed'),
+      key: ValueKey('vpn-secret-${field.name}'),
       initialValue: '',
       obscureText: !revealed,
       enableSuggestions: false,
@@ -515,8 +482,7 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
         style: TextStyle(color: Theme.of(context).colorScheme.error),
       );
     }
-    if (field.description == null) return null;
-    return Text(field.description!);
+    return field.description == null ? null : Text(field.description!);
   }
 
   Widget _section(String label) => Text(
@@ -529,17 +495,6 @@ class _VpnResourceFormScreenState extends State<VpnResourceFormScreen> {
   Iterable<Widget> _withSpacing(Widget widget) sync* {
     yield widget;
     if (widget is! SizedBox) yield const SizedBox(height: 12);
-  }
-
-  bool _isRelationshipField(String name) {
-    if (name == 'parent_id' && widget.kind.child) return true;
-    if (name == 'ikeid' && widget.kind == VpnResourceKind.ipsecPhase2) {
-      return true;
-    }
-    if (name == 'tun' && widget.kind == VpnResourceKind.wireGuardPeer) {
-      return true;
-    }
-    return false;
   }
 
   bool _isNestedObjectField(String name, Object? value) {
@@ -566,169 +521,6 @@ const _nestedObjectFields = <String>{
   'encryption',
   'addresses',
   'allowedips',
-};
-
-const _coreFields = <VpnResourceKind, List<String>>{
-  VpnResourceKind.openVpnServer: [
-    'description',
-    'disable',
-    'mode',
-    'authmode',
-    'dev_mode',
-    'protocol',
-    'interface',
-    'local_port',
-    'use_tls',
-    'tls',
-    'tls_type',
-    'tlsauth_keydir',
-    'caref',
-    'certref',
-    'data_ciphers',
-    'data_ciphers_fallback',
-    'digest',
-    'tunnel_network',
-    'tunnel_networkv6',
-    'local_network',
-    'local_networkv6',
-    'remote_network',
-    'remote_networkv6',
-    'custom_options',
-  ],
-  VpnResourceKind.openVpnClient: [
-    'description',
-    'disable',
-    'mode',
-    'dev_mode',
-    'protocol',
-    'interface',
-    'server_addr',
-    'server_port',
-    'local_port',
-    'proxy_addr',
-    'proxy_port',
-    'proxy_authtype',
-    'proxy_user',
-    'proxy_passwd',
-    'auth_user',
-    'auth_pass',
-    'tls',
-    'tls_type',
-    'tlsauth_keydir',
-    'caref',
-    'certref',
-    'data_ciphers',
-    'data_ciphers_fallback',
-    'digest',
-    'custom_options',
-  ],
-  VpnResourceKind.openVpnCso: [
-    'common_name',
-    'description',
-    'disable',
-    'server_list',
-    'tunnel_network',
-    'tunnel_networkv6',
-    'local_network',
-    'local_networkv6',
-    'remote_network',
-    'remote_networkv6',
-    'custom_options',
-  ],
-  VpnResourceKind.openVpnExportConfig: [
-    'server',
-    'description',
-    'useaddr',
-    'usepkcs11',
-    'usetoken',
-    'useproxy',
-    'proxy_type',
-    'proxy_addr',
-    'proxy_port',
-    'proxy_authtype',
-    'proxy_user',
-    'proxy_password',
-  ],
-  VpnResourceKind.ipsecPhase1: [
-    'descr',
-    'disabled',
-    'iketype',
-    'mode',
-    'protocol',
-    'interface',
-    'remote_gateway',
-    'authentication_method',
-    'myid_type',
-    'myid_data',
-    'peerid_type',
-    'peerid_data',
-    'pre_shared_key',
-    'certref',
-    'caref',
-    'lifetime',
-    'rekey_time',
-    'reauth_time',
-    'rand_time',
-    'startaction',
-    'closeaction',
-    'nat_traversal',
-    'mobike',
-    'ikeport',
-    'nattport',
-    'dpd_delay',
-    'dpd_maxfail',
-    'encryption',
-  ],
-  VpnResourceKind.ipsecPhase2: [
-    'ikeid',
-    'descr',
-    'disabled',
-    'mode',
-    'localid_type',
-    'localid_address',
-    'localid_netbits',
-    'remoteid_type',
-    'remoteid_address',
-    'remoteid_netbits',
-    'protocol',
-    'lifetime',
-    'rekey_time',
-    'rand_time',
-    'pinghost',
-    'keepalive',
-    'encryption',
-  ],
-  VpnResourceKind.wireGuardTunnel: [
-    'enabled',
-    'descr',
-    'listenport',
-    'privatekey',
-    'mtu',
-    'addresses',
-  ],
-  VpnResourceKind.wireGuardPeer: [
-    'enabled',
-    'tun',
-    'endpoint',
-    'port',
-    'descr',
-    'persistentkeepalive',
-    'publickey',
-    'presharedkey',
-    'allowedips',
-  ],
-  VpnResourceKind.wireGuardTunnelAddress: [
-    'parent_id',
-    'address',
-    'mask',
-    'descr',
-  ],
-  VpnResourceKind.wireGuardPeerAllowedIp: [
-    'parent_id',
-    'address',
-    'mask',
-    'descr',
-  ],
 };
 
 bool _equivalent(Object? first, Object? second) {
