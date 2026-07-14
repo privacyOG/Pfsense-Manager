@@ -1,0 +1,220 @@
+name: VPN follow-up patch
+
+on:
+  push:
+    branches:
+      - feature/140-vpn-configuration-management
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/140-vpn-configuration-management
+          fetch-depth: 0
+
+      - name: Apply VPN follow-up fixes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          screen_path = Path('lib/screens/vpn_management_screen.dart')
+          screen = screen_path.read_text()
+          replacement = '''  List<String> _dependencies(ManagedVpnResource resource) {
+            final id = resource.id?.toString();
+            if (id == null || id.isEmpty) return const [];
+            if (resource.kind == VpnResourceKind.ipsecPhase1) {
+              final identifiers = <String>{id, _text(resource.raw['ikeid'])}
+                ..removeWhere((value) => value.isEmpty);
+              return [
+                for (final phase2 in
+                    _resources[VpnResourceKind.ipsecPhase2] ?? const [])
+                  if (identifiers.contains(_text(phase2.raw['ikeid'])) ||
+                      (phase2.parentId != null &&
+                          identifiers.contains(phase2.parentId)))
+                    'Phase 2: ${phase2.displayName}',
+              ];
+            }
+            if (resource.kind == VpnResourceKind.wireGuardTunnel) {
+              final identifiers = <String>{id, _text(resource.raw['name'])}
+                ..removeWhere((value) => value.isEmpty);
+              return [
+                for (final address in
+                    _resources[VpnResourceKind.wireGuardTunnelAddress] ?? const [])
+                  if (address.parentId != null &&
+                      identifiers.contains(address.parentId))
+                    'Tunnel address: ${address.displayName}',
+                for (final peer in
+                    _resources[VpnResourceKind.wireGuardPeer] ?? const [])
+                  if (identifiers.contains(_text(peer.raw['tun'])))
+                    'Peer: ${peer.displayName}',
+              ];
+            }
+            if (resource.kind == VpnResourceKind.wireGuardPeer) {
+              final identifiers = <String>{id, _text(resource.raw['name'])}
+                ..removeWhere((value) => value.isEmpty);
+              return [
+                for (final allowedIp in
+                    _resources[VpnResourceKind.wireGuardPeerAllowedIp] ?? const [])
+                  if (allowedIp.parentId != null &&
+                      identifiers.contains(allowedIp.parentId))
+                    'Allowed IP: ${allowedIp.displayName}',
+              ];
+            }
+            if (resource.kind == VpnResourceKind.openVpnServer) {
+              final identifiers = <String>{id, _text(resource.raw['vpnid'])}
+                ..removeWhere((value) => value.isEmpty);
+              return [
+                for (final cso in
+                    _resources[VpnResourceKind.openVpnCso] ?? const [])
+                  if (identifiers.any(
+                    (identifier) =>
+                        _containsIdentifier(cso.raw['server_list'], identifier),
+                  ))
+                    'Client override: ${cso.displayName}',
+                for (final export in
+                    _resources[VpnResourceKind.openVpnExportConfig] ?? const [])
+                  if (identifiers.contains(_text(export.raw['server'])))
+                    'Export default: ${export.displayName}',
+              ];
+            }
+            return const [];
+          }'''
+          screen, count = re.subn(
+              r"  List<String> _dependencies\(ManagedVpnResource resource\) \{.*?\n  \}\n\n  Future<void> _exportOpenVpnClient",
+              replacement + "\n\n  Future<void> _exportOpenVpnClient",
+              screen,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f'Expected one dependency function, replaced {count}')
+          screen_path.write_text(screen)
+
+          validation_path = Path('lib/utils/vpn_management_validation.dart')
+          validation = validation_path.read_text()
+          validation_replacement = '''  if (technology == VpnTechnology.wireGuard &&
+              !_boolean(values['resolve_interval_track'])) {
+            final resolveInterval = _integer(values['resolve_interval']);
+            if (resolveInterval != null && resolveInterval < 1) {
+              errors['resolve_interval'] =
+                  'Resolve interval must be at least 1 second.';
+            }
+          }'''
+          validation, count = re.subn(
+              r"  if \(technology == VpnTechnology\.wireGuard\) \{\n    final keepalive = _integer\(values\['keepalive'\]\);\n    if \(keepalive != null && \(keepalive < 0 \|\| keepalive > 65535\)\) \{\n      errors\['keepalive'\] = 'Keepalive must be between 0 and 65535 seconds\.';\n    \}\n  \}",
+              validation_replacement,
+              validation,
+          )
+          if count != 1:
+              raise SystemExit(f'Expected one WireGuard settings block, replaced {count}')
+          validation_path.write_text(validation)
+
+          model_test_path = Path('test/vpn_management_model_test.dart')
+          model_test = model_test_path.read_text()
+          model_test_insert = '''  test('relationship identifiers use pfREST runtime keys', () {
+            final phase1 = ManagedVpnResource(
+              kind: VpnResourceKind.ipsecPhase1,
+              raw: const {'id': 5, 'ikeid': 20, 'descr': 'Branch IPsec'},
+            );
+            final tunnel = ManagedVpnResource(
+              kind: VpnResourceKind.wireGuardTunnel,
+              raw: const {'id': 4, 'name': 'tun_wg0', 'descr': 'Branch tunnel'},
+            );
+            final server = ManagedVpnResource(
+              kind: VpnResourceKind.openVpnServer,
+              raw: const {'id': 1, 'vpnid': 10, 'description': 'Remote access'},
+            );
+
+            expect(vpnRelationshipIdentifier(phase1, 'ikeid'), '20');
+            expect(vpnRelationshipIdentifier(tunnel, 'tun'), 'tun_wg0');
+            expect(vpnRelationshipIdentifier(server, 'server'), '10');
+            expect(vpnRelationshipIdentifier(server, 'server_list'), '10');
+          });
+
+          '''
+          marker = "  test('technology capabilities preserve apply asymmetry', () {"
+          if model_test.count(marker) != 1:
+              raise SystemExit('Could not find model test insertion marker')
+          model_test = model_test.replace(marker, model_test_insert + marker)
+          model_test_path.write_text(model_test)
+
+          validation_test_path = Path('test/vpn_management_validation_test.dart')
+          validation_test = validation_test_path.read_text()
+          validation_test_insert = '''  test('WireGuard settings validate the active resolve interval', () {
+            final operation = PfRestOperationCapability(
+              path: VpnTechnology.wireGuard.settingsPath!,
+              method: 'PATCH',
+              requestFields: const {
+                'body:resolve_interval_track': PfRestFieldConstraint(
+                  name: 'resolve_interval_track',
+                  location: 'body',
+                  required: false,
+                  type: 'boolean',
+                ),
+                'body:resolve_interval': PfRestFieldConstraint(
+                  name: 'resolve_interval',
+                  location: 'body',
+                  required: false,
+                  type: 'integer',
+                ),
+              },
+              tags: const {'VPN'},
+            );
+
+            final direct = validateVpnSettings(
+              technology: VpnTechnology.wireGuard,
+              values: const {
+                'resolve_interval_track': false,
+                'resolve_interval': 0,
+              },
+              operation: operation,
+            );
+            final tracked = validateVpnSettings(
+              technology: VpnTechnology.wireGuard,
+              values: const {
+                'resolve_interval_track': true,
+                'resolve_interval': 0,
+              },
+              operation: operation,
+            );
+
+            expect(direct.errors['resolve_interval'], contains('at least 1'));
+            expect(tracked.isValid, isTrue);
+          });
+
+          '''
+          marker = "  test('normalisation parses numeric and nested JSON values', () {"
+          if validation_test.count(marker) != 1:
+              raise SystemExit('Could not find validation test insertion marker')
+          validation_test = validation_test.replace(
+              marker,
+              validation_test_insert + marker,
+          )
+          validation_test_path.write_text(validation_test)
+
+          Path('.github/workflows/vpn-followup-fix.yml').unlink()
+          PY
+
+      - name: Commit follow-up fixes
+        shell: bash
+        run: |
+          git config user.name "privacyOG"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/screens/vpn_management_screen.dart \
+            lib/utils/vpn_management_validation.dart \
+            test/vpn_management_model_test.dart \
+            test/vpn_management_validation_test.dart \
+            .github/workflows/vpn-followup-fix.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Harden VPN relationship validation"
+          git push origin HEAD:feature/140-vpn-configuration-management
