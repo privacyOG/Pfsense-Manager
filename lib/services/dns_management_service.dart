@@ -32,7 +32,9 @@ class DnsManagementService {
   ) async {
     final operation = capabilities.settingsUpdate;
     if (operation == null) {
-      throw const UnsupportedApiFeatureException('Update DNS Resolver settings');
+      throw const UnsupportedApiFeatureException(
+        'Update DNS Resolver settings',
+      );
     }
     final payload = settings.writablePayload(operation, changes);
     final response = await _client.patch(operation.path, data: payload);
@@ -42,9 +44,26 @@ class DnsManagementService {
     );
   }
 
-  Future<List<ManagedDnsResource>> list(DnsResourceKind kind) async {
+  Future<List<ManagedDnsResource>> list(
+    DnsResourceKind kind, {
+    Object? parentId,
+  }) async {
     final operation = _require(kind, 'GET', collection: true);
-    final response = await _client.get(operation.path);
+    final parentField = operation.field('parent_id', location: 'query');
+    final query = <String, dynamic>{};
+    if (parentField != null) {
+      final value = parentId?.toString().trim() ?? '';
+      if (value.isEmpty) {
+        throw ArgumentError(
+          'A parent identifier is required to list ${kind.label.toLowerCase()}.',
+        );
+      }
+      query['parent_id'] = value;
+    }
+    final response = await _client.get(
+      operation.path,
+      queryParameters: query.isEmpty ? null : query,
+    );
     return List.unmodifiable(
       _records(response.data)
           .map((record) => ManagedDnsResource.fromJson(kind, record)),
