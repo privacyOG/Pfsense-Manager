@@ -37,7 +37,7 @@ void main() {
 
     expect(client.requests.single.method, 'GET');
     expect(client.requests.single.path, '/api/v2/users');
-    expect(users.single.displayName, 'alice');
+    expect(users.single.displayName, 'Administrator');
     expect(users.single.raw, isNot(contains('password')));
   });
 
