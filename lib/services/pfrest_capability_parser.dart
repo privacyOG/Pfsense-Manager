@@ -192,6 +192,9 @@ PfRestFieldConstraint _fieldConstraint({
     allowedValues:
         enumValues is List ? List<Object?>.unmodifiable(enumValues) : const [],
     defaultValue: source['default'],
+    description: _reportedText(source['description']),
+    readOnly: source['readOnly'] == true,
+    writeOnly: source['writeOnly'] == true,
   );
 }
 
