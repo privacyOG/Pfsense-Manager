@@ -1,7 +1,7 @@
 name: pfsense_manager
 description: A versatile mobile application for managing multiple pfSense instances.
 publish_to: 'none'
-version: 1.8.2+16
+version: 1.9.0+17
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

@@ -30,29 +30,83 @@ The project is still under development. Check the release notes before using it 
 
 ## What it currently supports
 
-- Multiple pfSense profiles
-- System, interface and gateway status
-- Expanded firmware, repository and platform details
+Availability is capability- and permission-aware. A screen or action is shown only when the connected pfREST OpenAPI schema reports the required endpoint and method.
+
+### Monitoring and dashboard
+
+- Multiple saved pfSense profiles
+- System, firmware, platform, repository, interface and gateway status
+- CPU and per-core temperature monitoring
 - Live gateway latency and packet-loss history
-- Saved live/pause and gateway refresh intervals
-- CPU and per-core thermal sensor monitoring
-- Real-time network throughput charts
-- Per-interface byte, packet, error and collision counters
-- Reorderable, persistent Dashboard sections
-- Clickable Dashboard warning details and recommended checks
-- Per-profile warning ignore and 24-hour snooze controls
-- Settings controls for restoring ignored warnings
-- Firewall rule viewing and management
-- Firewall logs
-- Current firewall states
+- Real-time per-interface throughput, byte, packet, error and collision counters
+- Top Talkers ranking for devices on configured local subnets
+- Reorderable Dashboard sections and saved refresh controls
+- Warning details, recommendations, per-profile ignores and 24-hour snoozes
+- Background alerts with deterministic notification identifiers and diagnostics
+
+### Firewall and network management
+
+- Firewall rule viewing and full pfREST rule management
+- Firewall aliases and nested alias entries
+- Port-forward, outbound and 1:1 NAT management when reported
+- Firewall logs and current firewall states
+- Interface configuration
+- Gateways, monitoring thresholds, default gateways and gateway groups
+- Static routes
+- Wake-on-LAN
+
+### DHCP and DNS
+
+- DHCP server settings per interface
+- Primary and additional DHCP pools
+- Static mappings and lease-to-static conversion
+- DHCP relay and backend selection
 - DHCP lease viewing
-- Starting, stopping and restarting services
-- OpenVPN status
-- Restarting OpenVPN
-- Rebooting pfSense
-- Local app lock
-- Encrypted storage for profile credentials
-- Light and dark themes
+- DNS Resolver settings, forwarding and DNSSEC
+- Host and domain overrides, aliases, access lists and child networks
+- Supported DNS Forwarder host overrides
+
+### VPN
+
+- OpenVPN status and exact per-instance start, stop and restart controls
+- OpenVPN server, client and client-specific override management
+- OpenVPN client export defaults and one-time client export results
+- IPsec Phase 1 and Phase 2 management
+- WireGuard settings, tunnels, peers, tunnel addresses and peer allowed IPs
+- Capability-reported apply workflows and relationship-aware deletion checks
+
+### Administration
+
+- Certificate authorities, certificates and certificate revocation lists
+- Certificate generation, renewal, signing, PKCS#12 export and revocation actions when reported
+- Local users, groups and authentication servers
+- REST API keys, access lists and REST API settings
+- System tunables and packages
+- Available-package inspection and pfSense update actions
+- Capability-reported NTP, SSH, SNMP and remote-logging settings
+
+### Diagnostics and recovery
+
+- Ping, traceroute and DNS lookup when reported
+- ARP table viewing, entry deletion and full-table clearing
+- pf table listing, content inspection and entry flushing
+- Configuration-history revision viewing and backup deletion
+- Configuration rollback only when a compatible restore endpoint is explicitly reported
+- Reboot and capability-gated system halt
+- OpenAPI-discovered System, Services, DHCP, Authentication, OpenVPN and REST API logs
+- Separately unlocked command console with strong warnings and output redaction
+
+### App security and usability
+
+- JWT password and API-key profile authentication modes
+- Encrypted credential storage
+- Local PIN or device-authentication app lock
+- HTTPS-only connections with optional per-profile self-signed-certificate allowance
+- Capability-aware read-only operation for restricted pfREST profiles
+- Secret replacement-only forms and one-time generated-secret display
+- Explicit slide confirmation for destructive or connectivity-impacting actions
+- Light, dark, AMOLED and Material You theming
+- Spotlight search, home-screen widgets and network asset copy actions
 
 ## pfSense requirements
 
@@ -61,7 +115,7 @@ The app uses the pfSense REST API v2 endpoints. The normal pfSense web interface
 Before adding a firewall to the app:
 
 1. Install and enable the pfSense REST API package.
-2. Create an API key with only the permissions you need.
+2. Create an API key or local API account with only the permissions you need.
 3. Make sure the API is available over HTTPS.
 4. Confirm that the phone can reach the pfSense address, either locally or through a VPN.
 
