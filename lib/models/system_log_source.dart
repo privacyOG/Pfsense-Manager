@@ -49,6 +49,12 @@ const _systemLogDefinitions = <_SystemLogDefinition>[
     icon: Icons.dns_outlined,
   ),
   _SystemLogDefinition(
+    id: 'services',
+    label: 'Services',
+    slugs: {'services', 'service', 'service_manager', 'service-manager'},
+    icon: Icons.miscellaneous_services_outlined,
+  ),
+  _SystemLogDefinition(
     id: 'dhcp',
     label: 'DHCP',
     slugs: {'dhcp', 'dhcpd'},
@@ -57,13 +63,13 @@ const _systemLogDefinitions = <_SystemLogDefinition>[
   _SystemLogDefinition(
     id: 'authentication',
     label: 'Authentication',
-    slugs: {'auth', 'authentication'},
+    slugs: {'auth', 'authentication', 'system_auth', 'system-auth'},
     icon: Icons.verified_user_outlined,
   ),
   _SystemLogDefinition(
     id: 'openvpn',
     label: 'OpenVPN',
-    slugs: {'openvpn'},
+    slugs: {'openvpn', 'open_vpn', 'open-vpn'},
     icon: Icons.vpn_lock_outlined,
   ),
   _SystemLogDefinition(
