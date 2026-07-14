@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/dashboard.dart';
 import '../providers/session_provider.dart';
 import '../widgets/gateway_history_panel.dart';
+import 'routing_management_screen.dart';
 
 class GatewayHistoryScreen extends StatefulWidget {
   const GatewayHistoryScreen({super.key});
@@ -161,7 +162,10 @@ class _GatewayHistoryScreenState extends State<GatewayHistoryScreen>
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
-    final identity = '${session.sessionGeneration}:${session.selectedProfile?.id ?? ''}';
+    final identity =
+        '${session.sessionGeneration}:${session.selectedProfile?.id ?? ''}';
+    final canManageRouting =
+        session.routingManagementService?.capabilities.canReadAnything == true;
 
     return RefreshIndicator(
       onRefresh: () => _refresh(showSpinner: true),
@@ -177,6 +181,20 @@ class _GatewayHistoryScreenState extends State<GatewayHistoryScreen>
                   'Gateway monitoring',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
+              ),
+              IconButton(
+                tooltip: 'Manage routing',
+                onPressed: !canManageRouting
+                    ? null
+                    : () async {
+                        await Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) => const RoutingManagementScreen(),
+                          ),
+                        );
+                        if (mounted) await _refresh(showSpinner: true);
+                      },
+                icon: const Icon(Icons.alt_route_outlined),
               ),
               IconButton(
                 tooltip: 'Refresh',
