@@ -2,6 +2,7 @@ import '../models/administration_management.dart';
 import '../models/pfrest_capabilities.dart';
 import '../models/profile.dart';
 import '../utils/api_feature_support.dart';
+import 'administration_basic_auth_transport.dart';
 import 'api_client.dart';
 import 'pfrest_capability_service.dart';
 
@@ -9,10 +10,14 @@ class AdministrationManagementService {
   AdministrationManagementService(
     this._client, {
     required PfRestCapabilityService capabilityService,
-  }) : _capabilityService = capabilityService;
+    AdministrationBasicAuthTransport? basicAuthTransport,
+  })  : _capabilityService = capabilityService,
+        _basicAuthTransport =
+            basicAuthTransport ?? PfSenseBasicAuthTransport(_client.profile);
 
   final PfSenseApiClient _client;
   final PfRestCapabilityService _capabilityService;
+  final AdministrationBasicAuthTransport _basicAuthTransport;
 
   bool get canUseBasicAuthMutations =>
       _client.profile.authMode == PfSenseAuthMode.jwtPassword &&
@@ -64,7 +69,7 @@ class AdministrationManagementService {
       id: values['id'],
     );
     final response = kind.basicAuthMutations
-        ? await _client.postWithBasicAuth(operation.path, data: payload)
+        ? await _basicAuthTransport.post(operation.path, data: payload)
         : await _client.post(operation.path, data: payload);
     return AdministrationOperationResult.fromResponse(
       response.data,
@@ -104,7 +109,7 @@ class AdministrationManagementService {
       );
     }
     if (resource.kind.basicAuthMutations) {
-      await _client.deleteWithBasicAuth(
+      await _basicAuthTransport.delete(
         operation.path,
         queryParameters: query,
       );
