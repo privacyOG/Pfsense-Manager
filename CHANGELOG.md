@@ -8,12 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **VPN configuration management** — capability-reported OpenVPN servers, clients, client-specific overrides and export defaults; IPsec Phase 1 and Phase 2 entries; and WireGuard settings, tunnels, peers, addresses and allowed IPs can now be managed from the VPN status screen. OpenVPN instance start, stop and restart controls remain tied to exact service instances, IPsec and WireGuard use their reported pending/apply workflows, and one-time OpenVPN client exports are not retained by the app.
 - **DNS services management** — DNS Resolver settings, forwarding and DNSSEC controls, host and domain overrides, access lists, aliases, child networks, and DNS Forwarder host overrides can now be managed through capability-reported pfREST endpoints. The Services tab identifies active Resolver and Forwarder processes, unreported Forwarder settings remain unavailable instead of using assumed paths, and custom Resolver configuration requires an elevated warning before apply.
 - **DHCP management** — per-interface DHCP server settings, primary and additional address pools, static mappings, relay configuration, backend selection, and lease-to-static-mapping conversion are now capability-gated through pfREST. Local validation checks interface addressing, subnet boundaries, lease ordering, duplicate clients, and pool or mapping conflicts before submission.
 - **Routing management** — gateways, monitoring addresses and thresholds, default gateways, gateway groups, trigger levels, and static routes can now be managed through capability-reported pfREST endpoints. Gateway status remains linked to configuration, destructive gateway changes check known dependencies, and routing changes are applied only after successful writes.
 
 ### Changed
 
+- OpenAPI capability discovery now records field descriptions and read-only or write-only visibility metadata so schema-driven editors can suppress generated values and protect credentials.
 - Release metadata validation now keeps `pubspec.yaml`, `CHANGELOG.md`, README release guidance, and Android signing instructions consistent in pull-request and signed-release workflows.
 
 ## [1.8.2] - 2026-06-29
