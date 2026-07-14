@@ -7,6 +7,7 @@ import '../models/system_service.dart';
 import '../models/wireguard_tunnel.dart';
 import '../providers/session_provider.dart';
 import '../widgets/slide_to_confirm.dart';
+import 'vpn_management_screen.dart';
 
 class VpnScreen extends StatefulWidget {
   const VpnScreen({super.key});
@@ -109,7 +110,8 @@ class _VpnScreenState extends State<VpnScreen> {
         _openVpn = (results[0] as List<Map<String, dynamic>>)
             .map(OpenVpnServerStatus.fromJson)
             .toList();
-        _openVpnServices = services.where((service) => service.isOpenVpn).toList();
+        _openVpnServices =
+            services.where((service) => service.isOpenVpn).toList();
         _tailscale = tailscale;
         _wireGuard = results[2] as List<WireGuardTunnel>;
         _lastSuccessfulRefresh = DateTime.now();
@@ -123,6 +125,13 @@ class _VpnScreenState extends State<VpnScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _openManagement() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const VpnManagementScreen()),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _restart({
@@ -140,20 +149,82 @@ class _VpnScreenState extends State<VpnScreen> {
       icon: Icons.refresh,
     );
     if (confirmed != true || !mounted) return;
+    await _runServiceAction(
+      actionKey: actionKey,
+      title: title,
+      actionLabel: 'restart',
+      action: action,
+    );
+  }
+
+  Future<void> _controlOpenVpnService(
+    SystemService service,
+    String action,
+  ) async {
+    if (_busyAction != null) return;
+    final session = context.read<PfSenseSessionProvider>();
+    if (!session.connected || session.service == null) return;
+
+    final bool confirmed;
+    if (action == 'stop') {
+      confirmed =
+          await showSlideToConfirmSheet(
+            context: context,
+            title: 'Stop ${service.instanceLabel}?',
+            body:
+                'Stopping this exact OpenVPN instance disconnects its active clients and leaves the configuration unchanged.',
+            slideLabel: 'Slide to stop instance',
+            icon: Icons.stop_circle_outlined,
+          ) ==
+          true;
+    } else {
+      confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text('Start ${service.instanceLabel}?'),
+              content: const Text(
+                'Start this exact OpenVPN service instance using its current configuration?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Start'),
+                ),
+              ],
+            ),
+          ) ==
+          true;
+    }
+    if (!confirmed || !mounted) return;
+
+    await _runServiceAction(
+      actionKey: service.instanceKey,
+      title: service.instanceLabel,
+      actionLabel: action,
+      action: () => action == 'start'
+          ? session.service!.startServiceInstance(service)
+          : session.service!.stopServiceInstance(service),
+    );
+  }
+
+  Future<void> _runServiceAction({
+    required String actionKey,
+    required String title,
+    required String actionLabel,
+    required Future<void> Function() action,
+  }) async {
     setState(() => _busyAction = actionKey);
     try {
       await action();
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppStrings.of(context).f(
-                'restartCompleted',
-                {'service': title},
-              ),
-            ),
-          ),
+          SnackBar(content: Text('$title $actionLabel request completed.')),
         );
       }
     } catch (error) {
@@ -172,11 +243,18 @@ class _VpnScreenState extends State<VpnScreen> {
     PfSenseSessionProvider session,
   ) {
     final service = matchOpenVpnService(server, _openVpnServices);
+    final unavailable = service == null || !session.connected || _loading;
     return _OpenVpnServerCard(
       server: server,
       service: service,
       busy: service != null && _busyAction == service.instanceKey,
-      onRestart: service == null || !session.connected || _loading
+      onStart: unavailable || service.running
+          ? null
+          : () => _controlOpenVpnService(service, 'start'),
+      onStop: unavailable || !service.running
+          ? null
+          : () => _controlOpenVpnService(service, 'stop'),
+      onRestart: unavailable
           ? null
           : () => _restart(
                 actionKey: service.instanceKey,
@@ -190,6 +268,8 @@ class _VpnScreenState extends State<VpnScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final session = context.watch<PfSenseSessionProvider>();
+    final canManageVpn =
+        session.vpnManagementService?.capabilities.canReadAnything == true;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -221,6 +301,23 @@ class _VpnScreenState extends State<VpnScreen> {
                 title: Text(_error.toString()),
               ),
             ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.settings_input_component_outlined),
+              title: const Text('VPN configuration'),
+              subtitle: const Text(
+                'Manage capability-reported OpenVPN, IPsec and WireGuard configuration separately from live status.',
+              ),
+              trailing: IconButton(
+                key: const Key('open-vpn-management'),
+                tooltip: 'Configure VPN',
+                onPressed: canManageVpn && _busyAction == null
+                    ? _openManagement
+                    : null,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ),
+          ),
 
           // ── OpenVPN ──────────────────────────────────────────────────────
           Card(
@@ -320,12 +417,16 @@ class _OpenVpnServerCard extends StatelessWidget {
     required this.server,
     required this.service,
     required this.busy,
+    required this.onStart,
+    required this.onStop,
     required this.onRestart,
   });
 
   final OpenVpnServerStatus server;
   final SystemService? service;
   final bool busy;
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
   final VoidCallback? onRestart;
 
   @override
@@ -359,6 +460,26 @@ class _OpenVpnServerCard extends StatelessWidget {
                 icon: const Icon(Icons.restart_alt),
               ),
         children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: onStart,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start'),
+              ),
+              TextButton.icon(
+                onPressed: onStop,
+                icon: const Icon(Icons.stop),
+                label: const Text('Stop'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: onRestart,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Restart'),
+              ),
+            ],
+          ),
           if (server.connections.isEmpty)
             ListTile(
               dense: true,
@@ -424,8 +545,7 @@ class _WireGuardTunnelCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          for (final peer in tunnel.peers)
-            _PeerTile(peer: peer),
+          for (final peer in tunnel.peers) _PeerTile(peer: peer),
         ],
       ),
     );
@@ -440,9 +560,8 @@ class _PeerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final handshake = peer.lastHandshake;
-    final handshakeAge = handshake != null
-        ? DateTime.now().difference(handshake)
-        : null;
+    final handshakeAge =
+        handshake != null ? DateTime.now().difference(handshake) : null;
     final recentHandshake =
         handshakeAge != null && handshakeAge.inMinutes < 3;
     final handshakeColor = handshake == null
