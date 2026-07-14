@@ -36,7 +36,9 @@ class DnsManagementService {
         'Update DNS Resolver settings',
       );
     }
-    final payload = settings.writablePayload(operation, changes);
+    final payload = _configurationPayload(
+      settings.writablePayload(operation, changes),
+    );
     final response = await _client.patch(operation.path, data: payload);
     final records = _records(response.data);
     return DnsResolverSettings(
@@ -76,14 +78,14 @@ class DnsManagementService {
   ) async {
     final operation = _require(kind, 'POST');
     final draft = ManagedDnsResource(kind: kind, raw: values);
-    final response = await _client.post(
-      operation.path,
-      data: draft.writablePayload(
+    final payload = _configurationPayload(
+      draft.writablePayload(
         operation,
         changes: values,
         includeIdentifiers: true,
       ),
     );
+    final response = await _client.post(operation.path, data: payload);
     return _resourceFromResponse(kind, response.data, fallback: draft);
   }
 
@@ -92,14 +94,14 @@ class DnsManagementService {
     Map<String, dynamic> changes,
   ) async {
     final operation = _require(resource.kind, 'PATCH');
-    final response = await _client.patch(
-      operation.path,
-      data: resource.writablePayload(
+    final payload = _configurationPayload(
+      resource.writablePayload(
         operation,
         changes: changes,
         includeIdentifiers: true,
       ),
     );
+    final response = await _client.patch(operation.path, data: payload);
     return _resourceFromResponse(
       resource.kind,
       response.data,
@@ -169,6 +171,12 @@ class DnsManagementService {
       );
     }
     return operation;
+  }
+
+  Map<String, dynamic> _configurationPayload(Map<String, dynamic> payload) {
+    final result = Map<String, dynamic>.from(payload);
+    result.remove('runtime_status');
+    return result;
   }
 
   List<Map<String, dynamic>> _records(dynamic responseData) {
