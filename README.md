@@ -26,11 +26,9 @@ pfSense Manager is an Android app for monitoring and managing pfSense firewalls 
 
 It is written in Flutter and connects to the pfSense REST API. Multiple firewall profiles can be saved, which is useful when looking after more than one pfSense installation.
 
-**Current release:** `1.9.0`
-
 The project is still under development. Check the release notes before using it against an important or production firewall.
 
-## What version 1.9.0 supports
+## What it currently supports
 
 Availability is capability- and permission-aware. A screen or action is shown only when the connected pfREST OpenAPI schema reports the required endpoint and method.
 
@@ -175,12 +173,6 @@ ANDROID_KEY_ALIAS
 ```
 
 Pushing the tag matching the application version, in the form `v<major>.<minor>.<patch>`, builds the signed APK and attaches it, together with its SHA-256 checksum, to a GitHub release.
-
-For this release, the matching tag is:
-
-```text
-v1.9.0
-```
 
 ## Security notes
 
