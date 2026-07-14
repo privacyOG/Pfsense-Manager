@@ -37,6 +37,25 @@ void main() {
     expect(capabilities.canRollback, isFalse);
   });
 
+  test('pf table browsing requires the collection endpoint', () {
+    const path = '/api/v2/diagnostics/table';
+    final capabilities = DiagnosticsRecoveryCapabilities.from(
+      PfRestCapabilities(
+        profileId: 'test',
+        status: PfRestCapabilityStatus.available,
+        operations: {
+          PfRestCapabilities.operationKey(path, 'GET'):
+              _operation(path, 'GET'),
+        },
+        packageTags: const {},
+        loadedAt: DateTime(2026, 7, 14),
+      ),
+    );
+
+    expect(capabilities.tableRead, isNotNull);
+    expect(capabilities.canReadTables, isFalse);
+  });
+
   test('rollback is exposed only when a restore alias is reported', () {
     const path = '/api/v2/diagnostics/config_history/revision/restore';
     final capabilities = DiagnosticsRecoveryCapabilities.from(
@@ -75,6 +94,8 @@ void main() {
       'description': 'Before routing change',
       'version': '2.8.0',
       'filesize': 4096,
+      'config': '<pfsense><password>hidden</password></pfsense>',
+      'file_contents': 'hidden-backup',
     });
 
     expect(arp.id, 4);
@@ -86,6 +107,8 @@ void main() {
     expect(revision.id, 8);
     expect(revision.description, 'Before routing change');
     expect(revision.timestamp, isNotNull);
+    expect(revision.raw, isNot(contains('config')));
+    expect(revision.raw, isNot(contains('file_contents')));
   });
 
   test('command output redacts saved and discovered credential material', () {
