@@ -138,16 +138,17 @@ class DiagnosticsRecoveryService {
         'Configuration rollback requires a body-based restore operation.',
       );
     }
-    switch (operation.method) {
-      case 'POST':
-        await _client.post(operation.path, data: body.isEmpty ? null : body);
-      case 'PATCH':
-        await _client.patch(operation.path, data: body.isEmpty ? null : body);
-      default:
-        throw UnsupportedApiFeatureException(
-          '${operation.method} configuration rollback',
-        );
+    if (operation.method == 'POST') {
+      await _client.post(operation.path, data: body.isEmpty ? null : body);
+      return;
     }
+    if (operation.method == 'PATCH') {
+      await _client.patch(operation.path, data: body.isEmpty ? null : body);
+      return;
+    }
+    throw UnsupportedApiFeatureException(
+      '${operation.method} configuration rollback',
+    );
   }
 
   Future<void> haltSystem() async {
