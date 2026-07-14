@@ -76,7 +76,7 @@ void main() {
 
     expect(client.requests.single.method, 'DELETE_BASIC');
     expect(client.requests.single.path, '/api/v2/auth/key');
-    expect(client.requests.single.queryParameters, {'id': '9'});
+    expect(client.requests.single.queryParameters, {'id': 9});
   });
 
   test('system update action dispatches to the exact POST endpoint', () async {
