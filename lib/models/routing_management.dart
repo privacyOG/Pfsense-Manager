@@ -141,8 +141,8 @@ class ManagedRoutingResource {
     final value = raw['priorities'];
     if (value is! List) return const [];
     return List.unmodifiable(
-      value.whereType<Map>().map(
-            (item) => item.map(
+      value.whereType<Map>().map<Map<String, dynamic>>(
+            (item) => item.map<String, dynamic>(
               (key, entry) => MapEntry(key.toString(), _copyValue(entry)),
             ),
           ),
@@ -257,11 +257,11 @@ class RoutingDefaults {
 
 class GatewayDependencyReport {
   GatewayDependencyReport({
-    this.gatewayGroups = const [],
-    this.staticRoutes = const [],
-    this.firewallRules = const [],
-    this.defaultAssignments = const [],
-    this.uncheckedSources = const {},
+    List<String> gatewayGroups = const [],
+    List<String> staticRoutes = const [],
+    List<String> firewallRules = const [],
+    List<String> defaultAssignments = const [],
+    Set<String> uncheckedSources = const {},
   })  : gatewayGroups = List.unmodifiable(gatewayGroups),
         staticRoutes = List.unmodifiable(staticRoutes),
         firewallRules = List.unmodifiable(firewallRules),
