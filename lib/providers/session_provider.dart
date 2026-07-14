@@ -13,6 +13,7 @@ import '../services/interface_management_service.dart';
 import '../services/pfrest_capability_service.dart';
 import '../services/pfsense_service.dart';
 import '../services/routing_management_service.dart';
+import '../services/vpn_management_service.dart';
 import 'profile_provider.dart';
 
 typedef ConnectionProfileResolver = Future<PfSenseProfile> Function(
@@ -47,6 +48,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   FirewallRuleService? _firewallRuleService;
   InterfaceManagementService? _interfaceManagementService;
   RoutingManagementService? _routingManagementService;
+  VpnManagementService? _vpnManagementService;
   PfRestCapabilityService? _capabilityService;
   bool _connected = false;
   bool _connecting = false;
@@ -67,6 +69,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _interfaceManagementService;
   RoutingManagementService? get routingManagementService =>
       _routingManagementService;
+  VpnManagementService? get vpnManagementService => _vpnManagementService;
   PfRestCapabilityService? get capabilityService => _capabilityService;
   PfRestCapabilities? get capabilities => _capabilityService?.current;
   bool get connected => _connected;
@@ -122,6 +125,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     FirewallRuleService? candidateRules;
     InterfaceManagementService? candidateInterfaces;
     RoutingManagementService? candidateRouting;
+    VpnManagementService? candidateVpn;
     PfRestCapabilityService? candidateCapabilities;
     try {
       final connectionProfile = await _profileResolver(profile);
@@ -169,6 +173,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
         client,
         capabilityService: candidateCapabilities,
       );
+      candidateVpn = VpnManagementService(
+        client,
+        capabilityService: candidateCapabilities,
+      );
       client = null;
       await candidateCapabilities.refresh();
 
@@ -186,6 +194,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _firewallRuleService = candidateRules;
       _interfaceManagementService = candidateInterfaces;
       _routingManagementService = candidateRouting;
+      _vpnManagementService = candidateVpn;
       _capabilityService = candidateCapabilities;
       candidate = null;
       candidateDhcp = null;
@@ -195,6 +204,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       candidateRules = null;
       candidateInterfaces = null;
       candidateRouting = null;
+      candidateVpn = null;
       candidateCapabilities = null;
       _connected = true;
       _connecting = false;
@@ -291,6 +301,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _firewallRuleService = null;
     _interfaceManagementService = null;
     _routingManagementService = null;
+    _vpnManagementService = null;
   }
 
   @override
