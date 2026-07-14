@@ -8,10 +8,10 @@ import 'package:pfsense_manager/services/pfrest_capability_service.dart';
 
 void main() {
   test('certificate revocation uses the exact reported CRL endpoint', () async {
-    final client = _CrlApiClient();
+    final client = _AdministrationActionApiClient();
     final capabilityService = PfRestCapabilityService(
       client,
-      profileId: 'administration-crl-test',
+      profileId: 'administration-action-test',
     );
     final service = AdministrationManagementService(
       client,
@@ -47,14 +47,43 @@ void main() {
       },
     );
   });
+
+  test('generated private keys are exposed once and excluded from safe data',
+      () async {
+    final client = _AdministrationActionApiClient();
+    final capabilityService = PfRestCapabilityService(
+      client,
+      profileId: 'administration-certificate-test',
+    );
+    final service = AdministrationManagementService(
+      client,
+      capabilityService: capabilityService,
+    );
+    addTearDown(() {
+      capabilityService.dispose();
+      client.dispose();
+    });
+    await capabilityService.refresh();
+    client.requests.clear();
+
+    final result = await service.runAction(
+      AdministrationActionKind.generateCertificate,
+      const {'descr': 'Generated certificate'},
+    );
+
+    expect(client.requests.single.path, '/api/v2/system/certificate/generate');
+    expect(result.ephemeralSecret, 'private-key-material');
+    expect(result.safeData, isNot(contains('prv')));
+    expect(result.safeData['crt'], 'certificate-material');
+  });
 }
 
-class _CrlApiClient extends PfSenseApiClient {
-  _CrlApiClient()
+class _AdministrationActionApiClient extends PfSenseApiClient {
+  _AdministrationActionApiClient()
       : super(
           PfSenseProfile(
-            id: 'administration-crl-test',
-            name: 'Administration CRL test',
+            id: 'administration-action-test',
+            name: 'Administration action test',
             host: 'firewall.example.test',
             username: 'admin',
             authMode: PfSenseAuthMode.apiKey,
@@ -76,24 +105,22 @@ class _CrlApiClient extends PfSenseApiClient {
           'openapi': '3.0.3',
           'paths': {
             '/api/v2/system/crl/revoked_certificate': {
-              'post': {
-                'tags': ['SYSTEM'],
-                'requestBody': {
-                  'content': {
-                    'application/json': {
-                      'schema': {
-                        'type': 'object',
-                        'required': ['parent_id', 'certref'],
-                        'properties': {
-                          'parent_id': {'type': 'integer'},
-                          'certref': {'type': 'string'},
-                          'reason': {'type': 'integer'},
-                        },
-                      },
-                    },
-                  },
+              'post': _operation(
+                required: const ['parent_id', 'certref'],
+                properties: const {
+                  'parent_id': {'type': 'integer'},
+                  'certref': {'type': 'string'},
+                  'reason': {'type': 'integer'},
                 },
-              },
+              ),
+            },
+            '/api/v2/system/certificate/generate': {
+              'post': _operation(
+                required: const ['descr'],
+                properties: const {
+                  'descr': {'type': 'string'},
+                },
+              ),
             },
           },
         },
@@ -105,8 +132,37 @@ class _CrlApiClient extends PfSenseApiClient {
   @override
   Future<Response<dynamic>> post(String path, {dynamic data}) async {
     requests.add(_Request('POST', path, data: data));
+    if (path == '/api/v2/system/certificate/generate') {
+      return _response(path, {
+        'data': {
+          'descr': data['descr'],
+          'crt': 'certificate-material',
+          'prv': 'private-key-material',
+        },
+      });
+    }
     return _response(path, {'data': data});
   }
+}
+
+Map<String, dynamic> _operation({
+  required List<String> required,
+  required Map<String, dynamic> properties,
+}) {
+  return {
+    'tags': ['SYSTEM'],
+    'requestBody': {
+      'content': {
+        'application/json': {
+          'schema': {
+            'type': 'object',
+            'required': required,
+            'properties': properties,
+          },
+        },
+      },
+    },
+  };
 }
 
 class _Request {
