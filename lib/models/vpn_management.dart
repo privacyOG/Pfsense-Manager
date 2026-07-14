@@ -272,9 +272,7 @@ class ManagedVpnResource {
   }
 
   String get parentId => _text(raw['parent_id']);
-  String get description => _text(
-        raw['description'] ?? raw['descr'],
-      );
+  String get description => _text(raw['description'] ?? raw['descr']);
   bool get disabled => _boolean(raw['disable'] ?? raw['disabled']) ||
       (raw.containsKey('enabled') && !_boolean(raw['enabled']));
 
@@ -414,15 +412,17 @@ Map<String, dynamic> buildVpnWritePayload({
     }
   }
 
+  final idField = operation.field('id', location: 'body');
   if (id != null &&
-      operation.field('id', location: 'body') case final idField? &&
+      idField != null &&
       !idField.readOnly &&
       !payload.containsKey('id')) {
     payload['id'] = _copyValue(id);
   }
+  final parentField = operation.field('parent_id', location: 'body');
   if (parentId != null &&
       parentId.toString().trim().isNotEmpty &&
-      operation.field('parent_id', location: 'body') case final parentField? &&
+      parentField != null &&
       !parentField.readOnly &&
       !payload.containsKey('parent_id')) {
     payload['parent_id'] = _copyValue(parentId);
@@ -432,6 +432,19 @@ Map<String, dynamic> buildVpnWritePayload({
     payload.remove(name);
   }
   return payload;
+}
+
+String vpnRelationshipIdentifier(
+  ManagedVpnResource resource,
+  String fieldName,
+) {
+  final value = switch (fieldName) {
+    'ikeid' => resource.raw['ikeid'] ?? resource.id,
+    'tun' => resource.raw['name'] ?? resource.id,
+    'server' || 'server_list' => resource.raw['vpnid'] ?? resource.id,
+    _ => resource.id,
+  };
+  return _text(value);
 }
 
 bool isVpnSecretField(PfRestFieldConstraint field) {
@@ -479,8 +492,8 @@ const _runtimeOnlyVpnFields = <String>{
 Map<String, dynamic> _sanitiseVpnMap(Map<String, dynamic> source) {
   final result = <String, dynamic>{};
   for (final entry in source.entries) {
-    if (isVpnSecretFieldName(entry.key) ||
-        _runtimeOnlyVpnFields.contains(entry.key.toLowerCase())) {
+    final name = entry.key.toLowerCase();
+    if (isVpnSecretFieldName(name) || _runtimeOnlyVpnFields.contains(name)) {
       continue;
     }
     result[entry.key] = _copyValue(entry.value);
