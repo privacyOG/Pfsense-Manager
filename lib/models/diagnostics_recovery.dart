@@ -91,7 +91,7 @@ class DiagnosticsRecoveryCapabilities {
 
   bool get canReadArp => arpList != null;
   bool get canMutateArp => arpDeleteEntry != null || arpClear != null;
-  bool get canReadTables => tablesList != null || tableRead != null;
+  bool get canReadTables => tablesList != null;
   bool get canFlushTables => tableFlush != null;
   bool get canReadHistory => revisionsList != null;
   bool get canDeleteRevision => revisionDelete != null;
@@ -136,7 +136,7 @@ class PfTableSnapshot {
 
 class ConfigHistoryRevision {
   ConfigHistoryRevision(Map<String, dynamic> raw)
-      : raw = UnmodifiableMapView(Map<String, dynamic>.from(raw));
+      : raw = UnmodifiableMapView(_sanitiseHistoryMap(raw));
 
   final Map<String, dynamic> raw;
 
@@ -261,6 +261,15 @@ PfRestOperationCapability? _firstOperation(
   return null;
 }
 
+Map<String, dynamic> _sanitiseHistoryMap(Map<String, dynamic> source) {
+  final result = <String, dynamic>{};
+  for (final entry in source.entries) {
+    if (_historyPayloadFields.contains(entry.key.toLowerCase())) continue;
+    result[entry.key] = entry.value;
+  }
+  return result;
+}
+
 List<String> _stringList(Object? value) {
   if (value is List) {
     return value
@@ -290,3 +299,13 @@ bool _boolean(Object? value) {
 }
 
 String _text(Object? value) => value?.toString().trim() ?? '';
+
+const _historyPayloadFields = <String>{
+  'config',
+  'configuration',
+  'xml',
+  'contents',
+  'content',
+  'backup',
+  'file_contents',
+};
