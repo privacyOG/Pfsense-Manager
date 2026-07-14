@@ -99,12 +99,14 @@ VpnValidationResult validateVpnSettings({
 }) {
   final errors = <String, String>{};
   _validateSchema(values, operation, errors, editing: true);
-  if (technology == VpnTechnology.wireGuard) {
-    final keepalive = _integer(values['keepalive']);
-    if (keepalive != null && (keepalive < 0 || keepalive > 65535)) {
-      errors['keepalive'] = 'Keepalive must be between 0 and 65535 seconds.';
-    }
+  if (technology == VpnTechnology.wireGuard &&
+    !_boolean(values['resolve_interval_track'])) {
+  final resolveInterval = _integer(values['resolve_interval']);
+  if (resolveInterval != null && resolveInterval < 1) {
+    errors['resolve_interval'] =
+        'Resolve interval must be at least 1 second.';
   }
+}
   return VpnValidationResult(Map.unmodifiable(errors));
 }
 

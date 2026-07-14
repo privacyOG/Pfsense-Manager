@@ -260,6 +260,48 @@ void main() {
     expect(result.errors['mask'], contains('128'));
   });
 
+  test('WireGuard settings validate the active resolve interval', () {
+  final operation = PfRestOperationCapability(
+    path: VpnTechnology.wireGuard.settingsPath!,
+    method: 'PATCH',
+    requestFields: const {
+      'body:resolve_interval_track': PfRestFieldConstraint(
+        name: 'resolve_interval_track',
+        location: 'body',
+        required: false,
+        type: 'boolean',
+      ),
+      'body:resolve_interval': PfRestFieldConstraint(
+        name: 'resolve_interval',
+        location: 'body',
+        required: false,
+        type: 'integer',
+      ),
+    },
+    tags: const {'VPN'},
+  );
+
+  final direct = validateVpnSettings(
+    technology: VpnTechnology.wireGuard,
+    values: const {
+      'resolve_interval_track': false,
+      'resolve_interval': 0,
+    },
+    operation: operation,
+  );
+  final tracked = validateVpnSettings(
+    technology: VpnTechnology.wireGuard,
+    values: const {
+      'resolve_interval_track': true,
+      'resolve_interval': 0,
+    },
+    operation: operation,
+  );
+
+  expect(direct.errors['resolve_interval'], contains('at least 1'));
+  expect(tracked.isValid, isTrue);
+});
+
   test('normalisation parses numeric and nested JSON values', () {
     final operation = _operation(
       fields: const ['listenport', 'addresses', 'data_ciphers'],

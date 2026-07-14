@@ -260,46 +260,65 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   List<String> _dependencies(ManagedVpnResource resource) {
-    final id = resource.id?.toString();
-    if (id == null || id.isEmpty) return const [];
-    if (resource.kind == VpnResourceKind.ipsecPhase1) {
-      return [
-        for (final phase2 in
-            _resources[VpnResourceKind.ipsecPhase2] ?? const [])
-          if (_text(phase2.raw['ikeid']) == id || phase2.parentId == id)
-            'Phase 2: ${phase2.displayName}',
-      ];
-    }
-    if (resource.kind == VpnResourceKind.wireGuardTunnel) {
-      return [
-        for (final address in
-            _resources[VpnResourceKind.wireGuardTunnelAddress] ?? const [])
-          if (address.parentId == id) 'Tunnel address: ${address.displayName}',
-        for (final peer in
-            _resources[VpnResourceKind.wireGuardPeer] ?? const [])
-          if (_text(peer.raw['tun']) == id) 'Peer: ${peer.displayName}',
-      ];
-    }
-    if (resource.kind == VpnResourceKind.wireGuardPeer) {
-      return [
-        for (final allowedIp in
-            _resources[VpnResourceKind.wireGuardPeerAllowedIp] ?? const [])
-          if (allowedIp.parentId == id) 'Allowed IP: ${allowedIp.displayName}',
-      ];
-    }
-    if (resource.kind == VpnResourceKind.openVpnServer) {
-      return [
-        for (final cso in _resources[VpnResourceKind.openVpnCso] ?? const [])
-          if (_containsIdentifier(cso.raw['server_list'], id))
-            'Client override: ${cso.displayName}',
-        for (final export in
-            _resources[VpnResourceKind.openVpnExportConfig] ?? const [])
-          if (_text(export.raw['server']) == id)
-            'Export default: ${export.displayName}',
-      ];
-    }
-    return const [];
+  final id = resource.id?.toString();
+  if (id == null || id.isEmpty) return const [];
+  if (resource.kind == VpnResourceKind.ipsecPhase1) {
+    final identifiers = <String>{id, _text(resource.raw['ikeid'])}
+      ..removeWhere((value) => value.isEmpty);
+    return [
+      for (final phase2 in
+          _resources[VpnResourceKind.ipsecPhase2] ?? const [])
+        if (identifiers.contains(_text(phase2.raw['ikeid'])) ||
+            (phase2.parentId != null &&
+                identifiers.contains(phase2.parentId)))
+          'Phase 2: ${phase2.displayName}',
+    ];
   }
+  if (resource.kind == VpnResourceKind.wireGuardTunnel) {
+    final identifiers = <String>{id, _text(resource.raw['name'])}
+      ..removeWhere((value) => value.isEmpty);
+    return [
+      for (final address in
+          _resources[VpnResourceKind.wireGuardTunnelAddress] ?? const [])
+        if (address.parentId != null &&
+            identifiers.contains(address.parentId))
+          'Tunnel address: ${address.displayName}',
+      for (final peer in
+          _resources[VpnResourceKind.wireGuardPeer] ?? const [])
+        if (identifiers.contains(_text(peer.raw['tun'])))
+          'Peer: ${peer.displayName}',
+    ];
+  }
+  if (resource.kind == VpnResourceKind.wireGuardPeer) {
+    final identifiers = <String>{id, _text(resource.raw['name'])}
+      ..removeWhere((value) => value.isEmpty);
+    return [
+      for (final allowedIp in
+          _resources[VpnResourceKind.wireGuardPeerAllowedIp] ?? const [])
+        if (allowedIp.parentId != null &&
+            identifiers.contains(allowedIp.parentId))
+          'Allowed IP: ${allowedIp.displayName}',
+    ];
+  }
+  if (resource.kind == VpnResourceKind.openVpnServer) {
+    final identifiers = <String>{id, _text(resource.raw['vpnid'])}
+      ..removeWhere((value) => value.isEmpty);
+    return [
+      for (final cso in
+          _resources[VpnResourceKind.openVpnCso] ?? const [])
+        if (identifiers.any(
+          (identifier) =>
+              _containsIdentifier(cso.raw['server_list'], identifier),
+        ))
+          'Client override: ${cso.displayName}',
+      for (final export in
+          _resources[VpnResourceKind.openVpnExportConfig] ?? const [])
+        if (identifiers.contains(_text(export.raw['server'])))
+          'Export default: ${export.displayName}',
+    ];
+  }
+  return const [];
+}
 
   Future<void> _exportOpenVpnClient() async {
     if (_busy) return;

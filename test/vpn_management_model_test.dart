@@ -157,6 +157,26 @@ void main() {
     expect(isVpnSecretFieldName('description'), isFalse);
   });
 
+  test('relationship identifiers use pfREST runtime keys', () {
+  final phase1 = ManagedVpnResource(
+    kind: VpnResourceKind.ipsecPhase1,
+    raw: const {'id': 5, 'ikeid': 20, 'descr': 'Branch IPsec'},
+  );
+  final tunnel = ManagedVpnResource(
+    kind: VpnResourceKind.wireGuardTunnel,
+    raw: const {'id': 4, 'name': 'tun_wg0', 'descr': 'Branch tunnel'},
+  );
+  final server = ManagedVpnResource(
+    kind: VpnResourceKind.openVpnServer,
+    raw: const {'id': 1, 'vpnid': 10, 'description': 'Remote access'},
+  );
+
+  expect(vpnRelationshipIdentifier(phase1, 'ikeid'), '20');
+  expect(vpnRelationshipIdentifier(tunnel, 'tun'), 'tun_wg0');
+  expect(vpnRelationshipIdentifier(server, 'server'), '10');
+  expect(vpnRelationshipIdentifier(server, 'server_list'), '10');
+});
+
   test('technology capabilities preserve apply asymmetry', () {
     final openVpnRead = PfRestOperationCapability(
       path: VpnResourceKind.openVpnServer.collectionPath,
