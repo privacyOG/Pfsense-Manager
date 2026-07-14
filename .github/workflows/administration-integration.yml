@@ -1,0 +1,271 @@
+name: Administration integration
+
+on:
+  push:
+    branches:
+      - feature/141-certificate-administrative-management
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/141-certificate-administrative-management
+          fetch-depth: 0
+
+      - name: Integrate administration services
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              target = Path(path)
+              text = target.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected one match in {path}, found {count}')
+              target.write_text(text.replace(old, new))
+
+          replace_once(
+              'lib/services/api_client.dart',
+              """  Future<Response> delete(
+            String path, {
+            Map<String, dynamic>? queryParameters,
+          }) async {
+            return _request('DELETE', path, queryParameters: queryParameters);
+          }
+
+          Future<Response> _request(""",
+              """  Future<Response> delete(
+            String path, {
+            Map<String, dynamic>? queryParameters,
+          }) async {
+            return _request('DELETE', path, queryParameters: queryParameters);
+          }
+
+          /// Uses the profile username and password for operations that pfREST
+          /// explicitly restricts to HTTP Basic authentication.
+          Future<Response> postWithBasicAuth(String path, {dynamic data}) async {
+            return _requestWithBasicAuth('POST', path, data: data);
+          }
+
+          /// Uses the profile username and password for operations that pfREST
+          /// explicitly restricts to HTTP Basic authentication.
+          Future<Response> deleteWithBasicAuth(
+            String path, {
+            Map<String, dynamic>? queryParameters,
+          }) async {
+            return _requestWithBasicAuth(
+              'DELETE',
+              path,
+              queryParameters: queryParameters,
+            );
+          }
+
+          Future<Response> _requestWithBasicAuth(
+            String method,
+            String path, {
+            dynamic data,
+            Map<String, dynamic>? queryParameters,
+          }) async {
+            _ensureActive();
+            if (profile.authMode != PfSenseAuthMode.jwtPassword ||
+                profile.username.trim().isEmpty ||
+                profile.password.isEmpty) {
+              throw const ApiException(
+                'This operation requires a password-authenticated profile.',
+              );
+            }
+            final authorization = buildBasicAuthorization(
+              profile.username,
+              profile.password,
+            );
+            try {
+              final response = await _dio.request(
+                path,
+                data: data,
+                queryParameters: queryParameters,
+                options: Options(
+                  method: method,
+                  headers: {'Authorization': authorization},
+                ),
+              );
+              _ensureActive();
+              if (response.statusCode != null &&
+                  response.statusCode! >= 200 &&
+                  response.statusCode! < 300) {
+                _validateApiResponse(path, response.data);
+                return response;
+              }
+              throw ApiException(
+                _extractErrorMessage(response.data),
+                response.statusCode,
+              );
+            } on DioException catch (error) {
+              if (_disposed) {
+                throw const ApiException('The pfSense session was closed.');
+              }
+              throw ApiException.fromDio(error);
+            }
+          }
+
+          Future<Response> _request(""",
+          )
+
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """import '../services/api_client.dart';
+          import '../services/connection_check.dart';""",
+              """import '../services/administration_management_service.dart';
+          import '../services/api_client.dart';
+          import '../services/connection_check.dart';""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """  PfSenseService? _service;
+            DhcpManagementService? _dhcpManagementService;""",
+              """  PfSenseService? _service;
+            AdministrationManagementService? _administrationService;
+            DhcpManagementService? _dhcpManagementService;""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """  PfSenseProfile? get selectedProfile => _selectedProfile;
+            PfSenseService? get service => _service;
+            DhcpManagementService? get dhcpManagementService => _dhcpManagementService;""",
+              """  PfSenseProfile? get selectedProfile => _selectedProfile;
+            PfSenseService? get service => _service;
+            AdministrationManagementService? get administrationService =>
+                _administrationService;
+            DhcpManagementService? get dhcpManagementService => _dhcpManagementService;""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """    PfSenseService? candidate;
+              DhcpManagementService? candidateDhcp;""",
+              """    PfSenseService? candidate;
+              AdministrationManagementService? candidateAdministration;
+              DhcpManagementService? candidateDhcp;""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """      candidateDhcp = DhcpManagementService(
+                  client,
+                  capabilityService: candidateCapabilities,
+                );""",
+              """      candidateAdministration = AdministrationManagementService(
+                  client,
+                  capabilityService: candidateCapabilities,
+                );
+                candidateDhcp = DhcpManagementService(
+                  client,
+                  capabilityService: candidateCapabilities,
+                );""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """      _service = candidate;
+                _dhcpManagementService = candidateDhcp;""",
+              """      _service = candidate;
+                _administrationService = candidateAdministration;
+                _dhcpManagementService = candidateDhcp;""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """      candidate = null;
+                candidateDhcp = null;""",
+              """      candidate = null;
+                candidateAdministration = null;
+                candidateDhcp = null;""",
+          )
+          replace_once(
+              'lib/providers/session_provider.dart',
+              """  void _clearFeatureServices() {
+              _dhcpManagementService = null;""",
+              """  void _clearFeatureServices() {
+              _administrationService = null;
+              _dhcpManagementService = null;""",
+          )
+
+          replace_once(
+              'lib/screens/system_screen.dart',
+              """import '../widgets/slide_to_confirm.dart';
+          """,
+              """import '../widgets/slide_to_confirm.dart';
+          import 'administration_screen.dart';
+          """,
+          )
+          replace_once(
+              'lib/screens/system_screen.dart',
+              """          const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: session.connected && !_loading && !_rebooting""",
+              """          const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.admin_panel_settings_outlined),
+                        title: const Text('Administration'),
+                        subtitle: const Text(
+                          'Certificates, identities, API access, tunables, packages and service settings reported by pfREST.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: session.connected
+                            ? () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const AdministrationScreen(),
+                                  ),
+                                )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: session.connected && !_loading && !_rebooting""",
+          )
+
+          replace_once(
+              'CHANGELOG.md',
+              """### Added
+
+          - **VPN configuration management**""",
+              """### Added
+
+          - **Administrative system management** — capability-reported certificate authorities, certificates, revocation lists, local users, groups, authentication servers, REST API keys and access controls, system tunables, packages, system updates, and supported NTP, SSH, SNMP, and remote logging settings can now be viewed or managed from a dedicated administration workspace. Sensitive values use replacement-only forms, API-key lifecycle operations require password authentication, and generated secrets or certificate material are displayed only as one-time results.
+          - **VPN configuration management**""",
+          )
+
+          Path('.github/workflows/administration-integration.yml').unlink()
+          PY
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Format integrated Dart files
+        shell: bash
+        run: |
+          dart format \
+            lib/services/api_client.dart \
+            lib/providers/session_provider.dart \
+            lib/screens/system_screen.dart \
+            lib/models/administration_management.dart \
+            lib/services/administration_management_service.dart \
+            lib/utils/administration_validation.dart \
+            lib/screens/administration_screen.dart \
+            lib/screens/administration_resource_screen.dart \
+            lib/screens/administration_form_screen.dart
+
+      - name: Commit integration
+        shell: bash
+        run: |
+          git config user.name "privacyOG"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md lib .github/workflows/administration-integration.yml
+          git commit -m "Integrate administrative management"
+          git push origin HEAD:feature/141-certificate-administrative-management
