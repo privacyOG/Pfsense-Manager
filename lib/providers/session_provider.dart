@@ -4,6 +4,7 @@ import '../models/pfrest_capabilities.dart';
 import '../models/profile.dart';
 import '../services/api_client.dart';
 import '../services/connection_check.dart';
+import '../services/dhcp_management_service.dart';
 import '../services/firewall_alias_service.dart';
 import '../services/firewall_nat_service.dart';
 import '../services/firewall_rule_service.dart';
@@ -38,6 +39,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? _selectedProfile;
   PfSenseService? _service;
+  DhcpManagementService? _dhcpManagementService;
   FirewallAliasService? _firewallAliasService;
   FirewallNatService? _firewallNatService;
   FirewallRuleService? _firewallRuleService;
@@ -54,6 +56,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
   PfSenseProfile? get selectedProfile => _selectedProfile;
   PfSenseService? get service => _service;
+  DhcpManagementService? get dhcpManagementService => _dhcpManagementService;
   FirewallAliasService? get firewallAliasService => _firewallAliasService;
   FirewallNatService? get firewallNatService => _firewallNatService;
   FirewallRuleService? get firewallRuleService => _firewallRuleService;
@@ -109,6 +112,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
 
     PfSenseApiClient? client;
     PfSenseService? candidate;
+    DhcpManagementService? candidateDhcp;
     FirewallAliasService? candidateAliases;
     FirewallNatService? candidateNat;
     FirewallRuleService? candidateRules;
@@ -145,6 +149,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
         client,
         profileId: connectionProfile.id,
       );
+      candidateDhcp = DhcpManagementService(
+        client,
+        capabilityService: candidateCapabilities,
+      );
       candidateInterfaces = InterfaceManagementService(
         client,
         capabilityService: candidateCapabilities,
@@ -163,6 +171,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       }
 
       _service = candidate;
+      _dhcpManagementService = candidateDhcp;
       _firewallAliasService = candidateAliases;
       _firewallNatService = candidateNat;
       _firewallRuleService = candidateRules;
@@ -170,6 +179,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _routingManagementService = candidateRouting;
       _capabilityService = candidateCapabilities;
       candidate = null;
+      candidateDhcp = null;
       candidateAliases = null;
       candidateNat = null;
       candidateRules = null;
@@ -264,6 +274,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   }
 
   void _clearFeatureServices() {
+    _dhcpManagementService = null;
     _firewallAliasService = null;
     _firewallNatService = null;
     _firewallRuleService = null;
