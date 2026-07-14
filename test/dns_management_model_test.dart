@@ -163,27 +163,43 @@ void main() {
   });
 
   test('capabilities preserve resolver and forwarder asymmetry', () {
-    final capabilities = PfRestCapabilities.available(
+    final settingsRead = PfRestOperationCapability(
+      path: dnsResolverSettingsPath,
+      method: 'GET',
+      requestFields: const {},
+      tags: const {'SERVICES'},
+    );
+    final forwarderRead = PfRestOperationCapability(
+      path: DnsResourceKind.forwarderHostOverride.collectionPath,
+      method: 'GET',
+      requestFields: const {},
+      tags: const {'SERVICES'},
+    );
+    final forwarderApply = PfRestOperationCapability(
+      path: DnsServiceKind.forwarder.applyPath,
+      method: 'POST',
+      requestFields: const {},
+      tags: const {'SERVICES'},
+    );
+    final capabilities = PfRestCapabilities(
       profileId: 'dns-model-test',
+      status: PfRestCapabilityStatus.available,
       operations: {
-        'GET $dnsResolverSettingsPath': PfRestOperationCapability(
-          path: dnsResolverSettingsPath,
-          method: 'GET',
-          tags: const {'SERVICES'},
-        ),
-        'GET ${DnsResourceKind.forwarderHostOverride.collectionPath}':
-            PfRestOperationCapability(
-          path: DnsResourceKind.forwarderHostOverride.collectionPath,
-          method: 'GET',
-          tags: const {'SERVICES'},
-        ),
-        'POST ${DnsServiceKind.forwarder.applyPath}':
-            PfRestOperationCapability(
-          path: DnsServiceKind.forwarder.applyPath,
-          method: 'POST',
-          tags: const {'SERVICES'},
-        ),
+        PfRestCapabilities.operationKey(
+          settingsRead.path,
+          settingsRead.method,
+        ): settingsRead,
+        PfRestCapabilities.operationKey(
+          forwarderRead.path,
+          forwarderRead.method,
+        ): forwarderRead,
+        PfRestCapabilities.operationKey(
+          forwarderApply.path,
+          forwarderApply.method,
+        ): forwarderApply,
       },
+      packageTags: const {'SERVICES'},
+      loadedAt: DateTime.utc(2026, 7, 14),
     );
     final dns = DnsManagementCapabilities.from(capabilities);
 
