@@ -14,10 +14,7 @@ class VpnValidationResult {
 }
 
 class VpnValidationContext {
-  const VpnValidationContext({
-    this.resources = const [],
-    this.editing,
-  });
+  const VpnValidationContext({this.resources = const [], this.editing});
 
   final List<ManagedVpnResource> resources;
   final ManagedVpnResource? editing;
@@ -85,7 +82,11 @@ VpnValidationResult validateVpnResource({
     _validateWireGuardPeer(values, errors, editing: editing);
   } else if (kind == VpnResourceKind.wireGuardTunnelAddress ||
       kind == VpnResourceKind.wireGuardPeerAllowedIp) {
-    _validateWireGuardNetwork(values, errors, tunnelAddress: kind == VpnResourceKind.wireGuardTunnelAddress);
+    _validateWireGuardNetwork(
+      values,
+      errors,
+      tunnelAddress: kind == VpnResourceKind.wireGuardTunnelAddress,
+    );
   }
 
   _validateDuplicates(kind, values, context, errors);
@@ -100,13 +101,13 @@ VpnValidationResult validateVpnSettings({
   final errors = <String, String>{};
   _validateSchema(values, operation, errors, editing: true);
   if (technology == VpnTechnology.wireGuard &&
-    !_boolean(values['resolve_interval_track'])) {
-  final resolveInterval = _integer(values['resolve_interval']);
-  if (resolveInterval != null && resolveInterval < 1) {
-    errors['resolve_interval'] =
-        'Resolve interval must be at least 1 second.';
+      !_boolean(values['resolve_interval_track'])) {
+    final resolveInterval = _integer(values['resolve_interval']);
+    if (resolveInterval != null && resolveInterval < 1) {
+      errors['resolve_interval'] =
+          'Resolve interval must be at least 1 second.';
+    }
   }
-}
   return VpnValidationResult(Map.unmodifiable(errors));
 }
 
@@ -137,9 +138,7 @@ void _validateOpenVpnServer(
   _validateSubnetList(values, 'local_networkv6', errors);
   _validateSubnetList(values, 'remote_network', errors);
   _validateSubnetList(values, 'remote_networkv6', errors);
-  if (_boolean(values['use_tls']) &&
-      !editing &&
-      _text(values['tls']).isEmpty) {
+  if (_boolean(values['use_tls']) && !editing && _text(values['tls']).isEmpty) {
     errors['tls'] = 'Enter or generate a TLS key.';
   }
 }
@@ -234,10 +233,7 @@ void _validateIpsecPhase2(
   if (encryption is! List || encryption.isEmpty) {
     errors['encryption'] = 'Add at least one Phase 2 encryption proposal.';
   }
-  for (final name in const [
-    'localid_address',
-    'remoteid_address',
-  ]) {
+  for (final name in const ['localid_address', 'remoteid_address']) {
     final value = _text(values[name]);
     if (value.isNotEmpty && !_isIpOrSubnet(value)) {
       errors[name] = 'Enter a valid address or subnet.';
@@ -257,7 +253,12 @@ void _validateWireGuardTunnel(
       !_isWireGuardKey(_text(values['privatekey']))) {
     errors['privatekey'] = 'Enter a valid WireGuard private key.';
   }
-  _validateNestedNetworks(values['addresses'], errors, 'addresses', minimumMask: 1);
+  _validateNestedNetworks(
+    values['addresses'],
+    errors,
+    'addresses',
+    minimumMask: 1,
+  );
 }
 
 void _validateWireGuardPeer(
@@ -403,7 +404,8 @@ void _validateSchema(
       if (number == null) {
         errors[field.name] = '${_label(field.name)} must be a number.';
       } else if (!field.permitsNumber(number)) {
-        errors[field.name] = '${_label(field.name)} is outside the allowed range.';
+        errors[field.name] =
+            '${_label(field.name)} is outside the allowed range.';
       }
     }
     if (field.type == 'array' && value is! List) {
@@ -499,11 +501,15 @@ bool _isIpOrHostname(String value) {
 bool _isHostname(String value) {
   final text = value.trim();
   if (text.isEmpty || text.length > 255) return false;
-  return text.split('.').every(
-        (part) => part.isNotEmpty &&
+  return text
+      .split('.')
+      .every(
+        (part) =>
+            part.isNotEmpty &&
             part.length <= 63 &&
-            RegExp(r'^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$')
-                .hasMatch(part),
+            RegExp(
+              r'^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$',
+            ).hasMatch(part),
       );
 }
 
@@ -511,10 +517,7 @@ bool _isWireGuardKey(String value) {
   return RegExp(r'^[A-Za-z0-9+/]{43}=$').hasMatch(value.trim());
 }
 
-bool _sameResource(
-  ManagedVpnResource resource,
-  ManagedVpnResource? editing,
-) {
+bool _sameResource(ManagedVpnResource resource, ManagedVpnResource? editing) {
   if (editing == null || resource.kind != editing.kind) return false;
   return resource.id?.toString() == editing.id?.toString() &&
       resource.parentId == editing.parentId;

@@ -31,14 +31,15 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   String? _profileId;
 
   List<ManagedVpnResource> get _allResources => [
-        for (final values in _resources.values) ...values,
-      ];
+    for (final values in _resources.values) ...values,
+  ];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final session = context.watch<PfSenseSessionProvider>();
-    final changed = _sessionGeneration != session.sessionGeneration ||
+    final changed =
+        _sessionGeneration != session.sessionGeneration ||
         _profileId != session.selectedProfile?.id;
     if (!changed) return;
     _requestGeneration++;
@@ -94,7 +95,8 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
     }
 
     for (final kind in readableKinds.where((kind) => kind.child)) {
-      final parents = resources[kind.parentKind] ?? const <ManagedVpnResource>[];
+      final parents =
+          resources[kind.parentKind] ?? const <ManagedVpnResource>[];
       final children = <ManagedVpnResource>[];
       try {
         for (final parent in parents) {
@@ -110,12 +112,12 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
 
     VpnSingletonSettings? wireGuardSettings;
     Object? wireGuardSettingsError;
-    final wireGuardCapabilities =
-        service.capabilities.forTechnology(VpnTechnology.wireGuard);
+    final wireGuardCapabilities = service.capabilities.forTechnology(
+      VpnTechnology.wireGuard,
+    );
     if (wireGuardCapabilities.settingsRead != null) {
       try {
-        wireGuardSettings =
-            await service.getSettings(VpnTechnology.wireGuard);
+        wireGuardSettings = await service.getSettings(VpnTechnology.wireGuard);
       } catch (error) {
         wireGuardSettingsError = error;
       }
@@ -196,8 +198,9 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
     final service = session.vpnManagementService;
     if (!session.connected || service == null) return;
     final capability = service.capabilities.forKind(resource.kind);
-    final technology =
-        service.capabilities.forTechnology(resource.kind.technology);
+    final technology = service.capabilities.forTechnology(
+      resource.kind.technology,
+    );
     if (!capability.canDelete || !technology.canApply) return;
 
     final dependencies = _dependencies(resource);
@@ -260,65 +263,64 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   List<String> _dependencies(ManagedVpnResource resource) {
-  final id = resource.id?.toString();
-  if (id == null || id.isEmpty) return const [];
-  if (resource.kind == VpnResourceKind.ipsecPhase1) {
-    final identifiers = <String>{id, _text(resource.raw['ikeid'])}
-      ..removeWhere((value) => value.isEmpty);
-    return [
-      for (final phase2 in
-          _resources[VpnResourceKind.ipsecPhase2] ?? const [])
-        if (identifiers.contains(_text(phase2.raw['ikeid'])) ||
-            (phase2.parentId != null &&
-                identifiers.contains(phase2.parentId)))
-          'Phase 2: ${phase2.displayName}',
-    ];
+    final id = resource.id?.toString();
+    if (id == null || id.isEmpty) return const [];
+    if (resource.kind == VpnResourceKind.ipsecPhase1) {
+      final identifiers = <String>{id, _text(resource.raw['ikeid'])}
+        ..removeWhere((value) => value.isEmpty);
+      return [
+        for (final phase2
+            in _resources[VpnResourceKind.ipsecPhase2] ?? const [])
+          if (identifiers.contains(_text(phase2.raw['ikeid'])) ||
+              (phase2.parentId != null &&
+                  identifiers.contains(phase2.parentId)))
+            'Phase 2: ${phase2.displayName}',
+      ];
+    }
+    if (resource.kind == VpnResourceKind.wireGuardTunnel) {
+      final identifiers = <String>{id, _text(resource.raw['name'])}
+        ..removeWhere((value) => value.isEmpty);
+      return [
+        for (final address
+            in _resources[VpnResourceKind.wireGuardTunnelAddress] ?? const [])
+          if (address.parentId != null &&
+              identifiers.contains(address.parentId))
+            'Tunnel address: ${address.displayName}',
+        for (final peer
+            in _resources[VpnResourceKind.wireGuardPeer] ?? const [])
+          if (identifiers.contains(_text(peer.raw['tun'])))
+            'Peer: ${peer.displayName}',
+      ];
+    }
+    if (resource.kind == VpnResourceKind.wireGuardPeer) {
+      final identifiers = <String>{id, _text(resource.raw['name'])}
+        ..removeWhere((value) => value.isEmpty);
+      return [
+        for (final allowedIp
+            in _resources[VpnResourceKind.wireGuardPeerAllowedIp] ?? const [])
+          if (allowedIp.parentId != null &&
+              identifiers.contains(allowedIp.parentId))
+            'Allowed IP: ${allowedIp.displayName}',
+      ];
+    }
+    if (resource.kind == VpnResourceKind.openVpnServer) {
+      final identifiers = <String>{id, _text(resource.raw['vpnid'])}
+        ..removeWhere((value) => value.isEmpty);
+      return [
+        for (final cso in _resources[VpnResourceKind.openVpnCso] ?? const [])
+          if (identifiers.any(
+            (identifier) =>
+                _containsIdentifier(cso.raw['server_list'], identifier),
+          ))
+            'Client override: ${cso.displayName}',
+        for (final export
+            in _resources[VpnResourceKind.openVpnExportConfig] ?? const [])
+          if (identifiers.contains(_text(export.raw['server'])))
+            'Export default: ${export.displayName}',
+      ];
+    }
+    return const [];
   }
-  if (resource.kind == VpnResourceKind.wireGuardTunnel) {
-    final identifiers = <String>{id, _text(resource.raw['name'])}
-      ..removeWhere((value) => value.isEmpty);
-    return [
-      for (final address in
-          _resources[VpnResourceKind.wireGuardTunnelAddress] ?? const [])
-        if (address.parentId != null &&
-            identifiers.contains(address.parentId))
-          'Tunnel address: ${address.displayName}',
-      for (final peer in
-          _resources[VpnResourceKind.wireGuardPeer] ?? const [])
-        if (identifiers.contains(_text(peer.raw['tun'])))
-          'Peer: ${peer.displayName}',
-    ];
-  }
-  if (resource.kind == VpnResourceKind.wireGuardPeer) {
-    final identifiers = <String>{id, _text(resource.raw['name'])}
-      ..removeWhere((value) => value.isEmpty);
-    return [
-      for (final allowedIp in
-          _resources[VpnResourceKind.wireGuardPeerAllowedIp] ?? const [])
-        if (allowedIp.parentId != null &&
-            identifiers.contains(allowedIp.parentId))
-          'Allowed IP: ${allowedIp.displayName}',
-    ];
-  }
-  if (resource.kind == VpnResourceKind.openVpnServer) {
-    final identifiers = <String>{id, _text(resource.raw['vpnid'])}
-      ..removeWhere((value) => value.isEmpty);
-    return [
-      for (final cso in
-          _resources[VpnResourceKind.openVpnCso] ?? const [])
-        if (identifiers.any(
-          (identifier) =>
-              _containsIdentifier(cso.raw['server_list'], identifier),
-        ))
-          'Client override: ${cso.displayName}',
-      for (final export in
-          _resources[VpnResourceKind.openVpnExportConfig] ?? const [])
-        if (identifiers.contains(_text(export.raw['server'])))
-          'Export default: ${export.displayName}',
-    ];
-  }
-  return const [];
-}
 
   Future<void> _exportOpenVpnClient() async {
     if (_busy) return;
@@ -328,17 +330,19 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
     if (service == null || operation == null) return;
 
     final fields = operation.requestFields.values
-        .where((field) =>
-            field.location.toLowerCase() == 'body' && !field.readOnly)
+        .where(
+          (field) => field.location.toLowerCase() == 'body' && !field.readOnly,
+        )
         .toList(growable: false);
     final values = <String, dynamic>{
       for (final field in fields)
-        field.name: field.defaultValue ??
+        field.name:
+            field.defaultValue ??
             (field.type == 'boolean'
                 ? false
                 : field.type == 'array'
-                    ? <dynamic>[]
-                    : ''),
+                ? <dynamic>[]
+                : ''),
     };
     final errors = <String, String>{};
 
@@ -548,7 +552,8 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
       return _status(
         icon: Icons.schema_outlined,
         title: 'VPN capabilities not available',
-        message: session.capabilities?.message ??
+        message:
+            session.capabilities?.message ??
             'The OpenAPI schema could not be read for this profile.',
         action: () async {
           await session.refreshCapabilities();
@@ -617,7 +622,9 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   Widget _technologyTab(VpnTechnology technology) {
-    final service = context.watch<PfSenseSessionProvider>().vpnManagementService!;
+    final service = context
+        .watch<PfSenseSessionProvider>()
+        .vpnManagementService!;
     final capability = service.capabilities.forTechnology(technology);
     return RefreshIndicator(
       onRefresh: () => _load(showSpinner: true),
@@ -676,7 +683,8 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   Widget _wireGuardSettingsCard(VpnTechnologyCapabilities capability) {
-    final canEdit = capability.settingsUpdate != null &&
+    final canEdit =
+        capability.settingsUpdate != null &&
         capability.canApply &&
         !_writePermissionDenied &&
         !_busy;
@@ -687,12 +695,12 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
         subtitle: _wireGuardSettingsError != null
             ? Text(_wireGuardSettingsError.toString())
             : _wireGuardSettings == null
-                ? const Text('WireGuard settings are not available.')
-                : Text(
-                    _boolean(_wireGuardSettings!.raw['enable'])
-                        ? 'WireGuard is enabled.'
-                        : 'WireGuard is disabled.',
-                  ),
+            ? const Text('WireGuard settings are not available.')
+            : Text(
+                _boolean(_wireGuardSettings!.raw['enable'])
+                    ? 'WireGuard is enabled.'
+                    : 'WireGuard is disabled.',
+              ),
         trailing: capability.settingsRead == null
             ? null
             : IconButton(
@@ -705,7 +713,9 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   Widget _resourceSection(VpnResourceKind kind) {
-    final service = context.watch<PfSenseSessionProvider>().vpnManagementService!;
+    final service = context
+        .watch<PfSenseSessionProvider>()
+        .vpnManagementService!;
     final capability = service.capabilities.forKind(kind);
     final technology = service.capabilities.forTechnology(kind.technology);
     final canWrite = technology.canApply && !_writePermissionDenied && !_busy;
@@ -781,7 +791,8 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
                       ? () => _openForm(kind, resource: resource)
                       : null,
                   trailing: PopupMenuButton<String>(
-                    enabled: canWrite &&
+                    enabled:
+                        canWrite &&
                         (capability.canUpdate || capability.canDelete),
                     onSelected: (value) {
                       if (value == 'edit') {
@@ -792,10 +803,7 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
                     },
                     itemBuilder: (_) => [
                       if (capability.canUpdate)
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text('Edit'),
-                        ),
+                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
                       if (capability.canDelete)
                         const PopupMenuItem(
                           value: 'delete',
@@ -846,9 +854,9 @@ class _VpnManagementScreenState extends State<VpnManagementScreen> {
   }
 
   void _message(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

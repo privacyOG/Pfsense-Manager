@@ -4,40 +4,43 @@ import 'package:pfsense_manager/models/vpn_management.dart';
 import 'package:pfsense_manager/utils/vpn_management_validation.dart';
 
 void main() {
-  test('OpenVPN server validation enforces ports networks and new TLS keys', () {
-    final result = validateVpnResource(
-      kind: VpnResourceKind.openVpnServer,
-      values: const {
-        'mode': 'server_tls',
-        'dev_mode': 'tun',
-        'protocol': 'UDP4',
-        'interface': 'wan',
-        'local_port': 70000,
-        'use_tls': true,
-        'tls': '',
-        'tunnel_network': '2001:db8::/64',
-      },
-      operation: _operation(
-        fields: const [
-          'mode',
-          'dev_mode',
-          'protocol',
-          'interface',
-          'local_port',
-          'use_tls',
-          'tls',
-          'tunnel_network',
-        ],
-        requiredFields: const ['mode', 'dev_mode', 'protocol', 'interface'],
-        secretFields: const ['tls'],
-      ),
-      editing: false,
-    );
+  test(
+    'OpenVPN server validation enforces ports networks and new TLS keys',
+    () {
+      final result = validateVpnResource(
+        kind: VpnResourceKind.openVpnServer,
+        values: const {
+          'mode': 'server_tls',
+          'dev_mode': 'tun',
+          'protocol': 'UDP4',
+          'interface': 'wan',
+          'local_port': 70000,
+          'use_tls': true,
+          'tls': '',
+          'tunnel_network': '2001:db8::/64',
+        },
+        operation: _operation(
+          fields: const [
+            'mode',
+            'dev_mode',
+            'protocol',
+            'interface',
+            'local_port',
+            'use_tls',
+            'tls',
+            'tunnel_network',
+          ],
+          requiredFields: const ['mode', 'dev_mode', 'protocol', 'interface'],
+          secretFields: const ['tls'],
+        ),
+        editing: false,
+      );
 
-    expect(result.errors['local_port'], contains('65535'));
-    expect(result.errors['tls'], contains('TLS key'));
-    expect(result.errors['tunnel_network'], contains('IPv4'));
-  });
+      expect(result.errors['local_port'], contains('65535'));
+      expect(result.errors['tls'], contains('TLS key'));
+      expect(result.errors['tunnel_network'], contains('IPv4'));
+    },
+  );
 
   test('OpenVPN client edit preserves absent passwords', () {
     final result = validateVpnResource(
@@ -244,11 +247,7 @@ void main() {
   test('child WireGuard addresses require parent and valid prefix', () {
     final result = validateVpnResource(
       kind: VpnResourceKind.wireGuardTunnelAddress,
-      values: const {
-        'parent_id': '',
-        'address': '2001:db8::1',
-        'mask': 129,
-      },
+      values: const {'parent_id': '', 'address': '2001:db8::1', 'mask': 129},
       operation: _operation(
         fields: const ['parent_id', 'address', 'mask'],
         requiredFields: const ['parent_id', 'address', 'mask'],
@@ -261,46 +260,40 @@ void main() {
   });
 
   test('WireGuard settings validate the active resolve interval', () {
-  final operation = PfRestOperationCapability(
-    path: VpnTechnology.wireGuard.settingsPath!,
-    method: 'PATCH',
-    requestFields: const {
-      'body:resolve_interval_track': PfRestFieldConstraint(
-        name: 'resolve_interval_track',
-        location: 'body',
-        required: false,
-        type: 'boolean',
-      ),
-      'body:resolve_interval': PfRestFieldConstraint(
-        name: 'resolve_interval',
-        location: 'body',
-        required: false,
-        type: 'integer',
-      ),
-    },
-    tags: const {'VPN'},
-  );
+    final operation = PfRestOperationCapability(
+      path: VpnTechnology.wireGuard.settingsPath!,
+      method: 'PATCH',
+      requestFields: const {
+        'body:resolve_interval_track': PfRestFieldConstraint(
+          name: 'resolve_interval_track',
+          location: 'body',
+          required: false,
+          type: 'boolean',
+        ),
+        'body:resolve_interval': PfRestFieldConstraint(
+          name: 'resolve_interval',
+          location: 'body',
+          required: false,
+          type: 'integer',
+        ),
+      },
+      tags: const {'VPN'},
+    );
 
-  final direct = validateVpnSettings(
-    technology: VpnTechnology.wireGuard,
-    values: const {
-      'resolve_interval_track': false,
-      'resolve_interval': 0,
-    },
-    operation: operation,
-  );
-  final tracked = validateVpnSettings(
-    technology: VpnTechnology.wireGuard,
-    values: const {
-      'resolve_interval_track': true,
-      'resolve_interval': 0,
-    },
-    operation: operation,
-  );
+    final direct = validateVpnSettings(
+      technology: VpnTechnology.wireGuard,
+      values: const {'resolve_interval_track': false, 'resolve_interval': 0},
+      operation: operation,
+    );
+    final tracked = validateVpnSettings(
+      technology: VpnTechnology.wireGuard,
+      values: const {'resolve_interval_track': true, 'resolve_interval': 0},
+      operation: operation,
+    );
 
-  expect(direct.errors['resolve_interval'], contains('at least 1'));
-  expect(tracked.isValid, isTrue);
-});
+    expect(direct.errors['resolve_interval'], contains('at least 1'));
+    expect(tracked.isValid, isTrue);
+  });
 
   test('normalisation parses numeric and nested JSON values', () {
     final operation = _operation(
@@ -341,21 +334,22 @@ PfRestOperationCapability _operation({
           name: name,
           location: 'body',
           required: requiredFields.contains(name),
-          type: name == 'enabled' ||
+          type:
+              name == 'enabled' ||
                   name == 'disable' ||
                   name == 'disabled' ||
                   name == 'use_tls' ||
                   name == 'gw_duplicates'
               ? 'boolean'
               : name.contains('port') ||
-                      name == 'lifetime' ||
-                      name == 'rekey_time' ||
-                      name == 'persistentkeepalive' ||
-                      name == 'mask'
-                  ? 'integer'
-                  : arrayFields.contains(name) || objectArrayFields.contains(name)
-                      ? 'array'
-                      : 'string',
+                    name == 'lifetime' ||
+                    name == 'rekey_time' ||
+                    name == 'persistentkeepalive' ||
+                    name == 'mask'
+              ? 'integer'
+              : arrayFields.contains(name) || objectArrayFields.contains(name)
+              ? 'array'
+              : 'string',
           writeOnly: secretFields.contains(name),
         ),
     },

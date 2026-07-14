@@ -21,10 +21,7 @@ void main() {
       '/api/v2/vpn/openvpn/client_export/config',
     );
     expect(openVpnClientExportPath, '/api/v2/vpn/openvpn/client_export');
-    expect(
-      VpnResourceKind.ipsecPhase1.itemPath,
-      '/api/v2/vpn/ipsec/phase1',
-    );
+    expect(VpnResourceKind.ipsecPhase1.itemPath, '/api/v2/vpn/ipsec/phase1');
     expect(VpnTechnology.ipsec.applyPath, '/api/v2/vpn/ipsec/apply');
     expect(
       VpnTechnology.wireGuard.settingsPath,
@@ -59,10 +56,7 @@ void main() {
     expect(resource.raw, isNot(contains('presharedkey')));
     expect(resource.raw, isNot(contains('runtime_status')));
     expect(resource.raw['allowedips'], hasLength(1));
-    expect(
-      () => resource.raw['descr'] = 'mutated',
-      throwsUnsupportedError,
-    );
+    expect(() => resource.raw['descr'] = 'mutated', throwsUnsupportedError);
   });
 
   test('write payload preserves configuration but never replays secrets', () {
@@ -158,24 +152,24 @@ void main() {
   });
 
   test('relationship identifiers use pfREST runtime keys', () {
-  final phase1 = ManagedVpnResource(
-    kind: VpnResourceKind.ipsecPhase1,
-    raw: const {'id': 5, 'ikeid': 20, 'descr': 'Branch IPsec'},
-  );
-  final tunnel = ManagedVpnResource(
-    kind: VpnResourceKind.wireGuardTunnel,
-    raw: const {'id': 4, 'name': 'tun_wg0', 'descr': 'Branch tunnel'},
-  );
-  final server = ManagedVpnResource(
-    kind: VpnResourceKind.openVpnServer,
-    raw: const {'id': 1, 'vpnid': 10, 'description': 'Remote access'},
-  );
+    final phase1 = ManagedVpnResource(
+      kind: VpnResourceKind.ipsecPhase1,
+      raw: const {'id': 5, 'ikeid': 20, 'descr': 'Branch IPsec'},
+    );
+    final tunnel = ManagedVpnResource(
+      kind: VpnResourceKind.wireGuardTunnel,
+      raw: const {'id': 4, 'name': 'tun_wg0', 'descr': 'Branch tunnel'},
+    );
+    final server = ManagedVpnResource(
+      kind: VpnResourceKind.openVpnServer,
+      raw: const {'id': 1, 'vpnid': 10, 'description': 'Remote access'},
+    );
 
-  expect(vpnRelationshipIdentifier(phase1, 'ikeid'), '20');
-  expect(vpnRelationshipIdentifier(tunnel, 'tun'), 'tun_wg0');
-  expect(vpnRelationshipIdentifier(server, 'server'), '10');
-  expect(vpnRelationshipIdentifier(server, 'server_list'), '10');
-});
+    expect(vpnRelationshipIdentifier(phase1, 'ikeid'), '20');
+    expect(vpnRelationshipIdentifier(tunnel, 'tun'), 'tun_wg0');
+    expect(vpnRelationshipIdentifier(server, 'server'), '10');
+    expect(vpnRelationshipIdentifier(server, 'server_list'), '10');
+  });
 
   test('technology capabilities preserve apply asymmetry', () {
     final openVpnRead = PfRestOperationCapability(
@@ -212,14 +206,8 @@ void main() {
     );
     final capabilities = VpnManagementCapabilities.from(snapshot);
 
-    expect(
-      capabilities.forTechnology(VpnTechnology.openVpn).canApply,
-      isTrue,
-    );
-    expect(
-      capabilities.forTechnology(VpnTechnology.ipsec).canApply,
-      isTrue,
-    );
+    expect(capabilities.forTechnology(VpnTechnology.openVpn).canApply, isTrue);
+    expect(capabilities.forTechnology(VpnTechnology.ipsec).canApply, isTrue);
     expect(
       capabilities.forTechnology(VpnTechnology.wireGuard).canApply,
       isFalse,
