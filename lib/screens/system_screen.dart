@@ -5,6 +5,7 @@ import '../l10n/app_strings.dart';
 import '../models/system_info.dart';
 import '../providers/session_provider.dart';
 import '../widgets/slide_to_confirm.dart';
+import 'administration_screen.dart';
 
 class SystemScreen extends StatefulWidget {
   const SystemScreen({super.key});
@@ -179,6 +180,24 @@ class _SystemScreenState extends State<SystemScreen> {
             if (info.lastUpdate != null) _row('Last update', info.lastUpdate!),
           ],
           const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('Administration'),
+              subtitle: const Text(
+                'Certificates, identities, API access, tunables, packages and service settings reported by pfREST.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: session.connected
+                  ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AdministrationScreen(),
+                        ),
+                      )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: session.connected && !_loading && !_rebooting
                 ? _reboot
@@ -190,7 +209,9 @@ class _SystemScreenState extends State<SystemScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.power_settings_new),
-            label: Text(_rebooting ? 'Sending reboot request…' : strings.t('reboot')),
+            label: Text(
+              _rebooting ? 'Sending reboot request…' : strings.t('reboot'),
+            ),
           ),
         ],
       ),
