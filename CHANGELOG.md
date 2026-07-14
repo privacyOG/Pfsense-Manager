@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **DHCP management** — per-interface DHCP server settings, primary and additional address pools, static mappings, relay configuration, backend selection, and lease-to-static-mapping conversion are now capability-gated through pfREST. Local validation checks interface addressing, subnet boundaries, lease ordering, duplicate clients, and pool or mapping conflicts before submission.
 - **Routing management** — gateways, monitoring addresses and thresholds, default gateways, gateway groups, trigger levels, and static routes can now be managed through capability-reported pfREST endpoints. Gateway status remains linked to configuration, destructive gateway changes check known dependencies, and routing changes are applied only after successful writes.
 
 ### Changed
