@@ -6,6 +6,7 @@ import '../models/system_service.dart';
 import '../providers/session_provider.dart';
 import '../widgets/slide_to_confirm.dart';
 import '../widgets/state_message.dart';
+import 'dns_management_screen.dart';
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
@@ -66,7 +67,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
       setState(() {
         _services = [];
         _lastSuccessfulRefresh = null;
-        _error = AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
+        _error =
+            AppLocalizations.of(context)?.disconnectedMessage ?? 'Disconnected';
       });
       return;
     }
@@ -100,6 +102,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _openDnsManagement() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const DnsManagementScreen()),
+    );
+    if (mounted) await _load(showSpinner: true);
   }
 
   Future<void> _act(SystemService service, String action) async {
@@ -183,6 +192,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final session = context.watch<PfSenseSessionProvider>();
+    final canManageDns =
+        session.dnsManagementService?.capabilities.canReadAnything == true;
 
     return RefreshIndicator(
       onRefresh: () => _load(showSpinner: true),
@@ -197,6 +208,15 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              IconButton.filledTonal(
+                key: const Key('open-dns-management'),
+                tooltip: 'Configure DNS services',
+                onPressed: canManageDns && _busyService == null
+                    ? _openDnsManagement
+                    : null,
+                icon: const Icon(Icons.dns_outlined),
+              ),
+              const SizedBox(width: 8),
               IconButton.filledTonal(
                 onPressed: _loading || !session.connected
                     ? null
