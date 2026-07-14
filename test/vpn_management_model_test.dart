@@ -40,8 +40,8 @@ void main() {
     final source = <String, dynamic>{
       'id': 4,
       'descr': 'Site peer',
-      'publickey': 'A' * 43 + '=',
-      'presharedkey': 'B' * 43 + '=',
+      'publickey': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      'presharedkey': 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
       'runtime_status': 'up',
       'allowedips': [
         {'address': '10.0.0.0', 'mask': 24},
