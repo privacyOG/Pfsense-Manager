@@ -133,6 +133,11 @@ class DiagnosticsRecoveryService {
     };
     final body = _valuesForLocation(operation, values, 'body');
     final query = _valuesForLocation(operation, values, 'query');
+    if (query.isNotEmpty) {
+      throw UnsupportedApiFeatureException(
+        'Configuration rollback requires a body-based restore operation.',
+      );
+    }
     switch (operation.method) {
       case 'POST':
         await _client.post(operation.path, data: body.isEmpty ? null : body);
@@ -142,11 +147,6 @@ class DiagnosticsRecoveryService {
         throw UnsupportedApiFeatureException(
           '${operation.method} configuration rollback',
         );
-    }
-    if (query.isNotEmpty) {
-      throw UnsupportedApiFeatureException(
-        'Configuration rollback requires query parameters that this operation cannot safely submit.',
-      );
     }
   }
 
@@ -174,14 +174,15 @@ class DiagnosticsRecoveryService {
       capabilities.commandPrompt,
       'Command prompt',
     );
-    final commandField = operation.requestFields.values
-        .where(
-          (field) =>
-              field.location.toLowerCase() == 'body' &&
-              !field.readOnly &&
-              field.name == 'command',
-        )
-        .firstOrNull;
+    PfRestFieldConstraint? commandField;
+    for (final field in operation.requestFields.values) {
+      if (field.location.toLowerCase() == 'body' &&
+          !field.readOnly &&
+          field.name == 'command') {
+        commandField = field;
+        break;
+      }
+    }
     if (commandField == null) {
       throw UnsupportedApiFeatureException(
         'Command prompt request schema',
