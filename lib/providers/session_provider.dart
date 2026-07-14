@@ -10,6 +10,7 @@ import '../services/firewall_rule_service.dart';
 import '../services/interface_management_service.dart';
 import '../services/pfrest_capability_service.dart';
 import '../services/pfsense_service.dart';
+import '../services/routing_management_service.dart';
 import 'profile_provider.dart';
 
 typedef ConnectionProfileResolver = Future<PfSenseProfile> Function(
@@ -41,6 +42,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
   FirewallNatService? _firewallNatService;
   FirewallRuleService? _firewallRuleService;
   InterfaceManagementService? _interfaceManagementService;
+  RoutingManagementService? _routingManagementService;
   PfRestCapabilityService? _capabilityService;
   bool _connected = false;
   bool _connecting = false;
@@ -57,6 +59,8 @@ class PfSenseSessionProvider extends ChangeNotifier {
   FirewallRuleService? get firewallRuleService => _firewallRuleService;
   InterfaceManagementService? get interfaceManagementService =>
       _interfaceManagementService;
+  RoutingManagementService? get routingManagementService =>
+      _routingManagementService;
   PfRestCapabilityService? get capabilityService => _capabilityService;
   PfRestCapabilities? get capabilities => _capabilityService?.current;
   bool get connected => _connected;
@@ -109,6 +113,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     FirewallNatService? candidateNat;
     FirewallRuleService? candidateRules;
     InterfaceManagementService? candidateInterfaces;
+    RoutingManagementService? candidateRouting;
     PfRestCapabilityService? candidateCapabilities;
     try {
       final connectionProfile = await _profileResolver(profile);
@@ -144,6 +149,10 @@ class PfSenseSessionProvider extends ChangeNotifier {
         client,
         capabilityService: candidateCapabilities,
       );
+      candidateRouting = RoutingManagementService(
+        client,
+        capabilityService: candidateCapabilities,
+      );
       client = null;
       await candidateCapabilities.refresh();
 
@@ -158,12 +167,14 @@ class PfSenseSessionProvider extends ChangeNotifier {
       _firewallNatService = candidateNat;
       _firewallRuleService = candidateRules;
       _interfaceManagementService = candidateInterfaces;
+      _routingManagementService = candidateRouting;
       _capabilityService = candidateCapabilities;
       candidate = null;
       candidateAliases = null;
       candidateNat = null;
       candidateRules = null;
       candidateInterfaces = null;
+      candidateRouting = null;
       candidateCapabilities = null;
       _connected = true;
       _connecting = false;
@@ -257,6 +268,7 @@ class PfSenseSessionProvider extends ChangeNotifier {
     _firewallNatService = null;
     _firewallRuleService = null;
     _interfaceManagementService = null;
+    _routingManagementService = null;
   }
 
   @override
