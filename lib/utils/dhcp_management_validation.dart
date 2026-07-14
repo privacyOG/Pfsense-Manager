@@ -68,13 +68,12 @@ DhcpValidationResult validateDhcpResourceValues({
   final errors = <String, String>{};
   _validateSchema(values, operation, errors);
 
-  switch (kind) {
-    case DhcpResourceKind.server:
-      _validateServer(values, context, errors);
-    case DhcpResourceKind.staticMapping:
-      _validateStaticMapping(values, context, errors);
-    case DhcpResourceKind.addressPool:
-      _validateAddressPool(values, context, errors);
+  if (kind == DhcpResourceKind.server) {
+    _validateServer(values, context, errors);
+  } else if (kind == DhcpResourceKind.staticMapping) {
+    _validateStaticMapping(values, context, errors);
+  } else {
+    _validateAddressPool(values, context, errors);
   }
 
   return DhcpValidationResult(Map.unmodifiable(errors));
@@ -366,7 +365,8 @@ _Ipv4Range? _validateRange(
   if (to == null) errors['range_to'] = 'Enter a valid IPv4 address.';
   if (from == null || to == null) return null;
   if (from > to) {
-    errors['range_from'] = 'The range start cannot be greater than the range end.';
+    errors['range_from'] =
+        'The range start cannot be greater than the range end.';
     return null;
   }
   if (subnet != null) {
@@ -389,10 +389,12 @@ void _validateLeaseTimes(
   final defaultLease = _integer(values['defaultleasetime']);
   final maxLease = _integer(values['maxleasetime']);
   if (defaultLease != null && defaultLease < 60) {
-    errors['defaultleasetime'] = 'Default lease time must be at least 60 seconds.';
+    errors['defaultleasetime'] =
+        'Default lease time must be at least 60 seconds.';
   }
   if (maxLease != null && maxLease < 60) {
-    errors['maxleasetime'] = 'Maximum lease time must be at least 60 seconds.';
+    errors['maxleasetime'] =
+        'Maximum lease time must be at least 60 seconds.';
   }
   if (defaultLease != null && maxLease != null && maxLease < defaultLease) {
     errors['maxleasetime'] =
@@ -422,8 +424,13 @@ void _validateServerLists(
 }) {
   _validateIpList(values, 'dnsserver', 4, errors);
   _validateIpList(values, 'winsserver', 2, errors);
-  _validateIpList(values, 'ntpserver', mapping ? 3 : 4, errors,
-      allowHostname: true);
+  _validateIpList(
+    values,
+    'ntpserver',
+    mapping ? 3 : 4,
+    errors,
+    allowHostname: true,
+  );
   _validateMacList(values, 'mac_allow', errors);
   _validateMacList(values, 'mac_deny', errors);
   final domains = _stringList(values['domainsearchlist']);
@@ -486,7 +493,8 @@ void _validateSchema(
       if (number == null) {
         errors[field.name] = '${_label(field.name)} must be a number.';
       } else if (!field.permitsNumber(number)) {
-        errors[field.name] = '${_label(field.name)} is outside the allowed range.';
+        errors[field.name] =
+            '${_label(field.name)} is outside the allowed range.';
       }
     }
     final text = value is String ? value : null;
@@ -504,9 +512,9 @@ void _validateSchema(
       }
     }
     if (field.allowedValues.isNotEmpty &&
-        !field.allowedValues.map((value) => value?.toString()).contains(
-              value.toString(),
-            )) {
+        !field.allowedValues
+            .map((value) => value?.toString())
+            .contains(value.toString())) {
       errors[field.name] = '${_label(field.name)} is not supported.';
     }
   }
@@ -539,7 +547,8 @@ _Ipv4Subnet? _subnetForInterface(ManagedInterfaceResource? interface) {
   final address = _ipv4ToInt(interface.ipv4Address);
   final prefix = interface.ipv4Prefix!;
   if (address == null || prefix < 0 || prefix > 32) return null;
-  final mask = prefix == 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF;
+  final mask =
+      prefix == 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF;
   final network = address & mask;
   final broadcast = network | (~mask & 0xFFFFFFFF);
   return _Ipv4Subnet(network, broadcast);
