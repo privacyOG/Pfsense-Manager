@@ -51,59 +51,58 @@ class _DhcpResourceFormScreenState extends State<DhcpResourceFormScreen> {
       ...?widget.resource?.raw,
       ...widget.initialValues,
     };
-    switch (widget.kind) {
-      case DhcpResourceKind.server:
-        _values.putIfAbsent('enable', () => false);
-        _values.putIfAbsent('defaultleasetime', () => 7200);
-        _values.putIfAbsent('maxleasetime', () => 86400);
-        for (final name in const [
-          'dnsserver',
-          'winsserver',
-          'ntpserver',
-          'domainsearchlist',
-          'mac_allow',
-          'mac_deny',
-        ]) {
-          _values.putIfAbsent(name, () => <String>[]);
-        }
-        for (final name in const [
-          'staticarp',
-          'ignorebootp',
-          'ignoreclientuids',
-          'nonak',
-          'disablepingcheck',
-          'dhcpleaseinlocaltime',
-          'statsgraph',
-        ]) {
-          _values.putIfAbsent(name, () => false);
-        }
-      case DhcpResourceKind.staticMapping:
-        _values.putIfAbsent('defaultleasetime', () => 7200);
-        _values.putIfAbsent('maxleasetime', () => 86400);
-        _values.putIfAbsent('arp_table_static_entry', () => false);
-        for (final name in const [
-          'dnsserver',
-          'winsserver',
-          'ntpserver',
-          'domainsearchlist',
-        ]) {
-          _values.putIfAbsent(name, () => <String>[]);
-        }
-      case DhcpResourceKind.addressPool:
-        _values.putIfAbsent('defaultleasetime', () => 7200);
-        _values.putIfAbsent('maxleasetime', () => 86400);
-        _values.putIfAbsent('ignorebootp', () => false);
-        _values.putIfAbsent('ignoreclientuids', () => false);
-        for (final name in const [
-          'dnsserver',
-          'winsserver',
-          'ntpserver',
-          'domainsearchlist',
-          'mac_allow',
-          'mac_deny',
-        ]) {
-          _values.putIfAbsent(name, () => <String>[]);
-        }
+    if (widget.kind == DhcpResourceKind.server) {
+      _values.putIfAbsent('enable', () => false);
+      _values.putIfAbsent('defaultleasetime', () => 7200);
+      _values.putIfAbsent('maxleasetime', () => 86400);
+      for (final name in const [
+        'dnsserver',
+        'winsserver',
+        'ntpserver',
+        'domainsearchlist',
+        'mac_allow',
+        'mac_deny',
+      ]) {
+        _values.putIfAbsent(name, () => <String>[]);
+      }
+      for (final name in const [
+        'staticarp',
+        'ignorebootp',
+        'ignoreclientuids',
+        'nonak',
+        'disablepingcheck',
+        'dhcpleaseinlocaltime',
+        'statsgraph',
+      ]) {
+        _values.putIfAbsent(name, () => false);
+      }
+    } else if (widget.kind == DhcpResourceKind.staticMapping) {
+      _values.putIfAbsent('defaultleasetime', () => 7200);
+      _values.putIfAbsent('maxleasetime', () => 86400);
+      _values.putIfAbsent('arp_table_static_entry', () => false);
+      for (final name in const [
+        'dnsserver',
+        'winsserver',
+        'ntpserver',
+        'domainsearchlist',
+      ]) {
+        _values.putIfAbsent(name, () => <String>[]);
+      }
+    } else {
+      _values.putIfAbsent('defaultleasetime', () => 7200);
+      _values.putIfAbsent('maxleasetime', () => 86400);
+      _values.putIfAbsent('ignorebootp', () => false);
+      _values.putIfAbsent('ignoreclientuids', () => false);
+      for (final name in const [
+        'dnsserver',
+        'winsserver',
+        'ntpserver',
+        'domainsearchlist',
+        'mac_allow',
+        'mac_deny',
+      ]) {
+        _values.putIfAbsent(name, () => <String>[]);
+      }
     }
   }
 
