@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pfsense_manager/models/administration_management.dart';
 import 'package:pfsense_manager/models/profile.dart';
+import 'package:pfsense_manager/services/administration_basic_auth_transport.dart';
 import 'package:pfsense_manager/services/administration_management_service.dart';
 import 'package:pfsense_manager/services/api_client.dart';
 import 'package:pfsense_manager/services/pfrest_capability_service.dart';
@@ -20,6 +21,7 @@ void main() {
     service = AdministrationManagementService(
       client,
       capabilityService: capabilityService,
+      basicAuthTransport: client.basicAuthTransport,
     );
     await capabilityService.refresh();
     client.requests.clear();
@@ -97,6 +99,7 @@ void main() {
     final readOnlyService = AdministrationManagementService(
       readOnlyClient,
       capabilityService: readOnlyCapabilities,
+      basicAuthTransport: readOnlyClient.basicAuthTransport,
     );
     addTearDown(() {
       readOnlyCapabilities.dispose();
@@ -109,7 +112,10 @@ void main() {
     );
     expect(capability.canRead, isTrue);
     expect(capability.readOnly, isTrue);
-    expect(await readOnlyService.list(AdministrationResourceKind.users), isNotEmpty);
+    expect(
+      await readOnlyService.list(AdministrationResourceKind.users),
+      isNotEmpty,
+    );
   });
 }
 
@@ -129,13 +135,18 @@ class _AdministrationApiClient extends PfSenseApiClient {
   final bool readOnly;
   final List<_Request> requests = [];
 
+  AdministrationBasicAuthTransport get basicAuthTransport =>
+      _FakeBasicAuthTransport(requests);
+
   @override
   Future<Response<dynamic>> get(
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
     requests.add(_Request('GET', path, queryParameters: queryParameters));
-    if (path == pfRestOpenApiSchemaPath) return _response(path, _schema(readOnly));
+    if (path == pfRestOpenApiSchemaPath) {
+      return _response(path, _schema(readOnly));
+    }
     if (path == '/api/v2/users') {
       return _response(path, {
         'data': [
@@ -176,9 +187,15 @@ class _AdministrationApiClient extends PfSenseApiClient {
     if (path == '/api/v2/user') return _response(path, {'data': data});
     throw StateError('Unexpected PATCH $path');
   }
+}
+
+class _FakeBasicAuthTransport implements AdministrationBasicAuthTransport {
+  const _FakeBasicAuthTransport(this.requests);
+
+  final List<_Request> requests;
 
   @override
-  Future<Response<dynamic>> postWithBasicAuth(String path, {dynamic data}) async {
+  Future<Response<dynamic>> post(String path, {dynamic data}) async {
     requests.add(_Request('POST_BASIC', path, data: data));
     return _response(path, {
       'data': {
@@ -190,7 +207,7 @@ class _AdministrationApiClient extends PfSenseApiClient {
   }
 
   @override
-  Future<Response<dynamic>> deleteWithBasicAuth(
+  Future<Response<dynamic>> delete(
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
