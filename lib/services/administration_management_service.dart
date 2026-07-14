@@ -159,7 +159,9 @@ class AdministrationManagementService {
     };
     return AdministrationOperationResult.fromResponse(
       response.data,
-      captureSecret: kind.secretResult,
+      captureSecret: kind.secretResult ||
+          kind == AdministrationActionKind.generateCertificateAuthority ||
+          kind == AdministrationActionKind.generateCertificate,
     );
   }
 
