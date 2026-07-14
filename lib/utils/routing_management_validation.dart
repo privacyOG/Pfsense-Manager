@@ -9,9 +9,7 @@ class RoutingValidationResult {
   final Map<String, String> errors;
 
   bool get isValid => errors.isEmpty;
-  String get summary => isValid
-      ? 'Valid'
-      : errors.values.first;
+  String get summary => isValid ? 'Valid' : errors.values.first;
 }
 
 Map<String, dynamic> normaliseRoutingValues(
@@ -58,13 +56,12 @@ RoutingValidationResult validateRoutingValues({
   final errors = <String, String>{};
   _validateSchema(values, operation, errors);
 
-  switch (kind) {
-    case RoutingResourceKind.gateway:
-      _validateGateway(values, errors);
-    case RoutingResourceKind.gatewayGroup:
-      _validateGatewayGroup(values, gatewayFamilies, errors);
-    case RoutingResourceKind.staticRoute:
-      _validateStaticRoute(values, gatewayFamilies, errors);
+  if (kind == RoutingResourceKind.gateway) {
+    _validateGateway(values, errors);
+  } else if (kind == RoutingResourceKind.gatewayGroup) {
+    _validateGatewayGroup(values, gatewayFamilies, errors);
+  } else {
+    _validateStaticRoute(values, gatewayFamilies, errors);
   }
 
   return RoutingValidationResult(Map.unmodifiable(errors));
@@ -140,9 +137,9 @@ void _validateSchema(
     }
 
     if (field.allowedValues.isNotEmpty &&
-        !field.allowedValues.map((item) => item?.toString()).contains(
-              value.toString(),
-            )) {
+        !field.allowedValues
+            .map((item) => item?.toString())
+            .contains(value.toString())) {
       errors[field.name] = '${_label(field.name)} is not supported.';
     }
   }
@@ -154,7 +151,8 @@ void _validateGateway(
 ) {
   final name = _text(values['name']);
   if (name.isNotEmpty && !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(name)) {
-    errors['name'] = 'Gateway name may contain only letters, numbers and underscores.';
+    errors['name'] =
+        'Gateway name may contain only letters, numbers and underscores.';
   }
   if (name.length > 31) {
     errors['name'] = 'Gateway name cannot exceed 31 characters.';
@@ -185,10 +183,12 @@ void _validateGateway(
     if (address == null) {
       errors['monitor'] = 'Enter a valid monitoring IP address.';
     } else if (family == 'inet' && address.type != InternetAddressType.IPv4) {
-      errors['monitor'] = 'An IPv4 gateway requires an IPv4 monitoring address.';
+      errors['monitor'] =
+          'An IPv4 gateway requires an IPv4 monitoring address.';
     } else if (family == 'inet6' &&
         address.type != InternetAddressType.IPv6) {
-      errors['monitor'] = 'An IPv6 gateway requires an IPv6 monitoring address.';
+      errors['monitor'] =
+          'An IPv6 gateway requires an IPv6 monitoring address.';
     }
   }
 
@@ -230,8 +230,7 @@ void _validateGatewayGroup(
 
   final names = <String>{};
   String? family;
-  for (var index = 0; index < priorities.length; index++) {
-    final value = priorities[index];
+  for (final value in priorities) {
     if (value is! Map) {
       errors['priorities'] = 'Gateway group priorities are invalid.';
       return;
@@ -271,20 +270,24 @@ void _validateStaticRoute(
   String? family;
   if (network.isNotEmpty && network.contains('/')) {
     final pieces = network.split('/');
-    final address = pieces.length == 2 ? InternetAddress.tryParse(pieces[0]) : null;
+    final address =
+        pieces.length == 2 ? InternetAddress.tryParse(pieces[0]) : null;
     final prefix = pieces.length == 2 ? int.tryParse(pieces[1]) : null;
     if (address == null || prefix == null) {
-      errors['network'] = 'Enter a valid IPv4 or IPv6 network in CIDR notation.';
+      errors['network'] =
+          'Enter a valid IPv4 or IPv6 network in CIDR notation.';
     } else {
       final maxPrefix = address.type == InternetAddressType.IPv4 ? 32 : 128;
       if (prefix < 0 || prefix > maxPrefix) {
-        errors['network'] = 'The network prefix must be between 0 and $maxPrefix.';
+        errors['network'] =
+            'The network prefix must be between 0 and $maxPrefix.';
       }
       family = address.type == InternetAddressType.IPv4 ? 'inet' : 'inet6';
     }
   } else if (network.isNotEmpty &&
       !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(network)) {
-    errors['network'] = 'Enter a CIDR network or a valid network alias name.';
+    errors['network'] =
+        'Enter a CIDR network or a valid network alias name.';
   }
 
   final gateway = _text(values['gateway']);
@@ -305,7 +308,8 @@ void _validateHighGreaterThanLow(
   final low = _integer(values[lowName]);
   final high = _integer(values[highName]);
   if (low != null && high != null && high <= low) {
-    errors[highName] = 'The high $label threshold must be greater than the low threshold.';
+    errors[highName] =
+        'The high $label threshold must be greater than the low threshold.';
   }
 }
 
