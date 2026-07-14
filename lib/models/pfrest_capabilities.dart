@@ -26,6 +26,9 @@ class PfRestFieldConstraint {
     this.pattern,
     this.allowedValues = const [],
     this.defaultValue,
+    this.description,
+    this.readOnly = false,
+    this.writeOnly = false,
   });
 
   final String name;
@@ -40,6 +43,9 @@ class PfRestFieldConstraint {
   final String? pattern;
   final List<Object?> allowedValues;
   final Object? defaultValue;
+  final String? description;
+  final bool readOnly;
+  final bool writeOnly;
 
   bool permitsNumber(num value) {
     final lower = minimum;
