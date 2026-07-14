@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- VPN dependency checks now resolve pfREST runtime identifiers (`ikeid`, WireGuard tunnel names, and OpenVPN `vpnid`) before permitting parent deletion, and WireGuard settings validate the active endpoint-resolution interval.
 - OpenAPI capability discovery now records field descriptions and read-only or write-only visibility metadata so schema-driven editors can suppress generated values and protect credentials.
 - Release metadata validation now keeps `pubspec.yaml`, `CHANGELOG.md`, README release guidance, and Android signing instructions consistent in pull-request and signed-release workflows.
 
