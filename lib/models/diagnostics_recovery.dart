@@ -222,13 +222,15 @@ String redactDiagnosticOutput(
 
   redacted = redacted.replaceAllMapped(
     RegExp(
-      r'(?i)(authorization\s*:\s*(?:bearer|basic)\s+|x-api-key\s*:\s*)[^\s]+',
+      r'(authorization\s*:\s*(?:bearer|basic)\s+|x-api-key\s*:\s*)[^\s]+',
+      caseSensitive: false,
     ),
     (match) => '${match.group(1)}[REDACTED]',
   );
   redacted = redacted.replaceAllMapped(
     RegExp(
-      r'(?i)\b(password|passwd|api[_-]?key|token|secret|client_secret)\s*[:=]\s*([^\s]+)',
+      r'\b(password|passwd|api[_-]?key|token|secret|client_secret)\s*[:=]\s*([^\s]+)',
+      caseSensitive: false,
     ),
     (match) => '${match.group(1)}=[REDACTED]',
   );
