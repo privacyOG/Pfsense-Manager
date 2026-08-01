@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 
 import '../models/profile.dart';
 import '../utils/api_exception.dart';
+import 'certificate_trust.dart';
 
 abstract class AdministrationBasicAuthTransport {
   Future<Response<dynamic>> post(String path, {dynamic data});
@@ -65,11 +66,39 @@ class PfSenseBasicAuthTransport implements AdministrationBasicAuthTransport {
         },
       ),
     );
+    String? certificateFailureMessage;
     if (profile.useHttps && profile.allowSelfSignedCert) {
+      final expectedFingerprint = normalizeCertificateFingerprint(
+        profile.trustedCertificateSha256,
+      );
+      if (!isValidCertificateFingerprint(expectedFingerprint)) {
+        throw const ApiException(
+          'This profile requires a trusted SHA-256 certificate fingerprint. Edit the profile and inspect the firewall certificate before connecting.',
+          null,
+          false,
+          false,
+          true,
+        );
+      }
       dio.httpClientAdapter = IOHttpClientAdapter(
-        createHttpClient: () => HttpClient()
-          ..badCertificateCallback =
-              (X509Certificate cert, String host, int port) => true,
+        createHttpClient: () {
+          final client = HttpClient();
+          client.badCertificateCallback = (_, __, ___) => true;
+          return client;
+        },
+        validateCertificate: (certificate, host, port) {
+          if (certificate == null) {
+            certificateFailureMessage =
+                'The firewall did not present a TLS certificate.';
+            return false;
+          }
+          final presented = sha256FingerprintFromDer(certificate.der);
+          final matches = presented == expectedFingerprint;
+          certificateFailureMessage = matches
+              ? null
+              : 'The firewall certificate changed. Expected ${formatCertificateFingerprint(expectedFingerprint)} but received ${formatCertificateFingerprint(presented)}.';
+          return matches;
+        },
       );
     }
 
@@ -98,6 +127,18 @@ class PfSenseBasicAuthTransport implements AdministrationBasicAuthTransport {
       }
       return response;
     } on DioException catch (error) {
+      if (certificateFailureMessage != null &&
+          (error.type == DioExceptionType.badCertificate ||
+              error.type == DioExceptionType.connectionError ||
+              error.type == DioExceptionType.unknown)) {
+        throw ApiException(
+          certificateFailureMessage!,
+          error.response?.statusCode,
+          false,
+          false,
+          true,
+        );
+      }
       throw ApiException.fromDio(error);
     } finally {
       dio.close(force: true);
