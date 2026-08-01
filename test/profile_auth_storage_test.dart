@@ -26,21 +26,26 @@ void main() {
     expect(profile.authMode, PfSenseAuthMode.apiKey);
     expect(profile.apiKey, isEmpty);
     expect(profile.password, isEmpty);
+    expect(profile.trustedCertificateSha256, isEmpty);
   });
 
-  test('profile metadata includes the mode but excludes both secrets', () {
+  test('profile metadata includes mode and trust data but excludes secrets', () {
     final profile = PfSenseProfile(
       id: 'jwt-export',
       name: 'JWT profile',
       host: 'firewall.example.test',
       username: 'local-admin',
       authMode: PfSenseAuthMode.jwtPassword,
+      allowSelfSignedCert: true,
+      trustedCertificateSha256:
+          '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF',
       apiKey: 'api-secret',
       password: 'password-secret',
     );
 
     final json = profile.toJson();
     expect(json['authMode'], 'jwt_password');
+    expect(json['trustedCertificateSha256'], hasLength(64));
     expect(json.containsKey('apiKey'), isFalse);
     expect(json.containsKey('password'), isFalse);
     expect(json.values, isNot(contains('api-secret')));
@@ -61,7 +66,7 @@ void main() {
         id: 'api-profile',
         name: 'API profile',
         host: 'api.example.test',
-        username: 'api-user',
+        username: '',
       ),
     );
     final jwtProfile = await ProfileProvider.resolveForConnection(
@@ -120,7 +125,7 @@ void main() {
         id: 'export-api',
         name: 'Export API',
         host: 'api.example.test',
-        username: 'api-user',
+        username: '',
         apiKey: 'private-api-key',
       ),
     );
@@ -144,6 +149,37 @@ void main() {
     expect(exported, contains('jwt_password'));
   });
 
+  test('changing authentication mode removes the inactive credential',
+      () async {
+    final provider = ProfileProvider();
+    addTearDown(provider.dispose);
+    const storage = FlutterSecureStorage();
+
+    await provider.addProfile(
+      PfSenseProfile(
+        id: 'switch-mode',
+        name: 'Switch mode',
+        host: 'firewall.example.test',
+        username: '',
+        apiKey: 'saved-api-key',
+      ),
+    );
+
+    await provider.updateProfile(
+      provider.profiles.single.copyWith(
+        username: 'local-admin',
+        authMode: PfSenseAuthMode.jwtPassword,
+        password: 'saved-password',
+      ),
+    );
+
+    expect(await storage.read(key: 'profile_api_key_switch-mode'), isNull);
+    expect(
+      await storage.read(key: 'profile_password_switch-mode'),
+      'saved-password',
+    );
+  });
+
   test('removing a profile deletes both secure credential slots', () async {
     final provider = ProfileProvider();
     addTearDown(provider.dispose);
@@ -154,10 +190,13 @@ void main() {
         id: 'delete-secrets',
         name: 'Delete secrets',
         host: 'firewall.example.test',
-        username: 'local-admin',
+        username: '',
         apiKey: 'saved-api-key',
-        password: 'saved-password',
       ),
+    );
+    await storage.write(
+      key: 'profile_password_delete-secrets',
+      value: 'legacy-password',
     );
 
     expect(
@@ -166,7 +205,7 @@ void main() {
     );
     expect(
       await storage.read(key: 'profile_password_delete-secrets'),
-      'saved-password',
+      'legacy-password',
     );
 
     await provider.removeProfile('delete-secrets');
