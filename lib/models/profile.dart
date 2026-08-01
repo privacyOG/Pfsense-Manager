@@ -24,6 +24,7 @@ class PfSenseProfile {
   int port;
   bool useHttps;
   bool allowSelfSignedCert;
+  String trustedCertificateSha256;
   String username;
   PfSenseAuthMode authMode;
   String apiKey; // Encrypted at rest via flutter_secure_storage.
@@ -36,6 +37,7 @@ class PfSenseProfile {
     this.port = 443,
     this.useHttps = true,
     this.allowSelfSignedCert = false,
+    this.trustedCertificateSha256 = '',
     required this.username,
     this.authMode = PfSenseAuthMode.apiKey,
     this.apiKey = '',
@@ -70,6 +72,7 @@ class PfSenseProfile {
       'port': port,
       'useHttps': useHttps,
       'allowSelfSignedCert': allowSelfSignedCert,
+      'trustedCertificateSha256': trustedCertificateSha256,
       'username': username,
       'authMode': authMode.storageValue,
       // Secrets are stored separately in secure storage and are never exported.
@@ -84,7 +87,9 @@ class PfSenseProfile {
       port: json['port'] as int? ?? 443,
       useHttps: json['useHttps'] as bool? ?? true,
       allowSelfSignedCert: json['allowSelfSignedCert'] as bool? ?? false,
-      username: json['username'] as String,
+      trustedCertificateSha256:
+          json['trustedCertificateSha256']?.toString() ?? '',
+      username: json['username'] as String? ?? '',
       authMode: PfSenseAuthMode.fromStorage(json['authMode']),
     );
   }
@@ -96,6 +101,7 @@ class PfSenseProfile {
     int? port,
     bool? useHttps,
     bool? allowSelfSignedCert,
+    String? trustedCertificateSha256,
     String? username,
     PfSenseAuthMode? authMode,
     String? apiKey,
@@ -108,6 +114,8 @@ class PfSenseProfile {
       port: port ?? this.port,
       useHttps: useHttps ?? this.useHttps,
       allowSelfSignedCert: allowSelfSignedCert ?? this.allowSelfSignedCert,
+      trustedCertificateSha256:
+          trustedCertificateSha256 ?? this.trustedCertificateSha256,
       username: username ?? this.username,
       authMode: authMode ?? this.authMode,
       apiKey: apiKey ?? this.apiKey,
