@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
+import '../services/certificate_trust.dart';
 import '../widgets/brand_mark.dart';
 import 'home_shell.dart';
 import 'onboarding_screen.dart';
@@ -169,9 +170,8 @@ class _SecureApiLoginScreenState extends State<SecureApiLoginScreen> {
                   items: [
                     'Credentials are read from secure storage only at connection time.',
                     'This profile uses HTTPS on port ${selected.port}.',
-                    selected.allowSelfSignedCert
-                        ? 'Self-signed certificates are allowed for this profile.'
-                        : 'Self-signed certificates are blocked for this profile.',
+                    _certificateStatus(selected),
+                    'App content is protected from screenshots and screen recording.',
                     'Headers and API secrets are not printed to app logs.',
                   ],
                 ),
@@ -181,6 +181,16 @@ class _SecureApiLoginScreenState extends State<SecureApiLoginScreen> {
         );
       },
     );
+  }
+
+  String _certificateStatus(PfSenseProfile profile) {
+    if (!profile.allowSelfSignedCert) {
+      return 'The firewall certificate must pass the Android system trust checks.';
+    }
+    if (!isValidCertificateFingerprint(profile.trustedCertificateSha256)) {
+      return 'Certificate pinning is enabled but the trusted fingerprint must be reviewed.';
+    }
+    return 'The firewall certificate is pinned to a saved SHA-256 fingerprint.';
   }
 }
 
@@ -215,7 +225,9 @@ class _EndpointPreview extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'API user: ${profile.username}',
+                  profile.authMode == PfSenseAuthMode.apiKey
+                      ? 'Authentication: API key'
+                      : 'API user: ${profile.username}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: scheme.onSurfaceVariant),
