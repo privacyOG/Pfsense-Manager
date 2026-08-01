@@ -9,6 +9,7 @@ import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
 import '../services/api_client.dart';
+import '../services/certificate_trust.dart';
 import '../services/connection_check.dart';
 import 'profile_form_screen.dart';
 
@@ -191,37 +192,65 @@ class _ProfileTileState extends State<_ProfileTile> {
     final l = AppLocalizations.of(context);
     final p = context.watch<ProfileProvider>();
     final selected = p.selectedProfileId == widget.profile.id;
+    final pinned = widget.profile.allowSelfSignedCert;
+    final validFingerprint = isValidCertificateFingerprint(
+      widget.profile.trustedCertificateSha256,
+    );
+
     return Card(
       child: Column(
         children: [
           ListTile(
             selected: selected,
+            isThreeLine: pinned,
             leading: Icon(
               selected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
             ),
             title: Text(widget.profile.name),
-            subtitle: Text(widget.profile.baseUrl),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.profile.baseUrl),
+                if (pinned)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          validFingerprint
+                              ? Icons.verified_user_outlined
+                              : Icons.warning_amber_rounded,
+                          size: 16,
+                          color: validFingerprint
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            validFingerprint
+                                ? 'Firewall certificate pinned'
+                                : 'Certificate trust requires review',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
             onTap: () => context
                 .read<ProfileProvider>()
                 .selectProfile(widget.profile.id),
             trailing: IconButton(
+              tooltip: 'Edit profile',
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => ProfileFormScreen(profile: widget.profile),
                 ),
               ),
-            ),
-          ),
-          SwitchListTile(
-            value: widget.profile.allowSelfSignedCert,
-            onChanged: (v) => context
-                .read<ProfileProvider>()
-                .updateProfile(widget.profile.copyWith(allowSelfSignedCert: v)),
-            title: Text(
-              l?.allowSelfSigned ?? 'Allow self-signed certificate',
             ),
           ),
           OverflowBar(
