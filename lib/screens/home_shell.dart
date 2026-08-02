@@ -1,33 +1,20 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
 import '../providers/session_provider.dart';
-import '../services/pfrest_feature_registry.dart';
 import '../widgets/brand_mark.dart';
-import '../widgets/pfrest_feature_gate.dart';
 import '../widgets/spotlight_search.dart';
-import 'alert_settings_screen.dart';
 import 'dashboard_screen.dart';
-import 'diagnostics_screen.dart';
 import 'dhcp_leases_screen.dart';
 import 'firewall_logs_screen.dart';
 import 'firewall_rules_screen.dart';
-import 'hardware_health_screen.dart';
+import 'more_screen.dart';
 import 'network_monitor_screen.dart';
-import 'pfrest_feature_routes.dart';
 import 'profiles_screen.dart';
-import 'services_screen.dart';
-import 'settings_screen.dart';
-import 'system_logs_screen.dart';
-import 'system_screen.dart';
 import 'top_talkers_screen.dart';
 import 'vpn_screen.dart';
 
@@ -168,34 +155,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ),
       ),
       _PrimaryDestination(
-        label: strings.t('services'),
-        icon: Icons.miscellaneous_services_outlined,
-        selectedIcon: Icons.miscellaneous_services,
-        child: _TabbedSection(
-          tabs: [
-            _SectionTab(
-              strings.t('services'),
-              Icons.miscellaneous_services_outlined,
-              const ServicesScreen(),
-            ),
-            _SectionTab(
-              strings.t('vpn'),
-              Icons.vpn_key_outlined,
-              const VpnScreen(),
-            ),
-            _SectionTab(
-              strings.t('system'),
-              Icons.info_outline,
-              const SystemScreen(),
-            ),
-          ],
-        ),
+        label: strings.t('vpn'),
+        icon: Icons.vpn_key_outlined,
+        selectedIcon: Icons.vpn_key,
+        child: const VpnScreen(),
       ),
-      _PrimaryDestination(
+      const _PrimaryDestination(
         label: 'More',
         icon: Icons.more_horiz,
         selectedIcon: Icons.more,
-        child: _MoreSection(onDestinationSelected: _setSelectedDestination),
+        child: MoreScreen(),
       ),
     ];
 
@@ -212,7 +181,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         titleSpacing: 12,
         title: _ProfileTitle(profile: selectedProfile),
         actions: [
-          _SearchAction(profiles: profiles),
+          const _SearchAction(),
           _ProfileMenu(
             profiles: profiles.profiles,
             selectedProfile: selectedProfile,
@@ -360,7 +329,6 @@ class _TabbedSectionState extends State<_TabbedSection>
           color: Theme.of(context).colorScheme.surface,
           child: TabBar(
             controller: _controller,
-            isScrollable: widget.tabs.length > 3,
             tabs: [
               for (final tab in widget.tabs)
                 Tab(icon: Icon(tab.icon), text: tab.label),
@@ -386,14 +354,6 @@ class _ProfileTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
-    final status = session.connecting
-        ? 'Connecting'
-        : session.connected
-            ? 'Connected'
-            : session.connectionError != null
-                ? 'Connection error'
-                : 'Disconnected';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -403,7 +363,10 @@ class _ProfileTitle extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        Text(status, style: Theme.of(context).textTheme.labelSmall),
+        Text(
+          _sessionStatusLabel(session),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
       ],
     );
   }
@@ -505,9 +468,7 @@ class _ConnectionAction extends StatelessWidget {
 }
 
 class _SearchAction extends StatelessWidget {
-  const _SearchAction({required this.profiles});
-
-  final ProfileProvider profiles;
+  const _SearchAction();
 
   @override
   Widget build(BuildContext context) {
@@ -534,10 +495,11 @@ class _ConnectionStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final profile = context.watch<ProfileProvider>().selectedProfile;
     final session = context.watch<PfSenseSessionProvider>();
+    final scheme = Theme.of(context).colorScheme;
 
     if (profile == null) {
       return Material(
-        color: Theme.of(context).colorScheme.errorContainer,
+        color: scheme.errorContainer,
         child: ListTile(
           dense: true,
           leading: const Icon(Icons.warning_amber_rounded),
@@ -552,257 +514,76 @@ class _ConnectionStrip extends StatelessWidget {
       );
     }
 
-    if (session.connectionError == null) return const SizedBox.shrink();
+    if (session.connecting) {
+      return Material(
+        color: scheme.surfaceContainerHigh,
+        child: ListTile(
+          dense: true,
+          leading: const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          title: Text('Connecting to ${profile.name}'),
+          subtitle: Text(profile.baseUrl),
+        ),
+      );
+    }
+
+    if (session.connectionError != null) {
+      return Material(
+        color: scheme.errorContainer,
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.error_outline),
+          title: const Text('Firewall connection failed'),
+          subtitle: Text(
+            session.connectionError!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: TextButton(
+            onPressed: () => session.connect(profile),
+            child: const Text('Retry'),
+          ),
+        ),
+      );
+    }
+
+    if (session.connected) {
+      return Material(
+        color: scheme.primaryContainer.withValues(alpha: 0.45),
+        child: ListTile(
+          dense: true,
+          leading: Icon(Icons.check_circle, color: scheme.primary),
+          title: Text('Connected to ${profile.name}'),
+          subtitle: Text(
+            profile.baseUrl,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
 
     return Material(
-      color: Theme.of(context).colorScheme.errorContainer,
+      color: scheme.surfaceContainerHigh,
       child: ListTile(
         dense: true,
-        leading: const Icon(Icons.error_outline),
-        title: Text(
-          session.connectionError!,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        leading: const Icon(Icons.cloud_off_outlined),
+        title: Text('${profile.name} is disconnected'),
+        subtitle: Text(profile.baseUrl),
         trailing: TextButton(
-          onPressed: session.connecting ? null : () => session.connect(profile),
-          child: const Text('Retry'),
+          onPressed: () => session.connect(profile),
+          child: const Text('Connect'),
         ),
       ),
     );
   }
 }
 
-class _MoreSection extends StatefulWidget {
-  const _MoreSection({required this.onDestinationSelected});
-
-  final void Function(int) onDestinationSelected;
-
-  @override
-  State<_MoreSection> createState() => _MoreSectionState();
-}
-
-class _MoreSectionState extends State<_MoreSection> {
-  bool _backingUp = false;
-
-  Future<void> _downloadBackup(PfRestFeatureDecision decision) async {
-    if (_backingUp || !decision.canAttempt) return;
-    final session = context.read<PfSenseSessionProvider>();
-    if (!session.connected || session.service == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connect to a firewall first.')),
-      );
-      return;
-    }
-
-    setState(() => _backingUp = true);
-    try {
-      final bytes = await session.service!.getConfigBackup();
-      if (!mounted) return;
-      final directory = await getTemporaryDirectory();
-      final profileName = session.selectedProfile?.name ?? 'pfsense';
-      final safeName = profileName.replaceAll(
-        RegExp(r'[^a-zA-Z0-9._-]'),
-        '_',
-      );
-      final now = DateTime.now();
-      final timestamp = '${now.year}'
-          '${now.month.toString().padLeft(2, '0')}'
-          '${now.day.toString().padLeft(2, '0')}';
-      final file = File(
-        '${directory.path}/${safeName}_config_$timestamp.xml',
-      );
-      await file.writeAsBytes(bytes);
-      if (!mounted) return;
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: 'pfSense config backup – $profileName',
-      );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              pfRestFeatureRequestErrorMessage(
-                PfRestFeature.configurationBackup,
-                error,
-              ),
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _backingUp = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final session = context.watch<PfSenseSessionProvider>();
-    final registry = PfRestFeatureRegistry(
-      activeProfileId: session.selectedProfile?.id,
-      capabilities: session.capabilities,
-    );
-    final pfBlocker = registry.decision(PfRestFeature.pfBlockerStatus);
-    final backup = registry.decision(PfRestFeature.configurationBackup);
-    final smart = registry.decision(PfRestFeature.smartStatus);
-    final traceroute = registry.decision(PfRestFeature.traceroute);
-    final dnsLookup = registry.decision(PfRestFeature.dnsLookup);
-    final captiveSessions =
-        registry.decision(PfRestFeature.captivePortalSessions);
-    final captiveVouchers =
-        registry.decision(PfRestFeature.captivePortalVouchers);
-    final captiveEntry = captiveSessions.canAttempt
-        ? captiveSessions
-        : captiveVouchers;
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.storage_outlined),
-            title: const Text('Firewall profiles'),
-            subtitle: const Text('Add, edit, import or test connections'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfilesScreen()),
-            ),
-          ),
-        ),
-        Card(
-          child: PfRestFeatureListTile(
-            decision: pfBlocker,
-            enabled: session.connected,
-            icon: Icons.security_outlined,
-            title: 'pfBlockerNG',
-            availableSubtitle: 'DNSBL stats, blocklist updates and controls',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const PfBlockerFeatureScreen(),
-              ),
-            ),
-          ),
-        ),
-        Card(
-          child: PfRestFeatureListTile(
-            decision: backup,
-            enabled: session.connected && !_backingUp,
-            icon: Icons.backup_outlined,
-            title: 'Configuration backup',
-            availableSubtitle: 'Download the firewall XML configuration',
-            trailing: _backingUp
-                ? const SizedBox.square(
-                    dimension: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.download_outlined),
-            onTap: () => _downloadBackup(backup),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.notifications_active_outlined),
-            title: const Text('Background alerts'),
-            subtitle: const Text(
-              'Get notified when gateways drop or temperatures rise',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const AlertSettingsScreen(),
-              ),
-            ),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.monitor_heart_outlined),
-            title: const Text('Hardware health'),
-            subtitle: Text(
-              smart.isAvailable
-                  ? 'CPU temperatures, SMART drive status and memory trends'
-                  : smart.isUnsupported
-                      ? 'CPU temperatures and memory trends; SMART requires a custom extension'
-                      : 'CPU temperatures and memory trends; SMART availability is unknown',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: session.connected
-                ? () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const HardwareHealthScreen(),
-                      ),
-                    )
-                : null,
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.subject_outlined),
-            title: const Text('System logs'),
-            subtitle: const Text(
-              'Log sources reported by the connected pfREST schema',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: session.connected
-                ? () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SystemLogsScreen(),
-                      ),
-                    )
-                : null,
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.network_ping_outlined),
-            title: const Text('Remote diagnostics'),
-            subtitle: Text(
-              traceroute.isUnsupported && dnsLookup.isUnsupported
-                  ? 'Ping is available; traceroute and DNS require custom extensions'
-                  : 'Ping plus capability-aware traceroute and DNS lookup',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: session.connected
-                ? () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const DiagnosticsScreen(),
-                      ),
-                    )
-                : null,
-          ),
-        ),
-        Card(
-          child: PfRestFeatureListTile(
-            decision: captiveEntry,
-            enabled: session.connected,
-            icon: Icons.wifi_password_outlined,
-            title: 'Captive portal',
-            availableSubtitle: 'Manage supported guest sessions and vouchers',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const CaptivePortalFeatureScreen(),
-              ),
-            ),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.tune),
-            title: const Text('Settings'),
-            subtitle: const Text('Appearance, language and app security'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              final destination = await Navigator.of(context).push<int>(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-              if (destination != null && mounted) {
-                widget.onDestinationSelected(destination);
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
+String _sessionStatusLabel(PfSenseSessionProvider session) {
+  if (session.connecting) return 'Connecting';
+  if (session.connected) return 'Connected';
+  if (session.connectionError != null) return 'Connection error';
+  return 'Disconnected';
 }
