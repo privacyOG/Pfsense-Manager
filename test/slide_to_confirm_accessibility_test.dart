@@ -64,11 +64,10 @@ Future<void> _pumpSlider(
 }
 
 Future<void> _dragThumb(WidgetTester tester, Offset delta) async {
-  final gesture = await tester.startGesture(
-    tester.getCenter(find.byKey(const Key('slide-to-confirm-thumb'))),
+  await tester.drag(
+    find.byKey(const Key('slide-to-confirm-thumb')),
+    delta,
   );
-  await gesture.moveBy(delta);
-  await gesture.up();
   await tester.pumpAndSettle();
 }
 
@@ -105,25 +104,27 @@ void main() {
   testWidgets('assistive technology receives an actionable button',
       (tester) async {
     final semanticsHandle = tester.ensureSemantics();
-    addTearDown(semanticsHandle.dispose);
-
-    await _pumpSlider(
-      tester,
-      label: 'Confirm firewall reboot',
-      onConfirmed: () {},
-    );
-
-    expect(
-      tester.getSemantics(find.byKey(const Key('slide-to-confirm'))),
-      isSemantics(
+    try {
+      await _pumpSlider(
+        tester,
         label: 'Confirm firewall reboot',
-        value: '0%',
-        isButton: true,
-        hasEnabledState: true,
-        isEnabled: true,
-        hasTapAction: true,
-      ),
-    );
+        onConfirmed: () {},
+      );
+
+      expect(
+        tester.getSemantics(find.byKey(const Key('slide-to-confirm'))),
+        isSemantics(
+          label: 'Confirm firewall reboot',
+          value: '0%',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+        ),
+      );
+    } finally {
+      semanticsHandle.dispose();
+    }
   });
 
   testWidgets('keyboard activation confirms the focused control',
