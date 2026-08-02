@@ -49,26 +49,28 @@ class ProfileProvider extends ChangeNotifier {
         final apiKey = profile.apiKey.isNotEmpty
             ? profile.apiKey
             : await _defaultSecureStorage.read(
-                key: '$_apiKeySecurePrefix${profile.id}',
-              ) ??
+                  key: '$_apiKeySecurePrefix${profile.id}',
+                ) ??
                 '';
         return profile.copyWith(apiKey: apiKey, password: '');
       case PfSenseAuthMode.jwtPassword:
         final password = profile.password.isNotEmpty
             ? profile.password
             : await _defaultSecureStorage.read(
-                key: '$_passwordSecurePrefix${profile.id}',
-              ) ??
+                  key: '$_passwordSecurePrefix${profile.id}',
+                ) ??
                 '';
         return profile.copyWith(apiKey: '', password: password);
     }
   }
 
   Future<void> addProfile(PfSenseProfile profile) async {
+    await _storeActiveCredential(profile, requireCredential: true);
+    await _deleteInactiveCredential(profile.id, profile.authMode);
+
     _profiles.add(profile.copyWith(apiKey: '', password: ''));
     _selectedProfileId ??= profile.id;
     notifyListeners();
-    await _persistProfileSecrets(profile);
     await _saveProfiles();
     await _saveSelection();
   }
@@ -77,10 +79,16 @@ class ProfileProvider extends ChangeNotifier {
     final index = _profiles.indexWhere((p) => p.id == updated.id);
     if (index == -1) return;
 
+    final previous = _profiles[index];
+    final modeChanged = previous.authMode != updated.authMode;
+    await _storeActiveCredential(
+      updated,
+      requireCredential: modeChanged,
+    );
+    await _deleteInactiveCredential(updated.id, updated.authMode);
+
     _profiles[index] = updated.copyWith(apiKey: '', password: '');
     notifyListeners();
-
-    await _persistProfileSecrets(updated);
     await _saveProfiles();
   }
 
@@ -169,19 +177,41 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persistProfileSecrets(PfSenseProfile profile) async {
-    if (profile.apiKey.isNotEmpty) {
-      await _secureStorage.write(
-        key: '$_apiKeySecurePrefix${profile.id}',
-        value: profile.apiKey,
-      );
+  Future<void> _storeActiveCredential(
+    PfSenseProfile profile, {
+    required bool requireCredential,
+  }) async {
+    final value = switch (profile.authMode) {
+      PfSenseAuthMode.apiKey => profile.apiKey,
+      PfSenseAuthMode.jwtPassword => profile.password,
+    };
+    if (value.isEmpty) {
+      if (requireCredential) {
+        throw StateError(
+          profile.authMode == PfSenseAuthMode.apiKey
+              ? 'An API key is required for this profile.'
+              : 'A password is required for this profile.',
+        );
+      }
+      return;
     }
-    if (profile.password.isNotEmpty) {
-      await _secureStorage.write(
-        key: '$_passwordSecurePrefix${profile.id}',
-        value: profile.password,
-      );
-    }
+
+    final key = switch (profile.authMode) {
+      PfSenseAuthMode.apiKey => '$_apiKeySecurePrefix${profile.id}',
+      PfSenseAuthMode.jwtPassword => '$_passwordSecurePrefix${profile.id}',
+    };
+    await _secureStorage.write(key: key, value: value);
+  }
+
+  Future<void> _deleteInactiveCredential(
+    String profileId,
+    PfSenseAuthMode activeMode,
+  ) async {
+    final inactiveKey = switch (activeMode) {
+      PfSenseAuthMode.apiKey => '$_passwordSecurePrefix$profileId',
+      PfSenseAuthMode.jwtPassword => '$_apiKeySecurePrefix$profileId',
+    };
+    await _secureStorage.delete(key: inactiveKey);
   }
 
   Future<void> _saveProfiles() async {

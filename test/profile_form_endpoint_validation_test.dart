@@ -33,8 +33,7 @@ void main() {
       'https://user:secret@firewall.example.test',
     );
     await tester.enterText(fields.at(2), '443');
-    await tester.enterText(fields.at(3), 'api-user');
-    await tester.enterText(fields.at(4), 'api-key');
+    await tester.enterText(fields.at(3), 'api-key');
 
     final saveButton = find.widgetWithText(FilledButton, 'Save');
     await tester.ensureVisible(saveButton);
@@ -66,8 +65,7 @@ void main() {
     await tester.enterText(fields.at(0), 'IPv6 firewall');
     await tester.enterText(fields.at(1), 'https://[2001:db8::20]:8443');
     await tester.enterText(fields.at(2), '443');
-    await tester.enterText(fields.at(3), 'api-user');
-    await tester.enterText(fields.at(4), 'api-key');
+    await tester.enterText(fields.at(3), 'api-key');
 
     final saveButton = find.widgetWithText(FilledButton, 'Save');
     await tester.ensureVisible(saveButton);
@@ -80,5 +78,6 @@ void main() {
     expect(profile.port, 8443);
     expect(profile.useHttps, isTrue);
     expect(profile.baseUrl, 'https://[2001:db8::20]:8443');
+    expect(profile.username, isEmpty);
   });
 }

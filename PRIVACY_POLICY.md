@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective date: 16 June 2026
+Effective date: 2 August 2026
 
 pfSense Manager is an independent Android application for connecting to and managing pfSense systems configured by the user.
 
@@ -10,6 +10,7 @@ The app may process and display information obtained directly from user-configur
 
 - firewall hostnames, addresses and profile names
 - API credentials or keys
+- trusted TLS certificate fingerprints
 - system, firmware, interface and gateway information
 - firewall rules, logs and connection states
 - DHCP leases, VPN status and service status
@@ -29,13 +30,17 @@ The current app does not include developer-operated analytics, advertising, trac
 
 ## Local storage
 
-Saved firewall profiles and credentials are stored on the user's device. Credentials are stored using Android secure storage where supported. Other preferences may be stored in normal application storage.
+Saved firewall profiles and credentials are stored on the user's device. Credentials are stored using Android secure storage where supported. Trusted certificate fingerprints and other profile preferences may be stored in normal application storage.
 
 Data remains on the device until the user removes the relevant profile, clears the app's storage or uninstalls the app.
 
 ## Network security
 
-The app requires HTTPS for pfSense connections. Users may choose to allow self-signed certificates for a profile. Enabling that option weakens normal certificate verification and should be used only on trusted networks where the certificate is understood and controlled by the user.
+The app requires HTTPS for pfSense connections. Certificates trusted by Android use normal platform certificate validation.
+
+For a self-signed or private-CA certificate, users can inspect and explicitly trust the firewall certificate's SHA-256 fingerprint. The app then accepts the connection only while the presented certificate matches the saved fingerprint. A changed certificate is blocked until the user reviews and trusts the replacement certificate.
+
+Users should verify a certificate fingerprint against the certificate shown by pfSense before trusting it.
 
 Users should avoid exposing the pfSense REST API directly to the public internet and should prefer a trusted local network or VPN.
 

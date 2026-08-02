@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/app_localizations.dart';
 import '../models/profile.dart';
 import '../providers/profile_provider.dart';
+import '../services/certificate_trust.dart';
 import '../utils/pfsense_endpoint.dart';
 
 class ProfileFormScreen extends StatefulWidget {
@@ -30,9 +31,13 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
   late PfSenseAuthMode _authMode =
       widget.profile?.authMode ?? PfSenseAuthMode.apiKey;
   late bool _https = true;
-  late bool _self = widget.profile?.allowSelfSignedCert ?? false;
+  late bool _pinCertificate = widget.profile?.allowSelfSignedCert ?? false;
+  late String _trustedCertificateSha256 = normalizeCertificateFingerprint(
+    widget.profile?.trustedCertificateSha256 ?? '',
+  );
   bool _obscure = true;
   bool _saving = false;
+  bool _inspectingCertificate = false;
 
   @override
   void dispose() {
@@ -49,6 +54,17 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
 
     final endpoint = _readEndpoint();
     if (endpoint == null) return;
+    if (_pinCertificate &&
+        !isValidCertificateFingerprint(_trustedCertificateSha256)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Inspect and trust the firewall certificate before saving this profile.',
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     final secret = _secret.text;
@@ -58,22 +74,114 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
       host: endpoint.host,
       port: endpoint.port,
       useHttps: endpoint.useHttps,
-      allowSelfSignedCert: _self,
-      username: _user.text.trim(),
+      allowSelfSignedCert: _pinCertificate,
+      trustedCertificateSha256:
+          _pinCertificate ? _trustedCertificateSha256 : '',
+      username: _authMode == PfSenseAuthMode.jwtPassword
+          ? _user.text.trim()
+          : '',
       authMode: _authMode,
       apiKey: _authMode == PfSenseAuthMode.apiKey ? secret : '',
       password: _authMode == PfSenseAuthMode.jwtPassword ? secret : '',
     );
 
-    final provider = context.read<ProfileProvider>();
-    if (widget.profile == null) {
-      await provider.addProfile(profile);
-    } else {
-      await provider.updateProfile(profile);
+    try {
+      final provider = context.read<ProfileProvider>();
+      if (widget.profile == null) {
+        await provider.addProfile(profile);
+      } else {
+        await provider.updateProfile(profile);
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<void> _inspectAndTrustCertificate() async {
+    if (_inspectingCertificate) return;
+    final endpoint = _readEndpoint();
+    if (endpoint == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid firewall address and port.')),
+      );
+      return;
     }
 
-    if (!mounted) return;
-    Navigator.pop(context, true);
+    setState(() => _inspectingCertificate = true);
+    try {
+      final inspection = await inspectCertificate(
+        host: endpoint.host,
+        port: endpoint.port,
+      );
+      if (!mounted) return;
+      final trust = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Trust firewall certificate?'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Verify this fingerprint against the certificate shown by pfSense before trusting it.',
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'SHA-256 fingerprint',
+                  style: Theme.of(dialogContext).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  formatCertificateFingerprint(inspection.sha256Fingerprint),
+                ),
+                const SizedBox(height: 16),
+                Text('Subject: ${inspection.subject}'),
+                const SizedBox(height: 6),
+                Text('Issuer: ${inspection.issuer}'),
+                const SizedBox(height: 6),
+                Text('Valid from: ${inspection.startValidity.toLocal()}'),
+                const SizedBox(height: 6),
+                Text('Valid until: ${inspection.endValidity.toLocal()}'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Trust certificate'),
+            ),
+          ],
+        ),
+      );
+      if (trust == true && mounted) {
+        setState(() {
+          _pinCertificate = true;
+          _trustedCertificateSha256 = normalizeCertificateFingerprint(
+            inspection.sha256Fingerprint,
+          );
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _inspectingCertificate = false);
+    }
   }
 
   PfSenseEndpoint? _readEndpoint() {
@@ -104,6 +212,8 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     final usesApiKey = _authMode == PfSenseAuthMode.apiKey;
     final modeChanged = editing && widget.profile!.authMode != _authMode;
     final secretOptional = editing && !modeChanged;
+    final fingerprintValid =
+        isValidCertificateFingerprint(_trustedCertificateSha256);
 
     return Scaffold(
       appBar: AppBar(
@@ -146,14 +256,63 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               subtitle: const Text('Required for all API communications'),
               secondary: const Icon(Icons.enhanced_encryption_outlined),
             ),
-            CheckboxListTile(
-              value: _self,
-              onChanged: (v) => setState(() => _self = v ?? false),
-              title: Text(
-                l?.allowSelfSigned ?? 'Allow self-signed certificate',
+            SwitchListTile(
+              value: _pinCertificate,
+              onChanged: (value) {
+                setState(() {
+                  _pinCertificate = value;
+                  if (!value) _trustedCertificateSha256 = '';
+                });
+              },
+              title: const Text('Pin firewall certificate'),
+              subtitle: const Text(
+                'Use for a self-signed or private-CA certificate. Connections are accepted only when the SHA-256 fingerprint matches.',
               ),
               secondary: const Icon(Icons.verified_user_outlined),
             ),
+            if (_pinCertificate)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fingerprintValid
+                            ? 'Trusted SHA-256 fingerprint'
+                            : 'No trusted fingerprint saved',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      if (fingerprintValid) ...[
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          formatCertificateFingerprint(
+                            _trustedCertificateSha256,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _inspectingCertificate
+                            ? null
+                            : _inspectAndTrustCertificate,
+                        icon: _inspectingCertificate
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.policy_outlined),
+                        label: Text(
+                          fingerprintValid
+                              ? 'Inspect certificate again'
+                              : 'Inspect and trust certificate',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<PfSenseAuthMode>(
               key: const Key('profile-auth-mode'),
               initialValue: _authMode,
@@ -181,12 +340,13 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
               },
             ),
             const SizedBox(height: 12),
-            _field(
-              _user,
-              l?.username ?? 'Username',
-              Icons.person_outline,
-              validator: _req,
-            ),
+            if (!usesApiKey)
+              _field(
+                _user,
+                l?.username ?? 'Username',
+                Icons.person_outline,
+                validator: _req,
+              ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: TextFormField(

@@ -8,14 +8,17 @@ import 'package:flutter/foundation.dart';
 import '../models/profile.dart';
 import '../utils/api_exception.dart';
 import '../utils/ping_request_validation.dart';
+import 'certificate_trust.dart';
 
 /// Core HTTP client for pfSense REST API.
 class PfSenseApiClient {
   late final Dio _dio;
   final PfSenseProfile profile;
+  final CancelToken _cancelToken = CancelToken();
   bool _disposed = false;
   String? _jwtToken;
   Future<String>? _jwtTokenRequest;
+  String? _certificateFailureMessage;
 
   PfSenseApiClient(this.profile, {Dio? dio}) {
     if (!profile.useHttps) {
@@ -44,11 +47,38 @@ class PfSenseApiClient {
     }
 
     if (dio == null && profile.allowSelfSignedCert) {
+      final expectedFingerprint = normalizeCertificateFingerprint(
+        profile.trustedCertificateSha256,
+      );
+      if (!isValidCertificateFingerprint(expectedFingerprint)) {
+        throw const ApiException(
+          'This profile requires a trusted SHA-256 certificate fingerprint. Edit the profile and inspect the firewall certificate before connecting.',
+          null,
+          false,
+          false,
+          true,
+        );
+      }
       _dio.httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
           final client = HttpClient();
+          // The TLS handshake is allowed to complete so the adapter can compare
+          // the presented certificate against the explicitly trusted fingerprint.
           client.badCertificateCallback = (_, __, ___) => true;
           return client;
+        },
+        validateCertificate: (certificate, host, port) {
+          if (certificate == null) {
+            _certificateFailureMessage =
+                'The firewall did not present a TLS certificate.';
+            return false;
+          }
+          final presented = sha256FingerprintFromDer(certificate.der);
+          final matches = presented == expectedFingerprint;
+          _certificateFailureMessage = matches
+              ? null
+              : 'The firewall certificate changed. Expected ${formatCertificateFingerprint(expectedFingerprint)} but received ${formatCertificateFingerprint(presented)}.';
+          return matches;
         },
       );
     }
@@ -125,6 +155,7 @@ class PfSenseApiClient {
         options: Options(
           headers: {'Authorization': authorization},
         ),
+        cancelToken: _cancelToken,
       );
       _ensureActive();
       if (response.statusCode != null &&
@@ -144,15 +175,14 @@ class PfSenseApiClient {
       );
     } on DioException catch (error) {
       if (_disposed) throw const ApiException('The pfSense session was closed.');
-      throw ApiException.fromDio(error);
+      throw _mapDioError(error);
     }
   }
 
-  Future<void> _prepareRequestAuth() async {
-    if (profile.authMode != PfSenseAuthMode.jwtPassword) return;
+  Future<Map<String, dynamic>?> _requestAuthHeaders() async {
+    if (profile.authMode != PfSenseAuthMode.jwtPassword) return null;
     final token = await getJwtToken();
-    _dio.options.headers.remove('X-API-Key');
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+    return {'Authorization': 'Bearer $token'};
   }
 
   Future<Response> get(
@@ -163,24 +193,17 @@ class PfSenseApiClient {
   }
 
   Future<List<int>> getRawBytes(String path) async {
-    _ensureActive();
-    await _prepareRequestAuth();
-    try {
-      final response = await _dio.get<List<int>>(
-        path,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      _ensureActive();
-      if (response.statusCode != null &&
-          response.statusCode! >= 200 &&
-          response.statusCode! < 300) {
-        return response.data ?? [];
-      }
-      throw ApiException('Download failed', response.statusCode);
-    } on DioException catch (e) {
-      if (_disposed) throw const ApiException('The pfSense session was closed.');
-      throw ApiException.fromDio(e);
+    final response = await _sendAuthorized(
+      'GET',
+      path,
+      responseType: ResponseType.bytes,
+    );
+    if (response.statusCode != null &&
+        response.statusCode! >= 200 &&
+        response.statusCode! < 300) {
+      return List<int>.from(response.data as List? ?? const []);
     }
+    throw ApiException('Download failed', response.statusCode);
   }
 
   Future<Response> post(String path, {dynamic data}) async {
@@ -209,38 +232,97 @@ class PfSenseApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     _ensureActive();
-    await _prepareRequestAuth();
     final requestPath = _normalisedPath(method, path);
     final requestData = _normalisedData(method, requestPath, data);
-    try {
-      final response = await _dio.request(
-        requestPath,
-        data: requestData,
-        queryParameters: queryParameters,
-        options: Options(method: method),
-      );
-      _ensureActive();
+    final response = await _sendAuthorized(
+      method,
+      requestPath,
+      data: requestData,
+      queryParameters: queryParameters,
+    );
 
-      if (response.statusCode != null &&
-          response.statusCode! >= 200 &&
-          response.statusCode! < 300) {
-        _validateApiResponse(requestPath, response.data);
-        if (_requiresFirewallApply(method, requestPath)) {
-          await _applyFirewallChanges();
-        }
-        return response;
+    if (response.statusCode != null &&
+        response.statusCode! >= 200 &&
+        response.statusCode! < 300) {
+      _validateApiResponse(requestPath, response.data);
+      if (_requiresFirewallApply(method, requestPath)) {
+        await _applyFirewallChanges();
       }
+      return response;
+    }
 
-      throw ApiException(
-        _extractErrorMessage(response.data),
-        response.statusCode,
+    throw ApiException(
+      _extractErrorMessage(response.data),
+      response.statusCode,
+    );
+  }
+
+  Future<Response> _sendAuthorized(
+    String method,
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    ResponseType? responseType,
+    bool allowJwtReadRetry = true,
+  }) async {
+    _ensureActive();
+    final headers = await _requestAuthHeaders();
+    try {
+      return await _dio.request(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: Options(
+          method: method,
+          headers: headers,
+          responseType: responseType,
+        ),
+        cancelToken: _cancelToken,
       );
-    } on DioException catch (e) {
-      if (_disposed) {
+    } on DioException catch (error) {
+      if (_disposed || CancelToken.isCancel(error)) {
         throw const ApiException('The pfSense session was closed.');
       }
-      throw ApiException.fromDio(e);
+
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 401 &&
+          profile.authMode == PfSenseAuthMode.jwtPassword) {
+        _jwtToken = null;
+        final safeRead = method == 'GET' || method == 'HEAD';
+        if (safeRead && allowJwtReadRetry) {
+          return _sendAuthorized(
+            method,
+            path,
+            data: data,
+            queryParameters: queryParameters,
+            responseType: responseType,
+            allowJwtReadRetry: false,
+          );
+        }
+        throw const ApiException(
+          'Authentication expired before the operation completed. Reconnect and verify the firewall state before retrying.',
+          401,
+        );
+      }
+      throw _mapDioError(error);
     }
+  }
+
+  ApiException _mapDioError(DioException error) {
+    final certificateFailure = _certificateFailureMessage;
+    if (certificateFailure != null &&
+        (error.type == DioExceptionType.badCertificate ||
+            error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.unknown)) {
+      return ApiException(
+        certificateFailure,
+        error.response?.statusCode,
+        false,
+        false,
+        true,
+      );
+    }
+    return ApiException.fromDio(error);
   }
 
   String _normalisedPath(String method, String path) {
@@ -266,7 +348,10 @@ class PfSenseApiClient {
   }
 
   Future<void> _applyFirewallChanges() async {
-    final response = await _dio.post('/api/v2/firewall/apply');
+    final response = await _sendAuthorized(
+      'POST',
+      '/api/v2/firewall/apply',
+    );
     _ensureActive();
     if (response.statusCode != null &&
         response.statusCode! >= 200 &&
@@ -311,6 +396,9 @@ class PfSenseApiClient {
     _disposed = true;
     _jwtToken = null;
     _jwtTokenRequest = null;
+    if (!_cancelToken.isCancelled) {
+      _cancelToken.cancel('The pfSense session was closed.');
+    }
     _dio.close(force: true);
   }
 }
