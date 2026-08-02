@@ -43,6 +43,26 @@ Widget _buildSlider({
   );
 }
 
+Future<void> _pumpSlider(
+  WidgetTester tester, {
+  required VoidCallback onConfirmed,
+  TextDirection textDirection = TextDirection.ltr,
+  TextScaler textScaler = TextScaler.noScaling,
+  bool autofocus = false,
+  String label = 'Slide to confirm',
+}) async {
+  await tester.pumpWidget(
+    _buildSlider(
+      onConfirmed: onConfirmed,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      autofocus: autofocus,
+      label: label,
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _dragThumb(WidgetTester tester, Offset delta) async {
   final gesture = await tester.startGesture(
     tester.getCenter(find.byKey(const Key('slide-to-confirm-thumb'))),
@@ -56,8 +76,9 @@ void main() {
   testWidgets('LTR confirmation completes by dragging toward the end',
       (tester) async {
     var confirmations = 0;
-    await tester.pumpWidget(
-      _buildSlider(onConfirmed: () => confirmations += 1),
+    await _pumpSlider(
+      tester,
+      onConfirmed: () => confirmations += 1,
     );
 
     await _dragThumb(tester, const Offset(300, 0));
@@ -68,11 +89,10 @@ void main() {
 
   testWidgets('RTL confirmation reverses the drag direction', (tester) async {
     var confirmations = 0;
-    await tester.pumpWidget(
-      _buildSlider(
-        textDirection: TextDirection.rtl,
-        onConfirmed: () => confirmations += 1,
-      ),
+    await _pumpSlider(
+      tester,
+      textDirection: TextDirection.rtl,
+      onConfirmed: () => confirmations += 1,
     );
 
     await _dragThumb(tester, const Offset(300, 0));
@@ -87,16 +107,15 @@ void main() {
     final semanticsHandle = tester.ensureSemantics();
     addTearDown(semanticsHandle.dispose);
 
-    await tester.pumpWidget(
-      _buildSlider(
-        label: 'Confirm firewall reboot',
-        onConfirmed: () {},
-      ),
+    await _pumpSlider(
+      tester,
+      label: 'Confirm firewall reboot',
+      onConfirmed: () {},
     );
 
     expect(
       tester.getSemantics(find.byKey(const Key('slide-to-confirm'))),
-      containsSemantics(
+      isSemantics(
         label: 'Confirm firewall reboot',
         value: '0%',
         isButton: true,
@@ -110,13 +129,11 @@ void main() {
   testWidgets('keyboard activation confirms the focused control',
       (tester) async {
     var confirmations = 0;
-    await tester.pumpWidget(
-      _buildSlider(
-        autofocus: true,
-        onConfirmed: () => confirmations += 1,
-      ),
+    await _pumpSlider(
+      tester,
+      autofocus: true,
+      onConfirmed: () => confirmations += 1,
     );
-    await tester.pump();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
@@ -126,12 +143,11 @@ void main() {
 
   testWidgets('large text expands the control and preserves tap targets',
       (tester) async {
-    await tester.pumpWidget(
-      _buildSlider(
-        textScaler: const TextScaler.linear(2),
-        label: 'Slide to confirm this sensitive firewall operation',
-        onConfirmed: () {},
-      ),
+    await _pumpSlider(
+      tester,
+      textScaler: const TextScaler.linear(2),
+      label: 'Slide to confirm this sensitive firewall operation',
+      onConfirmed: () {},
     );
 
     expect(tester.takeException(), isNull);
@@ -185,6 +201,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
