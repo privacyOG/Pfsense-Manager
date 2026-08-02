@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-08-03
+
+Maintained by privacyOG.
+
+### Added
+
+- **Certificate inspection and pinning** — self-signed firewall certificates can now be inspected in the profile workflow and trusted through an explicit SHA-256 fingerprint.
+- **Accessible destructive confirmation** — slide confirmation now follows logical text direction, exposes a standard assistive-technology action, supports Enter and Space activation, shows keyboard focus and remains usable with large text.
+- **Operator-focused navigation** — VPN is a primary destination and a searchable More workspace groups services, profiles, alerts, settings, system tools and troubleshooting utilities by task.
+- **Guided profile setup** — firewall details, authentication and final review are separated into a three-step profile workflow with API-key and least-privilege guidance.
+- **Firewall rule discovery controls** — rule search and Enabled, Disabled and Logged filters make large rulesets easier to inspect.
+
+### Changed
+
+- **Certificate trust** no longer accepts any invalid certificate for a self-signed profile. Pinned profiles require the presented leaf certificate to match the saved SHA-256 fingerprint, including password-authenticated administrative requests.
+- **Authenticated sessions** refresh an expired JWT once for safe read requests, never automatically replay a write after an authentication failure and cancel active work when a session closes.
+- **Credential lifecycle** removes inactive stored credentials when authentication mode changes and no longer requires an unused username for API-key profiles.
+- **Android privacy protection** blocks screenshots and screen recording for application content.
+- **Firewall rule presentation** uses structured action, interface, source and destination information with explicit action menus and per-rule progress state.
+- **Profile export** now separates Save, Share and Copy actions instead of performing multiple export actions together.
+- **Release validation** analyzes the complete Flutter project, runs a dedicated accessibility gate and pins reusable workflow actions to immutable Node 24 releases.
+- **Release publishing** uses the current GitHub release action line and retains signed APK identity, signature and checksum verification.
+
+### Fixed
+
+- Arabic and other right-to-left layouts now drag destructive confirmation in the expected direction.
+- Confirmation sheets no longer clip their content when system text scaling is increased.
+- Changing authentication mode no longer leaves the inactive secret in secure storage.
+- A changed or untrusted self-signed certificate now produces an explicit fingerprint mismatch instead of silently connecting.
+- Settings no longer displays a duplicate bottom navigation bar when opened from the main application shell.
+
+**Upgrade note:** Existing profiles that used the former self-signed certificate allowance must be edited once to inspect and pin the firewall certificate. Users running version 1.9.0 can otherwise install version 1.9.1 as a normal update when the APK is signed with the same release key.
+
 ## [1.9.0] - 2026-07-14
 
 Maintained by PrivacyOG.
