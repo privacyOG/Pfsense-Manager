@@ -20,21 +20,22 @@ Widget _buildSlider({
       GlobalWidgetsLocalizations.delegate,
       GlobalCupertinoLocalizations.delegate,
     ],
-    home: MediaQuery(
-      data: MediaQueryData(textScaler: textScaler),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: Directionality(
         textDirection: textDirection,
-        child: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 320,
-              child: SlideToConfirm(
-                label: label,
-                semanticLabel: label,
-                autofocus: autofocus,
-                onConfirmed: onConfirmed,
-              ),
-            ),
+        child: child!,
+      ),
+    ),
+    home: Scaffold(
+      body: Center(
+        child: SizedBox(
+          width: 320,
+          child: SlideToConfirm(
+            label: label,
+            semanticLabel: label,
+            autofocus: autofocus,
+            onConfirmed: onConfirmed,
           ),
         ),
       ),
