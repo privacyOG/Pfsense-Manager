@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/app_settings_provider.dart';
@@ -12,12 +11,12 @@ import '../services/dashboard_warning_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _destinationKey = 'home.selectedDestination';
   final _pin = TextEditingController();
   final _auth = LocalAuthentication();
   int _lockMinutes = 5;
@@ -71,14 +70,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .showSnackBar(const SnackBar(content: Text('PIN updated.')));
     }
   }
-
-  Future<void> _openDestination(int index) async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setInt(_destinationKey, index);
-    if (!mounted) return;
-    Navigator.of(context).pop(index);
-  }
-
 
   void _scheduleWarningPreferences(String? profileId) {
     if (_warningProfileId == profileId) return;
@@ -156,128 +147,158 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : '${packageInfo.version}+${packageInfo.buildNumber}';
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back',
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back),
-        ),
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
           _hero(context, version),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
           const _Heading(Icons.palette_outlined, 'Appearance'),
           Card(
-            child: SwitchListTile(
-              value: theme.isDarkMode,
-              onChanged: theme.isAmoled
-                  ? null
-                  : context.read<ThemeProvider>().setDarkMode,
-              title: Text(l10n?.darkMode ?? 'Dark mode'),
-              subtitle: Text(theme.isAmoled
-                  ? 'Overridden by AMOLED mode'
-                  : 'Theme control'),
-              secondary: Icon(theme.isDarkMode
-                  ? Icons.dark_mode_outlined
-                  : Icons.light_mode_outlined),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.format_paint_outlined),
-              title: const Text('Theme colour'),
-              subtitle: const Text('Choose the app accent'),
-              trailing: DropdownButton<AppThemePalette>(
-                value: theme.palette,
-                onChanged: theme.isAmoled
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          context.read<ThemeProvider>().setPalette(value);
-                        }
-                      },
-                items: const [
-                  DropdownMenuItem(
-                    value: AppThemePalette.pfsenseNavy,
-                    child: Text('pfSense navy'),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  value: theme.isDarkMode,
+                  onChanged: theme.isAmoled
+                      ? null
+                      : context.read<ThemeProvider>().setDarkMode,
+                  title: Text(l10n?.darkMode ?? 'Dark mode'),
+                  subtitle: Text(
+                    theme.isAmoled
+                        ? 'Overridden by AMOLED mode'
+                        : 'Use the dark application colour scheme',
                   ),
-                  DropdownMenuItem(
-                    value: AppThemePalette.emerald,
-                    child: Text('Emerald'),
+                  secondary: Icon(
+                    theme.isDarkMode
+                        ? Icons.dark_mode_outlined
+                        : Icons.light_mode_outlined,
                   ),
-                  DropdownMenuItem(
-                    value: AppThemePalette.dynamic,
-                    child: Text('Material You'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.format_paint_outlined),
+                  title: const Text('Theme colour'),
+                  subtitle: const Text('Choose the application accent'),
+                  trailing: DropdownButton<AppThemePalette>(
+                    value: theme.palette,
+                    onChanged: theme.isAmoled
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              context.read<ThemeProvider>().setPalette(value);
+                            }
+                          },
+                    items: const [
+                      DropdownMenuItem(
+                        value: AppThemePalette.pfsenseNavy,
+                        child: Text('pfSense navy'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemePalette.emerald,
+                        child: Text('Emerald'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppThemePalette.dynamic,
+                        child: Text('Material You'),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const _Heading(Icons.brightness_1, 'AMOLED Mode'),
-          Card(
-            child: SwitchListTile(
-              value: theme.isAmoled,
-              onChanged: context.read<ThemeProvider>().setAmoledMode,
-              title: const Text('True AMOLED black'),
-              subtitle: const Text(
-                'Pure #000000 background — saves battery on OLED screens',
-              ),
-              secondary: const Icon(Icons.phone_android_outlined),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  value: theme.isAmoled,
+                  onChanged: context.read<ThemeProvider>().setAmoledMode,
+                  title: const Text('True AMOLED black'),
+                  subtitle: const Text(
+                    'Uses pure black surfaces and may reduce display power on OLED screens.',
+                  ),
+                  secondary: const Icon(Icons.phone_android_outlined),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.language_outlined),
+                  title: Text(l10n?.language ?? 'Language'),
+                  trailing: DropdownButton<String>(
+                    value: _language,
+                    items: const [
+                      DropdownMenuItem(value: 'en', child: Text('EN')),
+                      DropdownMenuItem(value: 'ar', child: Text('AR')),
+                      DropdownMenuItem(value: 'es', child: Text('ES')),
+                      DropdownMenuItem(value: 'fr', child: Text('FR')),
+                      DropdownMenuItem(value: 'de', child: Text('DE')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _language = value);
+                      settings.setLocale(Locale(value));
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           if (theme.isAmoled) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             _AmoledAccentPicker(
               selected: theme.amoledAccent,
               onChanged: context.read<ThemeProvider>().setAmoledAccent,
             ),
           ],
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.language_outlined),
-              title: Text(l10n?.language ?? 'Language'),
-              trailing: DropdownButton<String>(
-                value: _language,
-                items: const [
-                  DropdownMenuItem(value: 'en', child: Text('EN')),
-                  DropdownMenuItem(value: 'ar', child: Text('AR')),
-                  DropdownMenuItem(value: 'es', child: Text('ES')),
-                  DropdownMenuItem(value: 'fr', child: Text('FR')),
-                  DropdownMenuItem(value: 'de', child: Text('DE')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _language = value);
-                  settings.setLocale(Locale(value));
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           const _Heading(Icons.lock_outline, 'Security'),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.lock_clock_outlined),
-              title: Text(l10n?.autoLock ?? 'Auto-lock'),
-              subtitle: Text('Lock after $_lockMinutes min idle'),
-              trailing: DropdownButton<int>(
-                value: _lockMinutes,
-                items: [
-                  for (final value in [1, 5, 10, 15, 30, 45, 60])
-                    DropdownMenuItem(value: value, child: Text('$value min')),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() => _lockMinutes = value);
-                  settings.setLockTimeout(value);
-                },
-              ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.lock_clock_outlined),
+                  title: Text(l10n?.autoLock ?? 'Auto-lock'),
+                  subtitle: Text('Lock after $_lockMinutes min idle'),
+                  trailing: DropdownButton<int>(
+                    value: _lockMinutes,
+                    items: [
+                      for (final value in [1, 5, 10, 15, 30, 45, 60])
+                        DropdownMenuItem(
+                          value: value,
+                          child: Text('$value min'),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _lockMinutes = value);
+                      settings.setLockTimeout(value);
+                    },
+                  ),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  value: settings.pinEnabled,
+                  onChanged: settings.hasPin ? settings.setPinEnabled : null,
+                  title: const Text('Require PIN on lock'),
+                  subtitle: Text(
+                    settings.hasPin ? 'PIN is configured' : 'Set a PIN first',
+                  ),
+                  secondary: const Icon(Icons.pin),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  value: settings.biometricEnabled,
+                  onChanged: _biometricsAvailable && settings.pinEnabled
+                      ? settings.setBiometricEnabled
+                      : null,
+                  title: const Text('Biometric unlock'),
+                  subtitle: Text(
+                    _biometricsAvailable
+                        ? 'Use fingerprint, face or device authentication'
+                        : 'No biometric method reported by Android',
+                  ),
+                  secondary: const Icon(Icons.fingerprint),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -299,6 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   Wrap(
                     spacing: 10,
+                    runSpacing: 8,
                     children: [
                       FilledButton.icon(
                         onPressed: () => _savePin(settings),
@@ -316,31 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          Card(
-            child: SwitchListTile(
-              value: settings.pinEnabled,
-              onChanged: settings.hasPin ? settings.setPinEnabled : null,
-              title: const Text('Require PIN on lock'),
-              subtitle: Text(settings.hasPin
-                  ? 'PIN is configured'
-                  : 'Set a PIN first'),
-              secondary: const Icon(Icons.pin),
-            ),
-          ),
-          Card(
-            child: SwitchListTile(
-              value: settings.biometricEnabled,
-              onChanged: _biometricsAvailable && settings.pinEnabled
-                  ? settings.setBiometricEnabled
-                  : null,
-              title: const Text('Biometric setup'),
-              subtitle: Text(_biometricsAvailable
-                  ? 'Enable fingerprint or device unlock'
-                  : 'No biometric method reported by Android'),
-              secondary: const Icon(Icons.fingerprint),
-            ),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           const _Heading(Icons.warning_amber_outlined, 'Warnings'),
           Card(
             child: ListTile(
@@ -357,47 +355,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           const _Heading(Icons.info_outline, 'About'),
           Card(
             child: ListTile(
               leading: const Icon(Icons.security),
               title: Text(l10n?.about ?? 'About pfSense Manager App'),
-              subtitle: Text(packageInfo == null
-                  ? 'Loading...'
-                  : '${packageInfo.appName} $version\nRequired OS: Android 7.0 or newer'),
+              subtitle: Text(
+                packageInfo == null
+                    ? 'Loading...'
+                    : '${packageInfo.appName} $version\nRequired OS: Android 7.0 or newer',
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 4,
-        onDestinationSelected: _openDestination,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.monitor_heart_outlined),
-            selectedIcon: Icon(Icons.monitor_heart),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.shield_outlined),
-            selectedIcon: Icon(Icons.shield),
-            label: 'Firewall',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.hub_outlined),
-            selectedIcon: Icon(Icons.hub),
-            label: 'Network',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.miscellaneous_services_outlined),
-            selectedIcon: Icon(Icons.miscellaneous_services),
-            label: 'Services',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz),
-            selectedIcon: Icon(Icons.more),
-            label: 'More',
           ),
         ],
       ),
@@ -564,8 +533,10 @@ class _AccentTile extends StatelessWidget {
 
 class _Heading extends StatelessWidget {
   const _Heading(this.icon, this.title);
+
   final IconData icon;
   final String title;
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
