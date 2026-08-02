@@ -7,6 +7,7 @@ import 'package:pfsense_manager/providers/profile_provider.dart';
 import 'package:pfsense_manager/providers/session_provider.dart';
 import 'package:pfsense_manager/providers/theme_provider.dart';
 import 'package:pfsense_manager/screens/home_shell.dart';
+import 'package:pfsense_manager/screens/more_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -127,9 +128,21 @@ void main() {
     await tester.tap(find.text('More').last);
     await tester.pumpAndSettle();
 
-    final settingsTile = find.widgetWithText(ListTile, 'Settings');
+    final moreList = find.descendant(
+      of: find.byType(MoreScreen),
+      matching: find.byType(ListView),
+    );
+    expect(moreList, findsOneWidget);
+    await tester.drag(moreList, const Offset(0, -320));
+    await tester.pumpAndSettle();
+
+    final settingsTile = find
+        .descendant(
+          of: find.byType(MoreScreen),
+          matching: find.widgetWithText(ListTile, 'Settings'),
+        )
+        .hitTestable();
     expect(settingsTile, findsOneWidget);
-    await tester.scrollUntilVisible(settingsTile, 100);
     await tester.tap(settingsTile);
     await tester.pumpAndSettle();
 
