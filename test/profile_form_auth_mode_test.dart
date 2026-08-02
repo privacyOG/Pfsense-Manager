@@ -13,30 +13,34 @@ void main() {
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
   });
 
-  testWidgets('profile form saves a JWT password profile explicitly',
+  testWidgets('profile wizard saves a JWT password profile explicitly',
       (tester) async {
     final provider = ProfileProvider();
     addTearDown(provider.dispose);
-    await tester.binding.setSurfaceSize(const Size(800, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
     await _pumpForm(tester, provider);
+
+    await _completeFirewallStep(
+      tester,
+      name: 'JWT firewall',
+      host: 'firewall.example.test',
+    );
     await _selectAuthMode(tester, 'Username and password (JWT)');
 
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Used only to obtain a JWT token.'), findsOneWidget);
 
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'JWT firewall');
-    await tester.enterText(fields.at(1), 'firewall.example.test');
-    await tester.enterText(fields.at(2), '443');
-    await tester.enterText(fields.at(3), 'local-admin');
+    await tester.enterText(
+      find.byKey(const Key('profile-username')),
+      'local-admin',
+    );
     await tester.enterText(
       find.byKey(const Key('profile-auth-secret')),
       'local-password',
     );
 
-    await _save(tester);
+    await _continue(tester);
+    expect(find.text('Review'), findsWidgets);
+    await _continue(tester);
 
     expect(provider.profiles, hasLength(1));
     final metadata = provider.profiles.single;
@@ -54,10 +58,12 @@ void main() {
       (tester) async {
     final provider = ProfileProvider();
     addTearDown(provider.dispose);
-    await tester.binding.setSurfaceSize(const Size(800, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-
     await _pumpForm(tester, provider);
+    await _completeFirewallStep(
+      tester,
+      name: 'Mode switch',
+      host: 'firewall.example.test',
+    );
 
     final secret = find.byKey(const Key('profile-auth-secret'));
     await tester.enterText(secret, 'unsaved-api-key');
@@ -72,33 +78,36 @@ void main() {
     expect(find.text('Password'), findsOneWidget);
 
     await tester.enterText(secret, 'unsaved-password');
-    await _selectAuthMode(tester, 'API key');
+    await _selectAuthMode(tester, 'API key — recommended');
 
     expect(tester.widget<TextFormField>(secret).controller?.text, isEmpty);
-    expect(find.text('API key'), findsWidgets);
+    expect(find.text('API key'), findsOneWidget);
   });
 
   testWidgets('changing authentication mode requires the new credential',
       (tester) async {
     final provider = ProfileProvider();
     addTearDown(provider.dispose);
-    await tester.binding.setSurfaceSize(const Size(800, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await provider.addProfile(
       PfSenseProfile(
         id: 'edit-auth-mode',
         name: 'Existing firewall',
         host: 'firewall.example.test',
-        username: 'api-user',
+        username: '',
         apiKey: 'saved-api-key',
       ),
     );
     final existing = provider.profiles.single;
 
     await _pumpForm(tester, provider, profile: existing);
+    await _continue(tester);
     await _selectAuthMode(tester, 'Username and password (JWT)');
-    await _save(tester);
+    await tester.enterText(
+      find.byKey(const Key('profile-username')),
+      'local-admin',
+    );
+    await _continue(tester);
 
     expect(find.text('Required'), findsOneWidget);
     expect(provider.profiles.single.authMode, PfSenseAuthMode.apiKey);
@@ -107,7 +116,8 @@ void main() {
       find.byKey(const Key('profile-auth-secret')),
       'new-password',
     );
-    await _save(tester);
+    await _continue(tester);
+    await _continue(tester);
 
     expect(provider.profiles.single.authMode, PfSenseAuthMode.jwtPassword);
     final resolved = await ProfileProvider.resolveForConnection(
@@ -123,6 +133,8 @@ Future<void> _pumpForm(
   ProfileProvider provider, {
   PfSenseProfile? profile,
 }) async {
+  await tester.binding.setSurfaceSize(const Size(800, 1400));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     ChangeNotifierProvider<ProfileProvider>.value(
       value: provider,
@@ -130,6 +142,17 @@ Future<void> _pumpForm(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+Future<void> _completeFirewallStep(
+  WidgetTester tester, {
+  required String name,
+  required String host,
+}) async {
+  await tester.enterText(find.byKey(const Key('profile-name')), name);
+  await tester.enterText(find.byKey(const Key('profile-host')), host);
+  await tester.enterText(find.byKey(const Key('profile-port')), '443');
+  await _continue(tester);
 }
 
 Future<void> _selectAuthMode(WidgetTester tester, String label) async {
@@ -141,9 +164,9 @@ Future<void> _selectAuthMode(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _save(WidgetTester tester) async {
-  final save = find.widgetWithText(FilledButton, 'Save');
-  await tester.ensureVisible(save);
-  await tester.tap(save);
+Future<void> _continue(WidgetTester tester) async {
+  final button = find.byKey(const Key('profile-step-continue'));
+  await tester.ensureVisible(button);
+  await tester.tap(button);
   await tester.pumpAndSettle();
 }
