@@ -101,10 +101,11 @@ Availability is capability- and permission-aware. A screen or action is shown on
 - JWT password and API-key profile authentication modes
 - Encrypted credential storage
 - Local PIN or device-authentication app lock
-- HTTPS-only connections with optional per-profile self-signed-certificate allowance
+- HTTPS-only connections with per-profile SHA-256 certificate fingerprint pinning for self-signed firewalls
 - Capability-aware read-only operation for restricted pfREST profiles
 - Secret replacement-only forms and one-time generated-secret display
-- Explicit slide confirmation for destructive or connectivity-impacting actions
+- Direction-aware destructive confirmation with assistive-technology and keyboard activation
+- Android screenshot and screen-recording protection
 - Light, dark, AMOLED and Material You theming
 - Spotlight search, home-screen widgets and network asset copy actions
 
@@ -121,7 +122,7 @@ Before adding a firewall to the app:
 
 The app deliberately rejects plain HTTP connections.
 
-Self-signed certificates can be allowed for a profile, but doing this disables normal certificate verification for that connection. A certificate issued by a trusted internal CA is preferable.
+A self-signed firewall certificate must be inspected and explicitly pinned to the profile by its SHA-256 fingerprint. The app blocks the connection when the presented certificate changes. A certificate issued by a trusted internal CA remains preferable where available.
 
 ## Building the app
 
