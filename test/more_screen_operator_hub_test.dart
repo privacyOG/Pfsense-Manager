@@ -20,9 +20,13 @@ void main() {
 
     expect(find.text('No firewall selected'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
-    expect(find.text('Manage and configure'), findsOneWidget);
-    expect(find.text('Troubleshoot and maintain'), findsOneWidget);
+    expect(find.text('Manage'), findsOneWidget);
     expect(find.byKey(const Key('operator-hub-search')), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -420));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Operate and troubleshoot'), findsOneWidget);
   });
 
   testWidgets('operator hub search filters tools and can be cleared',
@@ -44,7 +48,7 @@ void main() {
 
     expect(find.text('Firewall profiles'), findsOneWidget);
     expect(find.text('Settings'), findsNothing);
-    expect(find.text('Troubleshoot and maintain'), findsNothing);
+    expect(find.text('Operate and troubleshoot'), findsNothing);
 
     await tester.enterText(search, 'nonexistent tool');
     await tester.pumpAndSettle();
@@ -56,7 +60,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Manage and configure'), findsOneWidget);
-    expect(find.text('Troubleshoot and maintain'), findsOneWidget);
+    expect(find.text('Manage'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -420));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Operate and troubleshoot'), findsOneWidget);
   });
 }
