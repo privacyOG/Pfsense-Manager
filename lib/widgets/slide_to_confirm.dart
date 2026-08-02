@@ -99,6 +99,18 @@ class _SlideToConfirmState extends State<SlideToConfirm>
     widget.onConfirmed();
   }
 
+  KeyEventResult _handleKeyEvent(KeyEvent event, double maxDrag) {
+    if (_confirmed || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      _confirm(maxDrag);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -127,138 +139,127 @@ class _SlideToConfirmState extends State<SlideToConfirm>
         return Focus(
           focusNode: _focusNode,
           autofocus: widget.autofocus,
+          onKeyEvent: (_, event) => _handleKeyEvent(event, maxDrag),
           onFocusChange: (focused) {
             if (_hasFocus == focused) return;
             setState(() => _hasFocus = focused);
           },
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.enter): () =>
-                  _confirm(maxDrag),
-              const SingleActivator(LogicalKeyboardKey.space): () =>
-                  _confirm(maxDrag),
-            },
-            child: Semantics(
-              key: const Key('slide-to-confirm'),
-              container: true,
-              button: true,
-              enabled: !_confirmed,
-              label: widget.semanticLabel ?? widget.label,
-              hint: widget.semanticHint,
-              value: '${(progress * 100).round()}%',
-              onTap: _confirmed ? null : () => _confirm(maxDrag),
-              excludeSemantics: true,
-              child: SizedBox(
-                height: trackHeight,
-                child: MouseRegion(
-                  cursor: _confirmed
-                      ? SystemMouseCursors.basic
-                      : SystemMouseCursors.click,
-                  child: Stack(
-                    alignment: AlignmentDirectional.centerStart,
-                    children: [
-                      Container(
-                        height: trackHeight,
-                        decoration: BoxDecoration(
-                          color: Color.lerp(
-                            dangerColor.withValues(alpha: 0.12),
-                            dangerColor.withValues(alpha: 0.28),
-                            progress,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _hasFocus
-                                ? scheme.onSurface
-                                : dangerColor.withValues(alpha: 0.38),
-                            width: _hasFocus ? 2 : 1,
-                          ),
+          child: Semantics(
+            key: const Key('slide-to-confirm'),
+            container: true,
+            button: true,
+            enabled: !_confirmed,
+            label: widget.semanticLabel ?? widget.label,
+            hint: widget.semanticHint,
+            value: '${(progress * 100).round()}%',
+            onTap: _confirmed ? null : () => _confirm(maxDrag),
+            excludeSemantics: true,
+            child: SizedBox(
+              height: trackHeight,
+              child: MouseRegion(
+                cursor: _confirmed
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+                child: Stack(
+                  alignment: AlignmentDirectional.centerStart,
+                  children: [
+                    Container(
+                      height: trackHeight,
+                      decoration: BoxDecoration(
+                        color: Color.lerp(
+                          dangerColor.withValues(alpha: 0.12),
+                          dangerColor.withValues(alpha: 0.28),
+                          progress,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _hasFocus
+                              ? scheme.onSurface
+                              : dangerColor.withValues(alpha: 0.38),
+                          width: _hasFocus ? 2 : 1,
                         ),
                       ),
-                      if (!_confirmed)
-                        Padding(
-                          padding: EdgeInsetsDirectional.only(
-                            start: thumbSize + 12,
-                            end: 12,
-                          ),
-                          child: Center(
-                            child: Opacity(
-                              opacity:
-                                  (1.0 - progress * 2).clamp(0.0, 1.0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    chevron,
-                                    color: dangerColor,
-                                    size: 18,
-                                  ),
-                                  Icon(
-                                    chevron,
-                                    color: dangerColor.withValues(alpha: 0.5),
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      widget.label,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: dangerColor,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
+                    ),
+                    if (!_confirmed)
+                      Padding(
+                        padding: EdgeInsetsDirectional.only(
+                          start: thumbSize + 12,
+                          end: 12,
+                        ),
+                        child: Center(
+                          child: Opacity(
+                            opacity: (1.0 - progress * 2).clamp(0.0, 1.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  chevron,
+                                  color: dangerColor,
+                                  size: 18,
+                                ),
+                                Icon(
+                                  chevron,
+                                  color: dangerColor.withValues(alpha: 0.5),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    widget.label,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: dangerColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      PositionedDirectional(
-                        start: _dragOffset,
-                        child: GestureDetector(
-                          key: const Key('slide-to-confirm-thumb'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _focusNode.requestFocus,
-                          onHorizontalDragStart: (_) =>
-                              _focusNode.requestFocus(),
-                          onHorizontalDragUpdate: (details) =>
-                              _onDragUpdate(details, maxDrag, isRtl),
-                          onHorizontalDragEnd: (details) =>
-                              _onDragEnd(details, maxDrag),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 80),
-                            width: thumbSize,
-                            height: thumbSize,
-                            decoration: BoxDecoration(
-                              color: _confirmed
-                                  ? dangerColor.withValues(alpha: 0.2)
-                                  : dangerColor,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      dangerColor.withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                            child: Icon(
-                              _confirmed ? Icons.check : widget.icon,
-                              color: _confirmed
-                                  ? dangerColor
-                                  : scheme.onError,
-                              size: 26,
-                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    PositionedDirectional(
+                      start: _dragOffset,
+                      child: GestureDetector(
+                        key: const Key('slide-to-confirm-thumb'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _focusNode.requestFocus,
+                        onHorizontalDragStart: (_) =>
+                            _focusNode.requestFocus(),
+                        onHorizontalDragUpdate: (details) =>
+                            _onDragUpdate(details, maxDrag, isRtl),
+                        onHorizontalDragEnd: (details) =>
+                            _onDragEnd(details, maxDrag),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 80),
+                          width: thumbSize,
+                          height: thumbSize,
+                          decoration: BoxDecoration(
+                            color: _confirmed
+                                ? dangerColor.withValues(alpha: 0.2)
+                                : dangerColor,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: dangerColor.withValues(alpha: 0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            _confirmed ? Icons.check : widget.icon,
+                            color: _confirmed ? dangerColor : scheme.onError,
+                            size: 26,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
