@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -33,7 +33,7 @@ jobs:
         run: python3 tools/validate_release_metadata.py
 
       - name: Set up Java 17
-        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload release analyzer log
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: flutter-release-analyze-${{ github.sha }}
           path: flutter-release-analyze.log
@@ -172,7 +172,7 @@ jobs:
           echo "APK=$APK" >> "$GITHUB_ENV"
 
       - name: Upload signed release artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pfsense-manager-signed-${{ env.VERSION }}-${{ github.run_id }}
           path: |
