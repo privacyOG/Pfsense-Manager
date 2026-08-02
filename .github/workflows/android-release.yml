@@ -20,12 +20,12 @@ concurrency:
 jobs:
   build-release:
     name: Build and verify signed Android release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -33,14 +33,14 @@ jobs:
         run: python3 tools/validate_release_metadata.py
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.44.2'
           channel: stable
@@ -117,22 +117,20 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze release changes
+      - name: Analyze full Flutter project
         shell: bash
         run: |
-          set -euo pipefail
-          dart analyze lib/screens/home_shell.dart
-          dart analyze lib/screens/dashboard_screen.dart
-          dart analyze lib/screens/settings_screen.dart
-          dart analyze lib/screens/system_info_screen.dart
-          dart analyze lib/models/system_info.dart
-          dart analyze lib/providers/session_provider.dart
-          dart analyze lib/services/dashboard_warning_preferences.dart
-          dart analyze lib/widgets/dashboard_alert_strip.dart
-          dart analyze lib/widgets/system_info_details.dart
-          dart analyze test/home_shell_navigation_test.dart
-          dart analyze test/system_info_model_test.dart
-          dart analyze test/dashboard_warning_preferences_test.dart
+          set -o pipefail
+          flutter analyze --fatal-warnings --no-fatal-infos 2>&1 | tee flutter-release-analyze.log
+
+      - name: Upload release analyzer log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flutter-release-analyze-${{ github.sha }}
+          path: flutter-release-analyze.log
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Run tests
         run: flutter test --coverage
@@ -174,7 +172,7 @@ jobs:
           echo "APK=$APK" >> "$GITHUB_ENV"
 
       - name: Upload signed release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pfsense-manager-signed-${{ env.VERSION }}-${{ github.run_id }}
           path: |
@@ -204,7 +202,7 @@ jobs:
 
       - name: Publish GitHub release
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
