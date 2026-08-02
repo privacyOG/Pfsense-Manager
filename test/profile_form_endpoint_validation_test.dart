@@ -12,33 +12,23 @@ void main() {
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
   });
 
-  testWidgets('profile form shows a clear invalid endpoint error',
+  testWidgets('profile wizard shows a clear invalid endpoint error',
       (tester) async {
     final provider = ProfileProvider();
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
     addTearDown(provider.dispose);
+    await _pumpForm(tester, provider);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<ProfileProvider>.value(
-        value: provider,
-        child: const MaterialApp(home: ProfileFormScreen()),
-      ),
-    );
-
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Main firewall');
     await tester.enterText(
-      fields.at(1),
+      find.byKey(const Key('profile-name')),
+      'Main firewall',
+    );
+    await tester.enterText(
+      find.byKey(const Key('profile-host')),
       'https://user:secret@firewall.example.test',
     );
-    await tester.enterText(fields.at(2), '443');
-    await tester.enterText(fields.at(3), 'api-key');
+    await tester.enterText(find.byKey(const Key('profile-port')), '443');
 
-    final saveButton = find.widgetWithText(FilledButton, 'Save');
-    await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
-    await tester.pump();
+    await _continue(tester);
 
     expect(
       find.text('Remove the username or password from the endpoint.'),
@@ -47,30 +37,29 @@ void main() {
     expect(provider.profiles, isEmpty);
   });
 
-  testWidgets('profile form stores a normalised IPv6 endpoint',
+  testWidgets('profile wizard stores a normalised IPv6 endpoint',
       (tester) async {
     final provider = ProfileProvider();
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
     addTearDown(provider.dispose);
+    await _pumpForm(tester, provider);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<ProfileProvider>.value(
-        value: provider,
-        child: const MaterialApp(home: ProfileFormScreen()),
-      ),
+    await tester.enterText(
+      find.byKey(const Key('profile-name')),
+      'IPv6 firewall',
     );
+    await tester.enterText(
+      find.byKey(const Key('profile-host')),
+      'https://[2001:db8::20]:8443',
+    );
+    await tester.enterText(find.byKey(const Key('profile-port')), '443');
+    await _continue(tester);
 
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'IPv6 firewall');
-    await tester.enterText(fields.at(1), 'https://[2001:db8::20]:8443');
-    await tester.enterText(fields.at(2), '443');
-    await tester.enterText(fields.at(3), 'api-key');
-
-    final saveButton = find.widgetWithText(FilledButton, 'Save');
-    await tester.ensureVisible(saveButton);
-    await tester.tap(saveButton);
-    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('profile-auth-secret')),
+      'api-key',
+    );
+    await _continue(tester);
+    await _continue(tester);
 
     expect(provider.profiles, hasLength(1));
     final profile = provider.profiles.single;
@@ -80,4 +69,28 @@ void main() {
     expect(profile.baseUrl, 'https://[2001:db8::20]:8443');
     expect(profile.username, isEmpty);
   });
+}
+
+Future<void> _pumpForm(
+  WidgetTester tester,
+  ProfileProvider provider,
+) async {
+  await tester.binding.setSurfaceSize(const Size(800, 1400));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(
+    ChangeNotifierProvider<ProfileProvider>.value(
+      value: provider,
+      child: const MaterialApp(home: ProfileFormScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _continue(WidgetTester tester) async {
+  final button = find
+      .byKey(const Key('profile-step-continue'))
+      .hitTestable()
+      .first;
+  await tester.tap(button);
+  await tester.pumpAndSettle();
 }

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,9 +34,10 @@ class ProfilesScreen extends StatelessWidget {
             icon: const Icon(Icons.upload_file_outlined),
           ),
           IconButton(
-            tooltip: l?.exportJson ?? 'Export JSON',
-            onPressed: p.profiles.isEmpty ? null : () => _export(context),
-            icon: const Icon(Icons.ios_share_outlined),
+            tooltip: l?.exportJson ?? 'Export profiles',
+            onPressed:
+                p.profiles.isEmpty ? null : () => _showExportActions(context),
+            icon: const Icon(Icons.file_download_outlined),
           ),
         ],
       ),
@@ -73,17 +77,90 @@ class ProfilesScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _export(BuildContext context) async {
-    final l = AppLocalizations.of(context);
+  Future<void> _showExportActions(BuildContext context) async {
     final json = context.read<ProfileProvider>().exportProfiles();
-    await Clipboard.setData(ClipboardData(text: json));
-    await Share.share(json, subject: l?.exportJson ?? 'Export JSON');
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l?.copiedToClipboard ?? 'Copied to clipboard'),
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Export profiles',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Connection details are included. API keys and passwords are never exported.',
+                style: Theme.of(sheetContext).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.save_alt_outlined),
+                title: const Text('Save JSON file'),
+                subtitle: const Text('Choose where to store the profile export'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await _saveExport(context, json);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: const Text('Share JSON'),
+                subtitle: const Text('Send the export using another application'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Share.share(
+                    json,
+                    subject: 'pfSense Manager profile export',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.content_copy_outlined),
+                title: const Text('Copy JSON'),
+                subtitle: const Text('Place the export on the clipboard'),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Clipboard.setData(ClipboardData(text: json));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Profile JSON copied.')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _saveExport(BuildContext context, String json) async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save profile export',
+        fileName: 'pfsense-manager-profiles.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        bytes: Uint8List.fromList(utf8.encode(json)),
       );
+      if (path != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile export saved.')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to save profile export: $error')),
+        );
+      }
     }
   }
 

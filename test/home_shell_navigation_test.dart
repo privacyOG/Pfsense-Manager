@@ -7,6 +7,7 @@ import 'package:pfsense_manager/providers/profile_provider.dart';
 import 'package:pfsense_manager/providers/session_provider.dart';
 import 'package:pfsense_manager/providers/theme_provider.dart';
 import 'package:pfsense_manager/screens/home_shell.dart';
+import 'package:pfsense_manager/screens/more_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,7 +52,7 @@ void main() {
     expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Firewall'), findsWidgets);
     expect(find.text('Network'), findsWidgets);
-    expect(find.text('Services'), findsWidgets);
+    expect(find.text('VPN'), findsWidgets);
     expect(find.text('More'), findsWidgets);
   });
 
@@ -115,7 +116,7 @@ void main() {
     );
   });
 
-  testWidgets('Settings keeps direct access to primary navigation', (tester) async {
+  testWidgets('Settings opens as a focused child screen', (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -126,16 +127,27 @@ void main() {
 
     await tester.tap(find.text('More').last);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Settings'), 100);
-    await tester.tap(find.text('Settings'));
-    await tester.pump();
+
+    final moreList = find.descendant(
+      of: find.byType(MoreScreen),
+      matching: find.byType(ListView),
+    );
+    expect(moreList, findsOneWidget);
+    await tester.drag(moreList, const Offset(0, -320));
+    await tester.pumpAndSettle();
+
+    final settingsTile = find
+        .descendant(
+          of: find.byType(MoreScreen),
+          matching: find.widgetWithText(ListTile, 'Settings'),
+        )
+        .hitTestable();
+    expect(settingsTile, findsOneWidget);
+    await tester.tap(settingsTile);
+    await tester.pumpAndSettle();
 
     expect(find.text('Settings'), findsWidgets);
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Dashboard'), findsOneWidget);
-    expect(find.text('Firewall'), findsOneWidget);
-    expect(find.text('Network'), findsOneWidget);
-    expect(find.text('Services'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byTooltip('Back'), findsOneWidget);
   });
 }

@@ -19,16 +19,28 @@ class FirewallRulesScreen extends StatefulWidget {
 
 class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   final Set<String> _interfaces = {'all'};
+  final Set<String> _busyRuleIds = {};
+  final TextEditingController _search = TextEditingController();
   List<FirewallRule> _rules = [];
   String _selectedInterface = 'all';
+  String _statusFilter = 'all';
   Object? _error;
   bool _loading = false;
-  bool _actionBusy = false;
   bool _writePermissionDenied = false;
   int _requestGeneration = 0;
   int? _loadedSessionGeneration;
   String? _loadedProfileId;
   DateTime? _lastSuccessfulRefresh;
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -46,6 +58,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
         ..clear()
         ..add('all');
       _selectedInterface = 'all';
+      _statusFilter = 'all';
+      _search.clear();
+      _busyRuleIds.clear();
       _error = null;
       _writePermissionDenied = false;
       _lastSuccessfulRefresh = null;
@@ -66,6 +81,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   @override
   void dispose() {
     _requestGeneration++;
+    _search
+      ..removeListener(_onSearchChanged)
+      ..dispose();
     super.dispose();
   }
 
@@ -138,7 +156,10 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
   }
 
   Future<void> _toggle(FirewallRule rule) async {
-    if (rule.id == null || _actionBusy || _writePermissionDenied) return;
+    final id = rule.id;
+    if (id == null || _busyRuleIds.contains(id) || _writePermissionDenied) {
+      return;
+    }
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
 
@@ -167,7 +188,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _actionBusy = true);
+    setState(() => _busyRuleIds.add(id));
     try {
       if (session.firewallRuleService != null) {
         await session.firewallRuleService!.setEnabled(
@@ -176,9 +197,9 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
           operation: _operation(session, 'PATCH'),
         );
       } else {
-        await session.service!.toggleFirewallRule(rule.id!, !rule.enabled);
+        await session.service!.toggleFirewallRule(id, !rule.enabled);
       }
-      await _load(showSpinner: true);
+      await _load();
     } on ApiException catch (error) {
       _handleWriteError(error);
     } catch (error) {
@@ -188,12 +209,15 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _actionBusy = false);
+      if (mounted) setState(() => _busyRuleIds.remove(id));
     }
   }
 
   Future<void> _delete(FirewallRule rule) async {
-    if (rule.id == null || _actionBusy || _writePermissionDenied) return;
+    final id = rule.id;
+    if (id == null || _busyRuleIds.contains(id) || _writePermissionDenied) {
+      return;
+    }
     final session = context.read<PfSenseSessionProvider>();
     if (!session.connected || session.service == null) return;
 
@@ -218,14 +242,14 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _actionBusy = true);
+    setState(() => _busyRuleIds.add(id));
     try {
       if (session.firewallRuleService != null) {
         await session.firewallRuleService!.delete(rule);
       } else {
-        await session.service!.deleteFirewallRule(rule.id!);
+        await session.service!.deleteFirewallRule(id);
       }
-      await _load(showSpinner: true);
+      await _load();
     } on ApiException catch (error) {
       _handleWriteError(error);
     } catch (error) {
@@ -235,7 +259,7 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _actionBusy = false);
+      if (mounted) setState(() => _busyRuleIds.remove(id));
     }
   }
 
@@ -289,12 +313,40 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     );
   }
 
+  List<FirewallRule> get _filteredRules {
+    final query = _search.text.trim().toLowerCase();
+    return _rules.where((rule) {
+      final statusMatches = switch (_statusFilter) {
+        'enabled' => rule.enabled,
+        'disabled' => !rule.enabled,
+        'logged' => rule.log,
+        _ => true,
+      };
+      if (!statusMatches) return false;
+      if (query.isEmpty) return true;
+
+      final searchable = [
+        rule.description,
+        rule.type,
+        rule.interface,
+        rule.protocolLabel,
+        rule.sourceNetwork,
+        rule.sourcePortRange,
+        rule.destinationNetwork,
+        rule.portRange,
+        rule.gateway ?? '',
+        rule.tag,
+      ].join(' ').toLowerCase();
+      return searchable.contains(query);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final session = context.watch<PfSenseSessionProvider>();
+    final visibleRules = _filteredRules;
     final canCreate = session.connected &&
-        !_actionBusy &&
         !_writePermissionDenied &&
         _schemaSupports(session, '/api/v2/firewall/rule', 'POST');
     final canUpdate = !_writePermissionDenied &&
@@ -334,25 +386,75 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  key: const Key('open-firewall-aliases'),
-                  tooltip: 'Firewall aliases',
-                  onPressed: session.connected ? _openAliases : null,
-                  icon: const Icon(Icons.label_outline),
-                ),
-                const SizedBox(width: 4),
-                IconButton.filledTonal(
-                  key: const Key('open-firewall-nat'),
-                  tooltip: 'NAT management',
-                  onPressed: session.connected ? _openNat : null,
-                  icon: const Icon(Icons.swap_horiz),
-                ),
-                const SizedBox(width: 4),
-                IconButton.filledTonal(
-                  onPressed: _loading ? null : () => _load(showSpinner: true),
-                  icon: const Icon(Icons.refresh),
+                PopupMenuButton<String>(
+                  key: const Key('firewall-tools-menu'),
+                  tooltip: 'Firewall tools',
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (value) {
+                    if (value == 'aliases') _openAliases();
+                    if (value == 'nat') _openNat();
+                    if (value == 'refresh') _load(showSpinner: true);
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'aliases',
+                      enabled: session.connected,
+                      child: const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.label_outline),
+                        title: Text('Aliases'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'nat',
+                      enabled: session.connected,
+                      child: const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.swap_horiz),
+                        title: Text('NAT'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'refresh',
+                      enabled: !_loading,
+                      child: const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.refresh),
+                        title: Text('Refresh rules'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('firewall-rule-search'),
+              controller: _search,
+              decoration: InputDecoration(
+                labelText: 'Search rules',
+                hintText: 'Description, address, alias, port or protocol',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: _search.clear,
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _filterChip('all', 'All'),
+                  _filterChip('enabled', 'Enabled'),
+                  _filterChip('disabled', 'Disabled'),
+                  _filterChip('logged', 'Logged'),
+                ],
+              ),
             ),
             if (_writePermissionDenied)
               const Card(
@@ -378,11 +480,11 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
             if (_lastSuccessfulRefresh != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Last updated ${_formatTime(_lastSuccessfulRefresh!)}',
+                '${visibleRules.length} of ${_rules.length} rules • Updated ${_formatTime(_lastSuccessfulRefresh!)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             if (!session.connected)
               _message(
                 Icons.cloud_off_outlined,
@@ -397,12 +499,14 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
               if (_loading) const LinearProgressIndicator(minHeight: 3),
               if (_error != null)
                 _message(Icons.error_outline, _error.toString()),
-              if (!_loading && _error == null && _rules.isEmpty)
+              if (!_loading && _error == null && visibleRules.isEmpty)
                 _message(
                   Icons.rule_folder_outlined,
-                  strings?.emptyState ?? 'Nothing to show yet.',
+                  _rules.isEmpty
+                      ? (strings?.emptyState ?? 'Nothing to show yet.')
+                      : 'No firewall rules match the current filters.',
                 ),
-              for (final rule in _rules) _ruleCard(rule, canUpdate),
+              for (final rule in visibleRules) _ruleCard(rule, canUpdate),
             ],
           ],
         ),
@@ -415,65 +519,226 @@ class _FirewallRulesScreenState extends State<FirewallRulesScreen> {
     );
   }
 
-  Widget _ruleCard(FirewallRule rule, bool canUpdate) {
-    final details = <String>[
-      rule.interface,
-      rule.protocolLabel,
-      '${rule.sourceNetwork}${rule.sourcePortRange.isEmpty ? '' : ':${rule.sourcePortRange}'} → '
-          '${rule.destinationNetwork}${rule.portRange.isEmpty ? '' : ':${rule.portRange}'}',
-      if (rule.floating) 'FLOATING ${rule.direction.toUpperCase()}',
-      if (rule.log) 'LOGGED',
-      if (rule.gateway != null) 'GW ${rule.gateway}',
-    ];
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _color(rule.type).withValues(alpha: .16),
-          child: Icon(_icon(rule.type), color: _color(rule.type)),
-        ),
-        title: Text(
-          rule.description.isEmpty
-              ? '${rule.type.toUpperCase()} ${rule.interface}'
-              : rule.description,
-        ),
-        subtitle: Text(details.join(' | ')),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Switch(
-              value: rule.enabled,
-              onChanged: _actionBusy || !canUpdate ? null : (_) => _toggle(rule),
-            ),
-            PopupMenuButton<String>(
-              enabled: !_actionBusy,
-              onSelected: (value) {
-                if (value == 'edit') _openForm(rule);
-                if (value == 'delete') _delete(rule);
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'edit',
-                  enabled: canUpdate,
-                  child: const ListTile(
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Edit'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'delete',
-                  enabled: !_writePermissionDenied,
-                  child: const ListTile(
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('Delete'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        onTap: _actionBusy || !canUpdate ? null : () => _openForm(rule),
+  Widget _filterChip(String value, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: _statusFilter == value,
+        label: Text(label),
+        onSelected: (_) => setState(() => _statusFilter = value),
       ),
     );
+  }
+
+  Widget _ruleCard(FirewallRule rule, bool canUpdate) {
+    final id = rule.id;
+    final busy = id != null && _busyRuleIds.contains(id);
+    final actionColor = _color(rule.type);
+    final source = _endpointText(rule.sourceNetwork, rule.sourcePortRange);
+    final destination =
+        _endpointText(rule.destinationNetwork, rule.portRange);
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: busy || !canUpdate ? null : () => _openForm(rule),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _badge(
+                              rule.type.toUpperCase(),
+                              icon: _icon(rule.type),
+                              color: actionColor,
+                            ),
+                            _badge(rule.protocolLabel),
+                            _badge(rule.interface.isEmpty ? 'ANY' : rule.interface),
+                            _badge(
+                              rule.enabled ? 'ENABLED' : 'DISABLED',
+                              color: rule.enabled
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outline,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          rule.description.isEmpty
+                              ? '${rule.type.toUpperCase()} rule'
+                              : rule.description,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (busy)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else
+                    PopupMenuButton<String>(
+                      tooltip: 'Rule actions',
+                      onSelected: (value) {
+                        if (value == 'toggle') _toggle(rule);
+                        if (value == 'edit') _openForm(rule);
+                        if (value == 'delete') _delete(rule);
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'toggle',
+                          enabled: canUpdate && id != null,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              rule.enabled
+                                  ? Icons.toggle_off_outlined
+                                  : Icons.toggle_on_outlined,
+                            ),
+                            title: Text(rule.enabled ? 'Disable' : 'Enable'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'edit',
+                          enabled: canUpdate,
+                          child: const ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Edit'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          enabled: !_writePermissionDenied && id != null,
+                          child: const ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Delete'),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _trafficRow(
+                Icons.call_made_outlined,
+                'Source',
+                source,
+              ),
+              const SizedBox(height: 8),
+              _trafficRow(
+                Icons.call_received_outlined,
+                'Destination',
+                destination,
+              ),
+              if (rule.floating ||
+                  rule.log ||
+                  rule.gateway != null ||
+                  rule.tag.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (rule.floating)
+                      _badge('FLOATING ${rule.direction.toUpperCase()}'),
+                    if (rule.log) _badge('LOGGED', icon: Icons.receipt_long),
+                    if (rule.gateway != null)
+                      _badge('GW ${rule.gateway}', icon: Icons.alt_route),
+                    if (rule.tag.isNotEmpty)
+                      _badge(rule.tag, icon: Icons.sell_outlined),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _trafficRow(IconData icon, String label, String value) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(
+    String label, {
+    IconData? icon,
+    Color? color,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final resolved = color ?? scheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: resolved.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: resolved.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: resolved),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: resolved,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _endpointText(String network, String port) {
+    return port.isEmpty ? network : '$network : $port';
   }
 
   String _formatTime(DateTime value) {
