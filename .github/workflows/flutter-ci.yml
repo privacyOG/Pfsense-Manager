@@ -20,12 +20,14 @@ concurrency:
 jobs:
   validate:
     name: Analyze, test and build debug APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Test release metadata validator
         run: python3 tools/test_validate_release_metadata.py
@@ -34,14 +36,14 @@ jobs:
         run: python3 tools/validate_release_metadata.py
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.44.2'
           channel: stable
@@ -63,12 +65,15 @@ jobs:
 
       - name: Upload analyzer log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: flutter-analyze-${{ github.sha }}
           path: flutter-analyze.log
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run accessibility regression tests
+        run: flutter test test/slide_to_confirm_accessibility_test.dart
 
       - name: Run tests
         shell: bash
@@ -78,7 +83,7 @@ jobs:
 
       - name: Upload test log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: flutter-test-${{ github.sha }}
           path: flutter-test.log
@@ -86,7 +91,7 @@ jobs:
           retention-days: 14
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ github.sha }}
           path: coverage/lcov.info
@@ -101,7 +106,7 @@ jobs:
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: flutter-build-log-${{ github.sha }}
           path: flutter-build.log
@@ -110,7 +115,7 @@ jobs:
 
       - name: Upload debug APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pfsense-manager-debug-${{ github.sha }}
           path: build/app/outputs/flutter-apk/app-debug.apk
