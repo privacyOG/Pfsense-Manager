@@ -65,11 +65,14 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
         if (_readEndpoint() == null) return;
         if (!_certificateTrustIsReady(showMessage: true)) return;
         setState(() => _currentStep = 1);
+        return;
       case 1:
         if (!(_authenticationKey.currentState?.validate() ?? false)) return;
         setState(() => _currentStep = 2);
+        return;
       case 2:
         await _save();
+        return;
     }
   }
 
@@ -314,12 +317,14 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                     _name,
                     l?.name ?? 'Firewall name',
                     Icons.label_outline,
+                    fieldKey: const Key('profile-name'),
                     validator: _req,
                   ),
                   _field(
                     _host,
                     l?.host ?? 'Host, IP, or URL',
                     Icons.router_outlined,
+                    fieldKey: const Key('profile-host'),
                     helperText:
                         'Examples: firewall.local, 192.168.1.1, [2001:db8::1]:8443',
                     validator: _hostVal,
@@ -328,6 +333,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                     _port,
                     l?.port ?? 'HTTPS port',
                     Icons.numbers,
+                    fieldKey: const Key('profile-port'),
                     number: true,
                     validator: _portVal,
                   ),
@@ -410,6 +416,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
                       _user,
                       l?.username ?? 'Username',
                       Icons.person_outline,
+                      fieldKey: const Key('profile-username'),
                       validator: _req,
                     ),
                   Padding(
@@ -595,6 +602,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     TextEditingController controller,
     String label,
     IconData icon, {
+    Key? fieldKey,
     bool number = false,
     String? helperText,
     String? Function(String?)? validator,
@@ -602,6 +610,7 @@ class _ProfileFormScreenState extends State<ProfileFormScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
+        key: fieldKey,
         controller: controller,
         keyboardType: number ? TextInputType.number : TextInputType.text,
         decoration: InputDecoration(
