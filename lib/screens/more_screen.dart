@@ -26,7 +26,21 @@ class MoreScreen extends StatefulWidget {
 }
 
 class _MoreScreenState extends State<MoreScreen> {
+  final _searchController = TextEditingController();
   bool _backingUp = false;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matches(String title, String subtitle, [String keywords = '']) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    return '$title $subtitle $keywords'.toLowerCase().contains(query);
+  }
 
   Future<void> _downloadBackup(PfRestFeatureDecision decision) async {
     if (_backingUp || !decision.canAttempt) return;
@@ -79,6 +93,12 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
+  void _open(Widget screen) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<PfSenseSessionProvider>();
@@ -99,184 +119,332 @@ class _MoreScreenState extends State<MoreScreen> {
         ? captiveSessions
         : captiveVouchers;
 
+    final management = <Widget>[
+      if (_matches('Services', 'Review and control pfSense services', 'restart'))
+        _HubTile(
+          icon: Icons.miscellaneous_services_outlined,
+          title: 'Services',
+          subtitle: 'Review and control pfSense services',
+          enabled: session.connected,
+          onTap: () => _open(const ServicesScreen()),
+        ),
+      if (_matches('System', 'Firmware, packages and system details', 'update'))
+        _HubTile(
+          icon: Icons.info_outline,
+          title: 'System',
+          subtitle: 'Firmware, packages and system details',
+          enabled: session.connected,
+          onTap: () => _open(const SystemScreen()),
+        ),
+      if (_matches('Firewall profiles', 'Add, edit, import or test connections'))
+        _HubTile(
+          icon: Icons.storage_outlined,
+          title: 'Firewall profiles',
+          subtitle: 'Add, edit, import or test connections',
+          onTap: () => _open(const ProfilesScreen()),
+        ),
+      if (_matches('Background alerts', 'Gateway, packet-loss and temperature notifications'))
+        _HubTile(
+          icon: Icons.notifications_active_outlined,
+          title: 'Background alerts',
+          subtitle: 'Gateway, packet-loss and temperature notifications',
+          onTap: () => _open(const AlertSettingsScreen()),
+        ),
+      if (_matches('Settings', 'Appearance, language and app security', 'theme pin biometric'))
+        _HubTile(
+          icon: Icons.tune,
+          title: 'Settings',
+          subtitle: 'Appearance, language and app security',
+          onTap: () => _open(const SettingsScreen()),
+        ),
+    ];
+
+    final operations = <Widget>[
+      if (_matches('pfBlockerNG', 'DNSBL stats, blocklist updates and controls'))
+        PfRestFeatureListTile(
+          decision: pfBlocker,
+          enabled: session.connected,
+          icon: Icons.security_outlined,
+          title: 'pfBlockerNG',
+          availableSubtitle: 'DNSBL stats, blocklist updates and controls',
+          onTap: () => _open(const PfBlockerFeatureScreen()),
+        ),
+      if (_matches('Configuration backup', 'Download the firewall XML configuration', 'export'))
+        PfRestFeatureListTile(
+          decision: backup,
+          enabled: session.connected && !_backingUp,
+          icon: Icons.backup_outlined,
+          title: 'Configuration backup',
+          availableSubtitle: 'Download the firewall XML configuration',
+          trailing: _backingUp
+              ? const SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_outlined),
+          onTap: () => _downloadBackup(backup),
+        ),
+      if (_matches('Hardware health', 'CPU temperatures, drive status and memory trends', 'smart thermal'))
+        _HubTile(
+          icon: Icons.monitor_heart_outlined,
+          title: 'Hardware health',
+          subtitle: smart.isAvailable
+              ? 'CPU temperatures, SMART drive status and memory trends'
+              : smart.isUnsupported
+                  ? 'CPU temperatures and memory trends; SMART requires an extension'
+                  : 'CPU temperatures and memory trends; SMART availability is unknown',
+          enabled: session.connected,
+          onTap: () => _open(const HardwareHealthScreen()),
+        ),
+      if (_matches('System logs', 'Inspect system and package log sources'))
+        _HubTile(
+          icon: Icons.subject_outlined,
+          title: 'System logs',
+          subtitle: 'Inspect system and package log sources',
+          enabled: session.connected,
+          onTap: () => _open(const SystemLogsScreen()),
+        ),
+      if (_matches('Remote diagnostics', 'Ping, traceroute and DNS lookup', 'network test'))
+        _HubTile(
+          icon: Icons.network_ping_outlined,
+          title: 'Remote diagnostics',
+          subtitle: traceroute.isUnsupported && dnsLookup.isUnsupported
+              ? 'Ping is available; traceroute and DNS require extensions'
+              : 'Ping plus capability-aware traceroute and DNS lookup',
+          enabled: session.connected,
+          onTap: () => _open(const DiagnosticsScreen()),
+        ),
+      if (_matches('Captive portal', 'Manage guest sessions and vouchers', 'wifi'))
+        PfRestFeatureListTile(
+          decision: captiveEntry,
+          enabled: session.connected,
+          icon: Icons.wifi_password_outlined,
+          title: 'Captive portal',
+          availableSubtitle: 'Manage supported guest sessions and vouchers',
+          onTap: () => _open(const CaptivePortalFeatureScreen()),
+        ),
+    ];
+
+    final noResults = management.isEmpty && operations.isEmpty;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
       children: [
-        const _SectionHeading(
-          icon: Icons.admin_panel_settings_outlined,
-          title: 'Management',
-          subtitle: 'Core firewall services and application setup',
+        _OperatorStatusCard(
+          connected: session.connected,
+          connecting: session.connecting,
+          profileName: session.selectedProfile?.name,
+          endpoint: session.selectedProfile?.baseUrl,
         ),
-        _SectionCard(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.miscellaneous_services_outlined),
-              title: const Text('Services'),
-              subtitle: const Text('Review and control pfSense services'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: session.connected
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ServicesScreen(),
-                        ),
-                      )
-                  : null,
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('System'),
-              subtitle: const Text('Firmware, packages and system details'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: session.connected
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SystemScreen(),
-                        ),
-                      )
-                  : null,
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.storage_outlined),
-              title: const Text('Firewall profiles'),
-              subtitle: const Text('Add, edit, import or test connections'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfilesScreen()),
-              ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.notifications_active_outlined),
-              title: const Text('Background alerts'),
-              subtitle: const Text(
-                'Gateway, packet-loss and temperature notifications',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const AlertSettingsScreen(),
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.tune),
-              title: const Text('Settings'),
-              subtitle: const Text('Appearance, language and app security'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              ),
-            ),
-          ],
+        const SizedBox(height: 14),
+        TextField(
+          key: const Key('operator-hub-search'),
+          controller: _searchController,
+          onChanged: (value) => setState(() => _query = value),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            labelText: 'Find a tool or setting',
+            hintText: 'Search profiles, logs, backup, diagnostics…',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _query = '');
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+          ),
         ),
         const SizedBox(height: 22),
-        const _SectionHeading(
-          icon: Icons.build_outlined,
-          title: 'Operations',
-          subtitle: 'Diagnostics, backups and optional packages',
-        ),
-        _SectionCard(
+        if (management.isNotEmpty) ...[
+          const _SectionHeading(
+            icon: Icons.admin_panel_settings_outlined,
+            title: 'Manage',
+            subtitle: 'Firewall services, profiles, alerts and application setup',
+          ),
+          _SectionCard(children: management),
+          const SizedBox(height: 22),
+        ],
+        if (operations.isNotEmpty) ...[
+          const _SectionHeading(
+            icon: Icons.build_outlined,
+            title: 'Operate and troubleshoot',
+            subtitle: 'Diagnostics, backups, logs and optional packages',
+          ),
+          _SectionCard(children: operations),
+        ],
+        if (noResults)
+          _EmptySearchState(
+            query: _query,
+            onClear: () {
+              _searchController.clear();
+              setState(() => _query = '');
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _OperatorStatusCard extends StatelessWidget {
+  const _OperatorStatusCard({
+    required this.connected,
+    required this.connecting,
+    required this.profileName,
+    required this.endpoint,
+  });
+
+  final bool connected;
+  final bool connecting;
+  final String? profileName;
+  final String? endpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = profileName ?? 'No firewall selected';
+    final status = connecting
+        ? 'Connecting'
+        : connected
+            ? 'Connected'
+            : 'Offline';
+    final statusColor = connecting
+        ? scheme.tertiary
+        : connected
+            ? scheme.primary
+            : scheme.error;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            PfRestFeatureListTile(
-              decision: pfBlocker,
-              enabled: session.connected,
-              icon: Icons.security_outlined,
-              title: 'pfBlockerNG',
-              availableSubtitle: 'DNSBL stats, blocklist updates and controls',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const PfBlockerFeatureScreen(),
-                ),
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
               ),
-            ),
-            const Divider(height: 1),
-            PfRestFeatureListTile(
-              decision: backup,
-              enabled: session.connected && !_backingUp,
-              icon: Icons.backup_outlined,
-              title: 'Configuration backup',
-              availableSubtitle: 'Download the firewall XML configuration',
-              trailing: _backingUp
-                  ? const SizedBox.square(
-                      dimension: 22,
+              child: connecting
+                  ? const Padding(
+                      padding: EdgeInsets.all(13),
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.download_outlined),
-              onTap: () => _downloadBackup(backup),
+                  : Icon(
+                      connected ? Icons.router : Icons.router_outlined,
+                      color: statusColor,
+                    ),
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.monitor_heart_outlined),
-              title: const Text('Hardware health'),
-              subtitle: Text(
-                smart.isAvailable
-                    ? 'CPU temperatures, SMART drive status and memory trends'
-                    : smart.isUnsupported
-                        ? 'CPU temperatures and memory trends; SMART requires a custom extension'
-                        : 'CPU temperatures and memory trends; SMART availability is unknown',
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  if (endpoint != null)
+                    Text(
+                      endpoint!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: session.connected
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const HardwareHealthScreen(),
-                        ),
-                      )
-                  : null,
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.subject_outlined),
-              title: const Text('System logs'),
-              subtitle: const Text(
-                'Log sources reported by the connected pfREST schema',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: session.connected
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SystemLogsScreen(),
-                        ),
-                      )
-                  : null,
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.network_ping_outlined),
-              title: const Text('Remote diagnostics'),
-              subtitle: Text(
-                traceroute.isUnsupported && dnsLookup.isUnsupported
-                    ? 'Ping is available; traceroute and DNS require custom extensions'
-                    : 'Ping plus capability-aware traceroute and DNS lookup',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: session.connected
-                  ? () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const DiagnosticsScreen(),
-                        ),
-                      )
-                  : null,
-            ),
-            const Divider(height: 1),
-            PfRestFeatureListTile(
-              decision: captiveEntry,
-              enabled: session.connected,
-              icon: Icons.wifi_password_outlined,
-              title: 'Captive portal',
-              availableSubtitle: 'Manage supported guest sessions and vouchers',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CaptivePortalFeatureScreen(),
+            const SizedBox(width: 10),
+            Semantics(
+              label: 'Firewall status: $status',
+              child: Chip(
+                avatar: Icon(
+                  connected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 18,
+                  color: statusColor,
                 ),
+                label: Text(status),
               ),
             ),
           ],
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _HubTile extends StatelessWidget {
+  const _HubTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      enabled: enabled,
+      onTap: enabled ? onTap : null,
+    );
+  }
+}
+
+class _EmptySearchState extends StatelessWidget {
+  const _EmptySearchState({required this.query, required this.onClear});
+
+  final String query;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Icon(Icons.search_off, size: 42),
+            const SizedBox(height: 12),
+            Text(
+              'No tools match “$query”',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Try a feature name such as backup, logs, profiles or diagnostics.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear),
+              label: const Text('Clear search'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -336,9 +504,14 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final separated = <Widget>[];
+    for (var index = 0; index < children.length; index++) {
+      if (index > 0) separated.add(const Divider(height: 1));
+      separated.add(children[index]);
+    }
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Column(children: children),
+      child: Column(children: separated),
     );
   }
 }
