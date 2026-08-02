@@ -126,8 +126,11 @@ void main() {
 
     await tester.tap(find.text('More').last);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Settings'), 100);
-    await tester.tap(find.text('Settings'));
+
+    final settingsTile = find.widgetWithText(ListTile, 'Settings');
+    expect(settingsTile, findsOneWidget);
+    await tester.scrollUntilVisible(settingsTile, 100);
+    await tester.tap(settingsTile);
     await tester.pumpAndSettle();
 
     expect(find.text('Settings'), findsWidgets);
