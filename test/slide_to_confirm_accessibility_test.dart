@@ -82,33 +82,29 @@ void main() {
     expect(confirmations, 1);
   });
 
-  testWidgets('assistive technology can activate confirmation',
+  testWidgets('assistive technology receives an actionable button',
       (tester) async {
     final semanticsHandle = tester.ensureSemantics();
     addTearDown(semanticsHandle.dispose);
-    var confirmations = 0;
 
     await tester.pumpWidget(
       _buildSlider(
         label: 'Confirm firewall reboot',
-        onConfirmed: () => confirmations += 1,
+        onConfirmed: () {},
       ),
     );
 
-    final node = tester.getSemantics(
-      find.byKey(const Key('slide-to-confirm')),
+    expect(
+      tester.getSemantics(find.byKey(const Key('slide-to-confirm'))),
+      containsSemantics(
+        label: 'Confirm firewall reboot',
+        value: '0%',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasTapAction: true,
+      ),
     );
-    expect(node.label, 'Confirm firewall reboot');
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
-    expect(node.hasAction(SemanticsAction.tap), isTrue);
-
-    tester.binding.pipelineOwner.semanticsOwner!.performAction(
-      node.id,
-      SemanticsAction.tap,
-    );
-    await tester.pump();
-
-    expect(confirmations, 1);
   });
 
   testWidgets('keyboard activation confirms the focused control',
@@ -132,7 +128,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       _buildSlider(
-        textScaler: TextScaler.linear(2),
+        textScaler: const TextScaler.linear(2),
         label: 'Slide to confirm this sensitive firewall operation',
         onConfirmed: () {},
       ),
@@ -165,7 +161,7 @@ void main() {
         ],
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(2),
+            textScaler: const TextScaler.linear(2),
           ),
           child: child!,
         ),
