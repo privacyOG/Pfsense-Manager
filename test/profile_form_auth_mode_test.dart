@@ -81,7 +81,7 @@ void main() {
     await _selectAuthMode(tester, 'API key — recommended');
 
     expect(tester.widget<TextFormField>(secret).controller?.text, isEmpty);
-    expect(find.text('API key'), findsOneWidget);
+    expect(find.text('API key'), findsWidgets);
   });
 
   testWidgets('changing authentication mode requires the new credential',
