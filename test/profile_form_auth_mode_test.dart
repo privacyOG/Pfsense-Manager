@@ -165,8 +165,10 @@ Future<void> _selectAuthMode(WidgetTester tester, String label) async {
 }
 
 Future<void> _continue(WidgetTester tester) async {
-  final button = find.byKey(const Key('profile-step-continue'));
-  await tester.ensureVisible(button);
+  final button = find
+      .byKey(const Key('profile-step-continue'))
+      .hitTestable()
+      .first;
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
