@@ -51,7 +51,7 @@ void main() {
     expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Firewall'), findsWidgets);
     expect(find.text('Network'), findsWidgets);
-    expect(find.text('Services'), findsWidgets);
+    expect(find.text('VPN'), findsWidgets);
     expect(find.text('More'), findsWidgets);
   });
 
@@ -115,7 +115,7 @@ void main() {
     );
   });
 
-  testWidgets('Settings keeps direct access to primary navigation', (tester) async {
+  testWidgets('Settings opens as a focused child screen', (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -128,14 +128,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Settings'), 100);
     await tester.tap(find.text('Settings'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Settings'), findsWidgets);
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Dashboard'), findsOneWidget);
-    expect(find.text('Firewall'), findsOneWidget);
-    expect(find.text('Network'), findsOneWidget);
-    expect(find.text('Services'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byTooltip('Back'), findsOneWidget);
   });
 }
